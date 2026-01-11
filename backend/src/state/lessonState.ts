@@ -1,20 +1,20 @@
 //src/state/LessonSatet.ts
 
-export type LessonState = 
-| "PROMPT" 
-| "USER_INPUT" 
-| "FEEDBACK" 
-| "RETRY" 
-| "ADVANCE";
+import { TutorIntent } from "../ai/tutorIntent";
+
+export type LessonState =   // backend control only
+    | "USER_INPUT" 
+    | "ADVANCE"
+    | "COMPLETE";
+
 
 export type LessonSession = {
     userId: string;
     lessonId: string;
     state: LessonState;
+    tutorIntent?: TutorIntent;
     attempts: number;
-    maxAttempts: number; //maximum attempts before advancing
+    maxAttempts: number; 
+    currentQuestionIndex?: number;  // tracks the current question number 
 };
 
-
-//In-memory session store (for MVP)
-export const sessions: Record<string, LessonSession> = {};

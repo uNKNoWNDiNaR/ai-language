@@ -1,32 +1,22 @@
 //  src/routes/lesson.ts
 
 import { Router } from "express";
-import { startLesson, submitAnswer } from "../controllers/lessonController";
+import { 
+    startLesson, 
+    submitAnswer,
+    getSessionHandler } from "../controllers/lessonController";
+
 
 const router = Router();
 
-// POST /lesson/start
-router.post("/start", (req, res) => {
-    const userId = "user-1"; //for MVP hardcoded user
-    const session = startLesson(userId);
-    res.json(session);
-});
 
-// POST /lesson/submit
-router.post("/submit", (req, res) => {
-    console.log("Request body:", req.body);  //the console to debug
-    const {userId, isCorrect} = req.body;
+// POST /lesson/start(start a lesson)
+router.post("/start", startLesson);
 
-    if(!userId || typeof isCorrect !== "boolean"){
-        return res.status(400).json({error: "userId and isCorrect is required"});
-    }
+// POST /lesson/submit(submit an answer)
+router.post("/submit", submitAnswer);
 
-    try {
-        const session = submitAnswer(userId, isCorrect);
-        res.json(session);
-    } catch (err: any){
-        res.status(400).json({error: err.message});
-    }
-})
+//POST /lesson/:userId (get Session)
+router.get("/:userId", getSessionHandler);
 
 export default router;

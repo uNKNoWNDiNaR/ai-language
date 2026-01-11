@@ -1,5 +1,6 @@
+// src/index.ts
 
-
+import "dotenv/config";
 import express from "express";
 import lessonRoutes from "./routes/lesson"
 
