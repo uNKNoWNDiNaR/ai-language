@@ -1,0 +1,227 @@
+// src/components/Lesson.tsx
+
+import React, { useState } from "react";
+import { AxiosError } from "axios";
+import { startLesson, submitAnswer } from "../api/lessonAPI";
+
+type Message = {
+    sender: "tutor" | "student";
+    text: string;
+};
+
+const Lesson: React.FC = () => {
+    const [userId, setUserId] = useState("");
+    const [tutorNameInput, setTutorNameInput] = useState("");
+    const [tutorName, setTutorName] = useState("Tutor")   
+
+    const [sessionStarted, setSessionStarted] = useState(false);
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [answer, setAnswer] = useState ("");
+
+
+    // --------------------
+    // Start Lesson
+    // --------------------
+    const handleStartLesson = async() => {
+        if (!userId.trim()) { 
+            alert("Please enter your User ID");
+            return;
+        }
+
+        setTutorName(tutorNameInput.trim() || "Tutor");
+
+        try{
+            //check for previous sesssions
+            const res = await startLesson(userId);
+
+            setMessages([
+                {sender: "tutor", text: res.tutorMessage}
+            ]);
+
+            setSessionStarted(true);
+        } catch(err: unknown) {
+            const error = err as AxiosError;
+
+            //Resume existing session
+            if(error.response?.status === 409) {
+                const resume = await submitAnswer(userId, "");
+                setMessages([
+                    {sender: "tutor", text: resume.tutorMessage}
+                ]);
+                setSessionStarted(true);
+            } else {
+                alert("Could not start lesson. Check backend");
+            }
+        }
+    };
+
+    // --------------------
+    // Submit Answer
+    // --------------------
+    const handleSubmitAnswer = async () => {
+        if(!answer.trim()) return;
+
+        const studentMessage: Message = {
+            sender: "student",
+            text: answer
+        };
+
+        //Add student message imediately
+        setMessages(prev => [...prev, studentMessage]);
+        setAnswer("")
+
+        
+        try {
+            const res = await submitAnswer(userId, answer);
+
+            const tutorReply: Message = {
+            sender: "tutor",
+            text: res.tutorMessage
+            };
+
+            setMessages(prev => [...prev, tutorReply]); 
+            setAnswer(""); //clear input
+        } catch(err) {
+            console.error(err);
+            alert("Could not submit answer. Check backend");
+        }
+    };
+
+
+    // --------------------
+    // Detect Lesson end
+    // --------------------
+    const lessonComplete = messages.some(msg =>
+        msg.sender === "tutor" &&
+        msg.text.toLowerCase().includes("completed this lesson")
+    );
+
+
+    // --------------------
+    // Render
+    // --------------------
+    return(
+        <div style={{maxWidth: 600, margin: "0 auto", padding: 20}}>
+
+            {!sessionStarted ? (
+                <>
+                    <h2>Start Lesson</h2>
+
+                    <input
+                        type="text"
+                        placeholder="Enter your user ID"
+                        value={userId}
+                        onChange={(e) => setUserId(e.target.value)}
+                        style={{padding: 8, width: "100%", marginBottom: 10}}
+                    />
+
+                    <input
+                        type="text"
+                        placeholder="Enter tutor's name (optional)"
+                        value={tutorNameInput}
+                        onChange={(e) => setTutorNameInput(e.target.value)}
+                        style={{padding: 8, width: "100%", marginBottom: 10}}
+                    />
+
+                    <button onClick={handleStartLesson} style={{padding: 10}}>
+                        Start Lesson
+                    </button>
+                </>
+            ) : (
+                <>
+                <h2>Lesson Chat</h2>
+
+                {/*Chat Window*/}
+                <div
+                    style={{
+                        border: "1px solid #ccc",
+                        borderRadius: 10,
+                        padding: 15,
+                        height: 350,
+                        marginBottom: 15,
+                        background: "#ffffff",
+                        overflowY: "auto"
+                    }}
+                >
+                    {messages.map((msg, index) => ( 
+                        <div
+                            key={index}
+                            style={{
+                                textAlign: msg.sender === "tutor" ? "left" : "right",
+                                marginBottom: 10,
+                                color: "#222"
+                            }}
+                        >
+
+                        <div
+                            style={{
+                                display: "inline-block",
+                                padding: "8px 12px",
+                                borderRadius: 12,
+                                background:
+                                    msg.sender === "tutor" ? "#e8f0fe" : "#dcfce7",
+                                maxWidth: "80%"
+                            }}
+                        >
+                            <strong style={{fontSize: "0.85em"}}>
+                                {msg.sender === "tutor" ? tutorName : userId }
+                            </strong>
+                            <div>{msg.text}</div>
+                        </div>
+                    </div>
+                    ))}
+                </div>
+
+                {/* Feedback Button */}
+                <div style={{ marginTop: 10, textAlign:"center" }}>
+                    <a 
+                        href="https://docs.google.com/forms/d/e/1FAIpQLSf2ZVXstNUnk1GaFMiS4ywyNfRFVNewdIq90UnHKZWKnM5p1Q/viewform?usp=publish-editor"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                            textDecoration: "none",
+                            color: "#2563eb",
+                            fontWeight: "bold"
+                        }}
+                    >
+                        💬 Give Feedback
+                    </a>
+                </div>
+
+                {/*End state*/}
+                {lessonComplete ? (
+                    <div>
+                        <p>🎉 Lesson finished! Great work!</p>
+                        <button
+                            onClick= {() => {
+                                setSessionStarted(false);
+                                setMessages([]);
+                                setAnswer("");
+                                setUserId("");
+                            }}
+                            style={{padding: 10}}
+                        >
+                            Start New Lesson
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <input
+                            type="text"
+                            placeholder="Type your answer..."
+                            value={answer}
+                            onChange={(e) => setAnswer(e.target.value)}
+                            style={{padding: 8, width: "100%", marginBottom: 10}}
+                        />
+                        <button onClick={handleSubmitAnswer} style={{padding: 10}}>
+                            send
+                        </button>
+                    </>
+                )}
+                </>
+            )}
+        </div>
+    );
+};
+
+export default Lesson;

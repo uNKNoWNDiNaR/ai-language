@@ -1,9 +1,201 @@
 {
+  "12345": {
+    "userId": "12345",
+    "lessonId": "basic-1",
+    "state": "COMPLETE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
   "user-1": {
     "userId": "user-1",
     "lessonId": "basic-1",
+    "state": "COMPLETE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "user1": {
+    "userId": "user1",
+    "lessonId": "basic-1",
+    "state": "ADVANCE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "user-2": {
+    "userId": "user-2",
+    "lessonId": "basic-1",
     "state": "USER_INPUT",
     "attempts": 1,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "user-123": {
+    "userId": "user-123",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 0
+  },
+  "User-1": {
+    "userId": "User-1",
+    "lessonId": "basic-1",
+    "state": "COMPLETE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "user-3": {
+    "userId": "user-3",
+    "lessonId": "basic-1",
+    "state": "COMPLETE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "user-4": {
+    "userId": "user-4",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 0
+  },
+  "user-5": {
+    "userId": "user-5",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 0
+  },
+  "user-6": {
+    "userId": "user-6",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 1,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "user-7": {
+    "userId": "user-7",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 1,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 1
+  },
+  "Hallo": {
+    "userId": "Hallo",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 0
+  },
+  "user": {
+    "userId": "user",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 1,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 0
+  },
+  "hil": {
+    "userId": "hil",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 0
+  },
+  "jkjl": {
+    "userId": "jkjl",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 0
+  },
+  "uiy": {
+    "userId": "uiy",
+    "lessonId": "basic-1",
+    "state": "ADVANCE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 1
+  },
+  "hi": {
+    "userId": "hi",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 1,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "hily": {
+    "userId": "hily",
+    "lessonId": "basic-1",
+    "state": "ADVANCE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "kil": {
+    "userId": "kil",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 1,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "pouy": {
+    "userId": "pouy",
+    "lessonId": "basic-1",
+    "state": "USER_INPUT",
+    "attempts": 2,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 1
+  },
+  "ptpwj": {
+    "userId": "ptpwj",
+    "lessonId": "basic-1",
+    "state": "COMPLETE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "Hillp": {
+    "userId": "Hillp",
+    "lessonId": "basic-1",
+    "state": "COMPLETE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "Hillperkins": {
+    "userId": "Hillperkins",
+    "lessonId": "basic-1",
+    "state": "COMPLETE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "Hills": {
+    "userId": "Hills",
+    "lessonId": "basic-1",
+    "state": "COMPLETE",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "currentQuestionIndex": 2
+  },
+  "Hillat": {
+    "userId": "Hillat",
+    "lessonId": "basic-1",
+    "state": "COMPLETE",
+    "attempts": 0,
     "maxAttempts": 3,
     "currentQuestionIndex": 2
   }

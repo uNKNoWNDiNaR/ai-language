@@ -16,7 +16,7 @@ router.post("/start", startLesson);
 // POST /lesson/submit(submit an answer)
 router.post("/submit", submitAnswer);
 
-//POST /lesson/:userId (get Session)
+//GET /lesson/:userId (get Session)
 router.get("/:userId", getSessionHandler);
 
 export default router;

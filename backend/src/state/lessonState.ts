@@ -1,4 +1,4 @@
-//src/state/LessonSatet.ts
+//src/state/LessonState.ts
 
 import { TutorIntent } from "../ai/tutorIntent";
 

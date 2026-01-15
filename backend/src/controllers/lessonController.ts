@@ -11,7 +11,7 @@ import {
     getSession, 
     createSession, 
     updateSession, 
- } from "../state/sessionStore";
+ } from "../storage/sessionStore";
 
 
 //----------------------
@@ -33,9 +33,10 @@ export const startLesson = async (req: Request, res: Response) => {
 
     //check for presence of userId
     if(!userId) {
-        return res.status(400).json({error: "UserId is required"});}
+        return res.status(400).json({error: "UserId is required"});
+    }
 
-    //Check persistent store (if session already exists)
+    //Prevent overwriting existing session
     if(getSession(userId)) {
         return res.status(409).json({error: "Session already exists", });
     }
@@ -53,17 +54,16 @@ export const startLesson = async (req: Request, res: Response) => {
 
     const intent: TutorIntent = "ASK_QUESTION";
     const questionText = basicLesson1[session.currentQuestionIndex || 0]?.question || "";
-    const tutorPrompt = buildTutorPrompt(session, intent) + "\nQuestion: " + questionText;
+    const tutorPrompt = buildTutorPrompt(session, intent, questionText) + `\nQuestion: ${questionText}`;
 
     // Call openAI to get actual message
     let tutorMessage: string;
     try{
         tutorMessage = await generateTutorResponse(tutorPrompt, intent);
-    } catch(error){
-        console.error("OpenAI error:", error);
+    } catch{
         tutorMessage = "I'm having trouble responding right now. Please try again.";
     }
-    return res.status(201).json({session, tutorPrompt, tutorMessage});
+    return res.status(201).json({session, tutorMessage});
 };
 
 
@@ -86,12 +86,19 @@ export const submitAnswer = async (req: Request, res: Response) => {
 
     const currentIndex = session.currentQuestionIndex || 0;
     const currentQuestion = basicLesson1[currentIndex];
-    const isCorrect = answer.trim().toLowerCase() === currentQuestion.answer.toLowerCase();
 
+    const normalizedAnswer = answer.trim().toLowerCase();
+    const isCorrect = normalizedAnswer === currentQuestion.answer.toLowerCase();
 
-    //Determine correctness automatically (Update session based on answer)(lesson loop logic)
+//----------------------
+// Lesson progress Logic
+//----------------------
+
     if(isCorrect) {
+        //Reset prompts
         session.attempts = 0;
+
+        //Move forward
         if(currentIndex + 1 >= basicLesson1.length) {
             session.state = "COMPLETE";
         } else{
@@ -99,39 +106,55 @@ export const submitAnswer = async (req: Request, res: Response) => {
             session.state = "ADVANCE";
         }
     } else {
+        //Wrong answer
         session.attempts++;
-        if(session.attempts >= session.maxAttempts) {
-            session.state = "ADVANCE";
-            session.attempts = 0;
 
-            if(currentIndex + 1 < basicLesson1.length) {
-                session.currentQuestionIndex = currentIndex + 1;
-            } else {
-                session.state = "COMPLETE";
-            }
-        } else {
+        //still retries left, stay on the same question
+        if(session.attempts < session.maxAttempts) {
             session.state = "USER_INPUT";
         }
+        else {
+            session.attempts = 0;
+    
+            if(currentIndex + 1 >= basicLesson1.length){
+                session.state = "COMPLETE";
+            } else {
+                session.currentQuestionIndex = currentIndex + 1;
+                session.state = "ADVANCE";
+            }
+        } 
     }
 
-    // save updated session
+    // save session
     updateSession(session);
 
 
-    const intent = getTutorIntent(session.state,isCorrect);
-    const questionText = basicLesson1[session.currentQuestionIndex || 0]?.question || "";
-    const tutorPrompt = buildTutorPrompt(session, intent) + "\nQuestion: " + questionText;
-    
-    //calling openAI to generate actual message
+    // --------------------
+    // Build next tutor prompt
+    // --------------------
+
+    const intent = getTutorIntent(session.state, isCorrect);
+
+    let questionText = "";
+    if(session.state !== "COMPLETE") {
+        questionText = basicLesson1[session.currentQuestionIndex || 0].question;
+    }
+
+    const tutorPrompt = buildTutorPrompt(session, intent, questionText);
+
+
+    // --------------------
+    // Call AI
+    // --------------------
+
     let tutorMessage: string;
     try{
         tutorMessage = await generateTutorResponse(tutorPrompt, intent);
-    } catch(err){
-        console.error("OpenAI error:", err);
+    } catch{
         tutorMessage = "I'm having trouble responding right now. please try again.";
     }
 
-    return res.status(200).json({ session, tutorPrompt, tutorMessage });    
+    return res.status(200).json({ session, tutorMessage });    
 };
 
 //----------------------

@@ -1,8 +1,8 @@
-// src/sessionStore.ts
+// src/storage/sessionStore.ts
 
 import fs from "fs";
 import path from "path";
-import { LessonSession } from "./lessonState";
+import { LessonSession } from "../state/lessonState";
 
 const DATA_FILE = path.join(__dirname, "../../sessions.json");
 
@@ -26,7 +26,9 @@ function saveSessions(sessions: Record<string, LessonSession>) {
 }
 
 
+//------------------
 // Public API
+//------------------
 
 export function getSession(userId: string): LessonSession | null {
     const sessions = loadSessions();

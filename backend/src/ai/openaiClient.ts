@@ -2,8 +2,6 @@
 
 import OpenAI from "openai";
 import { TutorIntent } from "./tutorIntent";
-import { getStaticTutorMessage } from "./staticTutorMessages";
-
 
 const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
@@ -14,14 +12,6 @@ export async function generateTutorResponse(
     prompt: string,
     intent: TutorIntent
 ): Promise<string>{
-
-    //1. Static shortcut (no API calls)
-    const staticMsg = getStaticTutorMessage(intent);
-    if(staticMsg){
-        return staticMsg;
-}
-
-    //2. Otherwise call OpenAI Responses API
     try{
         const response = await client.responses.create({
             model: "gpt-4o-mini",
