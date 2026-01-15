@@ -175,7 +175,7 @@ const Lesson: React.FC = () => {
                 {/* Feedback Button */}
                 <div style={{ marginTop: 10, textAlign:"center" }}>
                     <a 
-                        href="https://docs.google.com/forms/d/e/1FAIpQLSf2ZVXstNUnk1GaFMiS4ywyNfRFVNewdIq90UnHKZWKnM5p1Q/viewform?usp=publish-editor"
+                        href="https://forms.gle/TUTGu4z68fUcECfu8"
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
