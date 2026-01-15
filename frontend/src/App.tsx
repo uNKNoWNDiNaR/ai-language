@@ -1,6 +1,5 @@
 // frontend/src/App.tsc
 
-import React from 'react';
 import Lesson from './components/Lesson';
 
 
