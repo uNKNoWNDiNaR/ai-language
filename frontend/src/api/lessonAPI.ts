@@ -2,7 +2,7 @@
 
 import axios from "axios";
 
-const BASE_URL = "http://localhost:3000/lesson";
+const BASE_URL = "https://ai-language-tutor-2ff9.onrender.com/lesson";
 
 export interface LessonSession {
     userId: string;
