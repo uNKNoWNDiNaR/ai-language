@@ -12,11 +12,11 @@ app.use(express.json());
 
 
 // Mount all lesson related rouutes under /lesson
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 
 app.use(cors({
-    origin: "http://localhost:5173",  //    Vite frontend
+    origin: "*",  //    Vite frontend
     methods: ["GET", "POST"],
 }));
 
@@ -25,3 +25,6 @@ app.use("/lesson", lessonRoutes)
 app.listen(PORT, () =>{
     console.log(`Backend running on http://localhost:${PORT}`);
 });
+
+
+// http://localhost:5173.  CORS launch site
