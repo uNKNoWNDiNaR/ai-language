@@ -57,6 +57,7 @@ const Lesson: React.FC = () => {
             }
             setMessages(restoredMessages);
             setSessionStarted(true);
+            return;
 
         } catch(err: unknown) {
             const error = err as AxiosError;
