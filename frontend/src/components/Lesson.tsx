@@ -36,37 +36,41 @@ const Lesson: React.FC = () => {
             alert("Please enter your User ID");
             return;
         }
-
         setTutorName(tutorNameInput.trim() || "Tutor");
 
         try{
-            //check for previous sesssions
+            //Attenmpt to start a new lesson
             const res = await startLesson(userId);
 
+            // Restore stored message from DB
             const restoredMessages: Message[] = res.session.messages.map(m => ({
                 sender: m.role === "assistant" ? "tutor" : "student",
                 text: m.content
             }));
 
-            setMessages(restoredMessages)
-
+            //If new user and no stored messages, show first tutor message
+            if(restoredMessages.length === 0 && res.tutorMessage) {
+                restoredMessages.push({
+                    sender: "tutor",
+                    text: res.tutorMessage
+                });
+            }
+            setMessages(restoredMessages);
             setSessionStarted(true);
+
         } catch(err: unknown) {
             const error = err as AxiosError;
 
             //Resume existing session
             if(error.response?.status === 409) {
-
-                //Fetchfull stored session(restore)
                 const existing: BackendSession | null = await getSession(userId);
-
-                //Convert backend messages to frontend Message type
                 if (!existing) return;
 
                 const restoredMessages: Message[] = existing.messages.map((m) => ({
                     sender: m.role === "assistant" ? "tutor": "student",
                     text: m.content
                 }));
+
                 setMessages(restoredMessages);
                 setSessionStarted(true);
             } else {
@@ -81,6 +85,7 @@ const Lesson: React.FC = () => {
     const handleSubmitAnswer = async () => {
         if(!answer.trim()) return;
 
+        //Show student message immediately
         const studentMessage: Message = {
             sender: "student",
             text: answer
@@ -94,13 +99,14 @@ const Lesson: React.FC = () => {
         try {
             const res = await submitAnswer(userId, answer);
 
-            const restoredMessages: Message[] = res.session.messages.map(m => ({
-                sender: m.role === "assistant" ? "tutor" : "student",
-                text: m.content
-            }));
+            //Append only tutor message to avoid duplicating
+            const tutorReply: Message = {
+                sender: "tutor" ,
+                text: res.tutorMessage
+            };
 
-            setMessages(restoredMessages); 
-            setAnswer(""); //clear input
+            setMessages(prev => [...prev, tutorReply]);
+
         } catch(err) {
             console.error(err);
             alert("Could not submit answer. Check backend");
