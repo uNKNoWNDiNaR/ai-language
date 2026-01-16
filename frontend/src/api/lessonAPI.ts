@@ -2,7 +2,7 @@
 
 import axios from "axios";
 
-const BASE_URL = "https://ai-language-tutor-2ff9.onrender.com/lesson";
+const BASE_URL = "https://ai-language-tutor-2ff9.onrender.com/";
 
 
   export type BackendMessage = {
