@@ -4,6 +4,13 @@ import axios from "axios";
 
 const BASE_URL = "https://ai-language-tutor-2ff9.onrender.com/lesson";
 
+
+  export type BackendMessage = {
+    role: "user" | "assistant";
+    content: string;
+};
+
+
 export interface LessonSession {
     userId: string;
     lessonId: string;
@@ -11,6 +18,7 @@ export interface LessonSession {
     attempts: number;
     maxAttempts: number;
     currentQuestionIndex: number;
+    messages: BackendMessage[]
 }
 
 export interface StartLessonResponse {

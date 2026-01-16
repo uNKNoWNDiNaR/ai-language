@@ -43,9 +43,12 @@ const Lesson: React.FC = () => {
             //check for previous sesssions
             const res = await startLesson(userId);
 
-            setMessages([
-                {sender: "tutor", text: res.tutorMessage}
-            ]);
+            const restoredMessages: Message[] = res.session.messages.map(m => ({
+                sender: m.role === "assistant" ? "tutor" : "student",
+                text: m.content
+            }));
+
+            setMessages(restoredMessages)
 
             setSessionStarted(true);
         } catch(err: unknown) {
@@ -91,12 +94,12 @@ const Lesson: React.FC = () => {
         try {
             const res = await submitAnswer(userId, answer);
 
-            const tutorReply: Message = {
-            sender: "tutor",
-            text: res.tutorMessage
-            };
+            const restoredMessages: Message[] = res.session.messages.map(m => ({
+                sender: m.role === "assistant" ? "tutor" : "student",
+                text: m.content
+            }));
 
-            setMessages(prev => [...prev, tutorReply]); 
+            setMessages(restoredMessages); 
             setAnswer(""); //clear input
         } catch(err) {
             console.error(err);
