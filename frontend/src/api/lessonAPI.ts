@@ -2,7 +2,7 @@
 
 import axios from "axios";
 
-const BASE_URL = "https://ai-language-tutor-2ff9.onrender.com/";
+const BASE_URL = "https://ai-language-tutor-2ff9.onrender.com";
 
 
   export type BackendMessage = {
@@ -58,3 +58,6 @@ export const getSession = async (userId:string): Promise<BackendSession | null> 
         const res = await axios.get(`${BASE_URL}/${userId}`);
         return res.data.session ?? null;
 }
+
+
+//https://ai-language-tutor-2ff9.onrender.com/
