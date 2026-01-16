@@ -34,12 +34,12 @@ export interface SubmitAnswerResponse {
 }
 
 export async function startLesson(userId: string): Promise<StartLessonResponse> {
-    const res = await axios.post(`${BASE_URL}/start`, {userId});
+    const res = await axios.post(`${BASE_URL}/lesson/start`, {userId});
     return res.data;
 }
 
 export async function submitAnswer(userId:string, answer:string): Promise<SubmitAnswerResponse> {
-    const res = await axios.post(`${BASE_URL}/submit`, {userId, answer});
+    const res = await axios.post(`${BASE_URL}/lesson/submit`, {userId, answer});
     return res.data;
 }
 
@@ -55,7 +55,7 @@ export type BackendSession = {
 };
 
 export const getSession = async (userId:string): Promise<BackendSession | null> => {
-        const res = await axios.get(`${BASE_URL}/${userId}`);
+        const res = await axios.get(`${BASE_URL}/lesson/${userId}`);
         return res.data.session ?? null;
 }
 
