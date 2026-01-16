@@ -1,6 +1,7 @@
 // src/controllers/lessonController.ts
 // Day 2 MVP backend lesson loop and retry logic
 
+import { LessonSessionModel } from "../state/sessionState";
 import { Request, Response } from "express";
 import { LessonSession, LessonState } from "../state/lessonState";
 import { buildTutorPrompt } from "../ai/promptBuilder";
@@ -12,6 +13,7 @@ import {
     createSession, 
     updateSession, 
  } from "../storage/sessionStore";
+
 
 
 //----------------------
@@ -37,7 +39,7 @@ export const startLesson = async (req: Request, res: Response) => {
     }
 
     //Prevent overwriting existing session
-    if(getSession(userId)) {
+    if( await getSession(userId)) {
         return res.status(409).json({error: "Session already exists", });
     }
 
@@ -47,10 +49,13 @@ export const startLesson = async (req: Request, res: Response) => {
         state: "USER_INPUT",  
         attempts: 0,
         maxAttempts: 3,
-        currentQuestionIndex: 0  //start with the first question
+        currentQuestionIndex: 0,
+        messages: []
     };
 
-    createSession(session);
+    await createSession({
+        ...session,
+        lessonId: "basic-1"});
 
     const intent: TutorIntent = "ASK_QUESTION";
     const questionText = basicLesson1[session.currentQuestionIndex || 0]?.question || "";
@@ -63,7 +68,25 @@ export const startLesson = async (req: Request, res: Response) => {
     } catch{
         tutorMessage = "I'm having trouble responding right now. Please try again.";
     }
-    return res.status(201).json({session, tutorMessage});
+
+    // Convert to ChatMessage
+    const initialMessage = {
+        role: "assistant",
+        content: tutorMessage
+    }; 
+
+    // Save new session on MongoDB
+    const newSessionDoc = await LessonSessionModel.create({
+        userId: "string",
+        lessonId: "basic-1",
+        state: "USER_INPUT",
+        attempts: 0,
+        maxAttempts: 3,
+        currentQuestionIndex: 0,
+        messages: [initialMessage]
+    });
+
+    return res.status(201).json({session: newSessionDoc, tutorMessage});
 };
 
 
@@ -78,17 +101,22 @@ export const submitAnswer = async (req: Request, res: Response) => {
         return res.status(400).json({error: "Invalid Payload (userId and answer are required)"});
     }
     
-    const session = getSession(userId);
+    // Fetch Mongo session
+    const session = await LessonSessionModel.findOne({ userId});
 
     if(!session) {
         return res.status(404).json({error: "No active sessions"});
     }
+
+    const userMessage = {role: "user",content: answer};
+    session.messages.push(userMessage);
 
     const currentIndex = session.currentQuestionIndex || 0;
     const currentQuestion = basicLesson1[currentIndex];
 
     const normalizedAnswer = answer.trim().toLowerCase();
     const isCorrect = normalizedAnswer === currentQuestion.answer.toLowerCase();
+
 
 //----------------------
 // Lesson progress Logic
@@ -126,7 +154,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
     }
 
     // save session
-    updateSession(session);
+    await updateSession(session);
 
 
     // --------------------
@@ -154,18 +182,36 @@ export const submitAnswer = async (req: Request, res: Response) => {
         tutorMessage = "I'm having trouble responding right now. please try again.";
     }
 
+    // Save tutor message to MongoDB
+    const tutorMessageObj = { role: "assistant", content: tutorMessage};
+    session.messages.push(tutorMessageObj);
+    await session.save();
+
+
     return res.status(200).json({ session, tutorMessage });    
 };
 
 //----------------------
 // Get session (debug)
 //----------------------
-export const getSessionHandler = (req: Request, res:Response) => {
-    const session = getSession(req.params.userId);
+export const getSessionHandler = async (req: Request, res:Response) => {
+    const { userId} = req.params;
 
-    if(!session){
-        return res.status(404).json({error: "No active sessions"});
+    if(!userId){
+        return res.status(400).json({error: "UserId is required"});
     }
 
-    return res.status(200).json(session);
+    try {
+        const session = await LessonSessionModel.findOne({ userId });
+
+        if(!session) {
+            return res.status(404).json({error: "No active sessions found"});
+        }
+        // Return full session including chart history
+        return res.status(200).json({ session, messages: session.messages});
+    } catch(err) {
+        console.error(err);
+        return res.status(500).json({error: "Failed to fetch session"})
+    }
+
 };

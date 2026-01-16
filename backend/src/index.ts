@@ -1,6 +1,7 @@
 // src/index.ts
 // this is also known as the backend entry file
 
+import { connectMongo } from "./db/mongo";
 import "dotenv/config";
 import express from "express";
 import lessonRoutes from "./routes/lesson"
@@ -20,6 +21,7 @@ app.use(cors({
     methods: ["GET", "POST"],
 }));
 
+connectMongo();
 
 app.use("/lesson", lessonRoutes)
 app.listen(PORT, () =>{
@@ -28,3 +30,4 @@ app.listen(PORT, () =>{
 
 
 // http://localhost:5173.  CORS launch site
+

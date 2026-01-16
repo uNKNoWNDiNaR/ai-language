@@ -7,14 +7,29 @@ export type LessonState =   // backend control only
     | "ADVANCE"
     | "COMPLETE";
 
+  export type BackendMessage = {
+    role: "user" | "assistant";
+    content: string;
+};
 
 export type LessonSession = {
     userId: string;
     lessonId: string;
-    state: LessonState;
+    state: string;
     tutorIntent?: TutorIntent;
     attempts: number;
     maxAttempts: number; 
-    currentQuestionIndex?: number;  // tracks the current question number 
+    currentQuestionIndex: number;  
+    messages: BackendMessage[];
+};
+export type BackendSession = {
+    userId: string;
+    lessonId: string;
+    state: string;
+    tutorIntent?: TutorIntent;
+    attempts: number;
+    maxAttempts: number; 
+    currentQuestionIndex: number;  
+    messages: BackendMessage[];
 };
 

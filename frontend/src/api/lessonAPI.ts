@@ -35,11 +35,18 @@ export async function submitAnswer(userId:string, answer:string): Promise<Submit
     return res.data;
 }
 
-export async function getSession(userId:string): Promise<LessonSession | null> {
-    try{
+
+export type BackendChatMessage = {
+    role: "user" | "assistant";
+    content: string; 
+};
+
+export type BackendSession = {
+    userId: string;
+    messages: BackendChatMessage[];
+};
+
+export const getSession = async (userId:string): Promise<BackendSession | null> => {
         const res = await axios.get(`${BASE_URL}/${userId}`);
-        return res.data;
-    } catch(err) {
-        return null;
-    }
+        return res.data.session ?? null;
 }

@@ -1,13 +1,16 @@
 // src/components/Lesson.tsx
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { AxiosError } from "axios";
-import { startLesson, submitAnswer } from "../api/lessonAPI";
+import { startLesson, submitAnswer, getSession } from "../api/lessonAPI";
+import type { BackendSession } from "../api/lessonAPI";
+
 
 type Message = {
     sender: "tutor" | "student";
     text: string;
 };
+
 
 const Lesson: React.FC = () => {
     const [userId, setUserId] = useState("");
@@ -17,6 +20,12 @@ const Lesson: React.FC = () => {
     const [sessionStarted, setSessionStarted] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [answer, setAnswer] = useState ("");
+    const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({behavior: "smooth"});
+    }, [messages]);
+
 
 
     // --------------------
@@ -44,10 +53,18 @@ const Lesson: React.FC = () => {
 
             //Resume existing session
             if(error.response?.status === 409) {
-                const resume = await submitAnswer(userId, "");
-                setMessages([
-                    {sender: "tutor", text: resume.tutorMessage}
-                ]);
+
+                //Fetchfull stored session(restore)
+                const existing: BackendSession | null = await getSession(userId);
+
+                //Convert backend messages to frontend Message type
+                if (!existing) return;
+
+                const restoredMessages: Message[] = existing.messages.map((m) => ({
+                    sender: m.role === "assistant" ? "tutor": "student",
+                    text: m.content
+                }));
+                setMessages(restoredMessages);
                 setSessionStarted(true);
             } else {
                 alert("Could not start lesson. Check backend");
@@ -163,6 +180,7 @@ const Lesson: React.FC = () => {
                                 maxWidth: "80%"
                             }}
                         >
+
                             <strong style={{fontSize: "0.85em"}}>
                                 {msg.sender === "tutor" ? tutorName : userId }
                             </strong>
@@ -171,7 +189,7 @@ const Lesson: React.FC = () => {
                     </div>
                     ))}
                 </div>
-
+                    <div ref={chatEndRef} />
                 {/* Feedback Button */}
                 <div style={{ marginTop: 10, textAlign:"center" }}>
                     <a 

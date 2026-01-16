@@ -1,54 +1,24 @@
 // src/storage/sessionStore.ts
 
-import fs from "fs";
-import path from "path";
+
 import { LessonSession } from "../state/lessonState";
+import { LessonSessionModel } from "../state/sessionState";
 
-const DATA_FILE = path.join(__dirname, "../../sessions.json");
-
-//Ensure all the files exist
-function ensureFile () {
-    if(!fs.existsSync(DATA_FILE)){
-        fs.writeFileSync(DATA_FILE, JSON.stringify({}), "utf-8");
-    }
+export async function getSession(userId: string): Promise<LessonSession | null> {
+    return await LessonSessionModel.findOne({ userId });
 }
 
-//Load all lessons
-function loadSessions(): Record<string, LessonSession> {
-    ensureFile();
-    const raw = fs.readFileSync(DATA_FILE, "utf-8");
-    return JSON.parse(raw);
+export async function createSession(session:LessonSession): Promise<void> {
+    await LessonSessionModel.create(session);
 }
 
-//Save all sessions
-function saveSessions(sessions: Record<string, LessonSession>) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(sessions, null, 2), "utf-8");
+export async function updateSession(session:LessonSession): Promise<void> {
+    await LessonSessionModel.updateOne(
+        {userId: session.userId},
+        session
+    );
 }
 
-
-//------------------
-// Public API
-//------------------
-
-export function getSession(userId: string): LessonSession | null {
-    const sessions = loadSessions();
-    return sessions[userId] || null;
-}
-
-export function createSession(session: LessonSession): void {
-    const sessions = loadSessions();
-    sessions[session.userId] = session;
-    saveSessions(sessions)
-}
-
-export function updateSession(session: LessonSession): void {
-    const sessions = loadSessions();
-    sessions[session.userId] = session;
-    saveSessions(sessions);
-}
-
-export function deleteSession(userId: string): void {
-    const sessions = loadSessions();
-    delete sessions[userId];
-    saveSessions(sessions)
+export async function deleteSession(userId:string): Promise<void> {
+    await LessonSessionModel.deleteOne({userId})
 }
