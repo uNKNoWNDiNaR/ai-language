@@ -13,6 +13,7 @@ import {
     createSession, 
     updateSession, 
  } from "../storage/sessionStore";
+import { error } from "node:console";
 
 
 
@@ -38,57 +39,62 @@ export const startLesson = async (req: Request, res: Response) => {
         return res.status(400).json({error: "UserId is required"});
     }
 
-    //Prevent overwriting existing session
-    if( await getSession(userId)) {
-        return res.status(409).json({error: "Session already exists", });
-    }
-
-    const session: LessonSession = {
-        userId,
-        lessonId: "basic-1",
-        state: "USER_INPUT",  
-        attempts: 0,
-        maxAttempts: 3,
-        currentQuestionIndex: 0,
-        messages: []
-    };
-
-    await createSession({
-        ...session,
-        lessonId: "basic-1"});
-
-    const intent: TutorIntent = "ASK_QUESTION";
-    const questionText = basicLesson1[session.currentQuestionIndex || 0]?.question || "";
-    const tutorPrompt = buildTutorPrompt(session, intent, questionText) + `\nQuestion: ${questionText}`;
-
-    // Call openAI to get actual message
-    let tutorMessage: string;
     try{
-        tutorMessage = await generateTutorResponse(tutorPrompt, intent);
-    } catch{
-        tutorMessage = "I'm having trouble responding right now. Please try again.";
+        //Check MONGO first
+        let session = await LessonSessionModel.findOne({userId});
+
+        //-----------------------
+        //If session alraedy exists -> return it 
+        //-----------------------
+        if(session) {
+            return res.status(200).json({ session });
+        }
+
+        //------------------------
+        //If new user -> create session
+        //------------------------
+        const newSession: LessonSession = {
+            userId,
+            lessonId: "basic-1",
+            state: "USER_INPUT",
+            attempts: 0,
+            maxAttempts: 3,
+            currentQuestionIndex: 0,
+            messages: []
+        };
+
+        //Build first tutor question
+        const intent: TutorIntent = "ASK_QUESTION";
+        const questionText = basicLesson1[0].question;
+        const tutorPrompt = 
+            buildTutorPrompt(newSession, intent, questionText) + `\nQuestion: ${questionText}`;
+
+        let tutorMessage: string;
+        try {
+            tutorMessage = await generateTutorResponse(tutorPrompt, intent);
+        } catch {
+            tutorMessage = "I'm having trouble responding right now. Please try again later.";
+        }
+
+        //Add tutor message to session
+        const intitialMessage = {
+            role: "assistant",
+            content: tutorMessage
+        };
+
+        //Save properly to Mongo
+        session = await LessonSessionModel.create({
+            ...newSession,
+            messages: [intitialMessage]
+        });
+
+        return res.status(201).json({ session, tutorMessage });
+
+    } catch(err) {
+        console.error("Start  lesson error", err);
+        return res.status(500).json({ error: "Server error"});
     }
-
-    // Convert to ChatMessage
-    const initialMessage = {
-        role: "assistant",
-        content: tutorMessage
-    }; 
-
-    // Save new session on MongoDB
-    const newSessionDoc = await LessonSessionModel.create({
-        userId: "string",
-        lessonId: "basic-1",
-        state: "USER_INPUT",
-        attempts: 0,
-        maxAttempts: 3,
-        currentQuestionIndex: 0,
-        messages: [initialMessage]
-    });
-
-    return res.status(201).json({session: newSessionDoc, tutorMessage});
 };
-
 
 //----------------------
 // Submit answer
