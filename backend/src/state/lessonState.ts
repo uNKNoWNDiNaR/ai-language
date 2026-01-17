@@ -21,6 +21,7 @@ export type LessonSession = {
     maxAttempts: number; 
     currentQuestionIndex: number;  
     messages: BackendMessage[];
+    language: string;
 };
 export type BackendSession = {
     userId: string;

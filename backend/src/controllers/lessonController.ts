@@ -7,12 +7,8 @@ import { LessonSession, LessonState } from "../state/lessonState";
 import { buildTutorPrompt } from "../ai/promptBuilder";
 import { generateTutorResponse } from "../ai/openaiClient";
 import { TutorIntent } from "../ai/tutorIntent";
-import { basicLesson1 } from "../lessons/basic-1";
-import { 
-    getSession, 
-    createSession, 
-    updateSession, 
- } from "../storage/sessionStore";
+import { updateSession, } from "../storage/sessionStore";
+import { Lesson, loadLesson } from "../state/lessonLoader";
 import { error } from "node:console";
 
 
@@ -27,20 +23,19 @@ function getTutorIntent(state: LessonState, isCorrect?: boolean): TutorIntent{
         return "ASK_QUESTION";
     }
 
-
 //----------------------
 // Start lesson
 //----------------------
 export const startLesson = async (req: Request, res: Response) => {
-    const { userId } = req.body;
+    const { userId, language = "en", lessonId = "basic-1" } = req.body;
 
     //check for presence of userId
     if(!userId) {
         return res.status(400).json({error: "UserId is required"});
     }
 
-    try{
-        //Check MONGO first
+    try {
+        //Check exisiting session
         let session = await LessonSessionModel.findOne({userId});
 
         //-----------------------
@@ -51,23 +46,29 @@ export const startLesson = async (req: Request, res: Response) => {
         }
 
         //------------------------
-        //If new user -> create session
+        //load lesson Dynamically using lessonLoader.ts
         //------------------------
+        const lesson: Lesson | null = loadLesson(language, lessonId);
+        if(!lesson) return res.status(404).json({error: "Lesson not found"});
+
+        //create new session
         const newSession: LessonSession = {
             userId,
-            lessonId: "basic-1",
+            lessonId,
             state: "USER_INPUT",
             attempts: 0,
             maxAttempts: 3,
             currentQuestionIndex: 0,
-            messages: []
+            messages: [],
+            language,
         };
 
-        //Build first tutor question
+        //Build First tutor question)
+        const firstQuestion = lesson.questions[0];
         const intent: TutorIntent = "ASK_QUESTION";
-        const questionText = basicLesson1[0].question;
         const tutorPrompt = 
-            buildTutorPrompt(newSession, intent, questionText) + `\nQuestion: ${questionText}`;
+            buildTutorPrompt(newSession, intent, firstQuestion.question) + 
+            `\nQuestion: ${firstQuestion.question}`;
 
         let tutorMessage: string;
         try {
@@ -76,20 +77,11 @@ export const startLesson = async (req: Request, res: Response) => {
             tutorMessage = "I'm having trouble responding right now. Please try again later.";
         }
 
-        //Add tutor message to session
-        const intitialMessage = {
-            role: "assistant",
-            content: tutorMessage
-        };
+        //Save tutor message to session
+        const intitialMessage = {role: "assistant", content: tutorMessage};
+        session = await LessonSessionModel.create({...newSession,messages: [intitialMessage]});
 
-        //Save properly to Mongo
-        session = await LessonSessionModel.create({
-            ...newSession,
-            messages: [intitialMessage]
-        });
-
-        return res.status(201).json({ session, tutorMessage });
-
+        return res.status(201).json({ session, tutorMessage })
     } catch(err) {
         console.error("Start  lesson error", err);
         return res.status(500).json({ error: "Server error"});
@@ -100,25 +92,29 @@ export const startLesson = async (req: Request, res: Response) => {
 // Submit answer
 //----------------------
 export const submitAnswer = async (req: Request, res: Response) => { 
-
     const {userId, answer} = req.body;
-
     if (!userId || typeof answer !== "string") {
         return res.status(400).json({error: "Invalid Payload (userId and answer are required)"});
     }
     
     // Fetch Mongo session
     const session = await LessonSessionModel.findOne({ userId});
-
     if(!session) {
-        return res.status(404).json({error: "No active sessions"});
+        return res.status(404).json({error: "No active session found"});
     }
 
-    const userMessage = {role: "user",content: answer};
+    //Load lesson dynamically via lessonLoader
+    const lesson: Lesson | null = loadLesson(session.language || "en", session.lessonId);
+    if(!lesson){
+        return res.status(404).json({error: "Lesson not found"});
+    }
+
+    //Push user message
+    const userMessage = {role: "user", content: answer};
     session.messages.push(userMessage);
 
     const currentIndex = session.currentQuestionIndex || 0;
-    const currentQuestion = basicLesson1[currentIndex];
+    const currentQuestion = lesson.questions[currentIndex];
 
     const normalizedAnswer = answer.trim().toLowerCase();
     const isCorrect = normalizedAnswer === currentQuestion.answer.toLowerCase();
@@ -129,28 +125,21 @@ export const submitAnswer = async (req: Request, res: Response) => {
 //----------------------
 
     if(isCorrect) {
-        //Reset prompts
         session.attempts = 0;
-
-        //Move forward
-        if(currentIndex + 1 >= basicLesson1.length) {
+        if(currentIndex + 1 >= lesson.questions.length) {
             session.state = "COMPLETE";
         } else{
             session.currentQuestionIndex = currentIndex + 1;
             session.state = "ADVANCE";
         }
     } else {
-        //Wrong answer
         session.attempts++;
-
-        //still retries left, stay on the same question
         if(session.attempts < session.maxAttempts) {
             session.state = "USER_INPUT";
         }
         else {
             session.attempts = 0;
-    
-            if(currentIndex + 1 >= basicLesson1.length){
+            if(currentIndex + 1 >= lesson.questions.length){
                 session.state = "COMPLETE";
             } else {
                 session.currentQuestionIndex = currentIndex + 1;
@@ -166,21 +155,15 @@ export const submitAnswer = async (req: Request, res: Response) => {
     // --------------------
     // Build next tutor prompt
     // --------------------
-
     const intent = getTutorIntent(session.state, isCorrect);
-
-    let questionText = "";
-    if(session.state !== "COMPLETE") {
-        questionText = basicLesson1[session.currentQuestionIndex || 0].question;
-    }
-
+    let questionText = 
+        session.state !== "COMPLETE" ? lesson.questions[session.currentQuestionIndex].question : ""; 
     const tutorPrompt = buildTutorPrompt(session, intent, questionText);
 
 
     // --------------------
     // Call AI
     // --------------------
-
     let tutorMessage: string;
     try{
         tutorMessage = await generateTutorResponse(tutorPrompt, intent);
@@ -209,7 +192,6 @@ export const getSessionHandler = async (req: Request, res:Response) => {
 
     try {
         const session = await LessonSessionModel.findOne({ userId });
-
         if(!session) {
             return res.status(404).json({error: "No active sessions found"});
         }

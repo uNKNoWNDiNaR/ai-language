@@ -15,8 +15,9 @@ type Message = {
 const Lesson: React.FC = () => {
     const [userId, setUserId] = useState("");
     const [tutorNameInput, setTutorNameInput] = useState("");
-    const [tutorName, setTutorName] = useState("Tutor")   
-
+    const [tutorName, setTutorName] = useState("Tutor");
+    const [language, setLanguage] = useState("en");
+    const [lessonId, setLessonId] = useState("basic-1"); 
     const [sessionStarted, setSessionStarted] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [answer, setAnswer] = useState ("");
@@ -40,7 +41,7 @@ const Lesson: React.FC = () => {
 
         try{
             //Attenmpt to start a new lesson
-            const res = await startLesson(userId);
+            const res = await startLesson(userId, language, lessonId);
 
             // Restore stored message from DB
             const restoredMessages: Message[] = res.session.messages.map(m => ({
@@ -150,6 +151,28 @@ const Lesson: React.FC = () => {
                         style={{padding: 8, width: "100%", marginBottom: 10}}
                     />
 
+                    {/* *Language selector */}
+                    <select 
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value)}
+                        style={{padding: 8, width: "100%", marginBottom: 10}}
+                    >
+                        <option value="en">English</option>
+                        <option value="de">German</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                    </select>
+
+                    {/* *Lesson selector */}
+                    <select 
+                        value={lessonId}
+                        onChange={(e) => setLessonId(e.target.value)}
+                        style={{padding: 8, width: "100%", marginBottom: 10}}
+                    >
+                        <option value="basic-1">Basic Lesson 1</option>
+                        <option value="basic-2">Basic Lesson 2</option>
+                    </select>
+
                     <button onClick={handleStartLesson} style={{padding: 10}}>
                         Start Lesson
                     </button>
@@ -176,7 +199,7 @@ const Lesson: React.FC = () => {
                             style={{
                                 textAlign: msg.sender === "tutor" ? "left" : "right",
                                 marginBottom: 10,
-                                color: "#222"
+                                //color: "#222"
                             }}
                         >
 
@@ -200,6 +223,7 @@ const Lesson: React.FC = () => {
                     ))}
                 </div>
                     <div ref={chatEndRef} />
+
                 {/* Feedback Button */}
                 <div style={{ marginTop: 10, textAlign:"center" }}>
                     <a 

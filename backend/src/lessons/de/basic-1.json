@@ -1,0 +1,28 @@
+{
+  "lessonId": "basic-1",
+  "title": "Greetings and Introductions (German)",
+  "description": "Learn how to greet, introduce yourself, and ask basic questions in German.",
+  "questions": [
+    {
+      "id": 1,
+      "question": "How do you say 'Hello' in German?",
+      "answer": "Hallo",
+      "hint": "Common greeting.",
+      "examples": ["Hallo", "Hi", "Guten Tag"]
+    },
+    {
+      "id": 2,
+      "question": "How do you ask someone's name?",
+      "answer": "Wie heißt du?",
+      "hint": "Starts with 'Wie'.",
+      "examples": ["Wie heißt du?", "Wie ist dein Name?"]
+    },
+    {
+      "id": 3,
+      "question": "Respond to 'Wie geht's?' in German.",
+      "answer": "Mir geht's gut",
+      "hint": "Starts with 'Mir geht'.",
+      "examples": ["Mir geht's gut", "Gut", "Alles gut"]
+    }
+  ]
+}

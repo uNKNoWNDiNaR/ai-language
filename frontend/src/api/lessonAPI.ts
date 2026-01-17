@@ -33,8 +33,16 @@ export interface SubmitAnswerResponse {
     tutorMessage: string;
 }
 
-export async function startLesson(userId: string): Promise<StartLessonResponse> {
-    const res = await axios.post(`${BASE_URL}/lesson/start`, {userId});
+export async function startLesson(
+    userId: string,
+    language: string,
+    lessonId: string,
+): Promise<StartLessonResponse> {
+    const res = await axios.post(`${BASE_URL}/lesson/start`, {
+        userId,
+        language,
+        lessonId
+});
     return res.data;
 }
 
