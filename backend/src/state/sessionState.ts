@@ -12,6 +12,7 @@ const ChatMessageSchema = new mongoose.Schema({
 const LessonSessionSchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true },
     lessonId: String,
+    language: {type: String, required: true},
     state: {type: String, required: true},
     attempts: {type: Number, required: true},
     maxAttempts: {type: Number, required: true},

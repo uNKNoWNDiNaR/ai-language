@@ -106,7 +106,7 @@ export const startLesson = async (req: Request, res: Response) => {
 // Submit answer
 //----------------------
 export const submitAnswer = async (req: Request, res: Response) => { 
-    const {userId, answer} = req.body;
+    const {userId, answer, language, lessonId} = req.body;
     if (!userId || typeof answer !== "string") {
         return res.status(400).json({error: "Invalid Payload (userId and answer are required)"});
     }
@@ -118,6 +118,14 @@ export const submitAnswer = async (req: Request, res: Response) => {
     }
 
     //Load lesson dynamically via lessonLoader
+    if(!session.language && typeof language === "string"){
+        session.language = language.trim().toLowerCase();
+    }
+
+    if(!session.lessonId && typeof lessonId === "string"){
+        session.lessonId = lessonId;
+    }
+    
     const lesson: Lesson | null = loadLesson(session.language, session.lessonId);
     if(!lesson){
         return res.status(404).json({error: "Lesson not found"});
