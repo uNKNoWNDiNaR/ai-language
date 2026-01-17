@@ -27,7 +27,7 @@ function getTutorIntent(state: LessonState, isCorrect?: boolean): TutorIntent{
 // Start lesson
 //----------------------
 export const startLesson = async (req: Request, res: Response) => {
-    const { userId, language = "en", lessonId = "basic-1" } = req.body;
+    const { userId, language, lessonId} = req.body;
 
     //check for presence of userId
     if(!userId) {
