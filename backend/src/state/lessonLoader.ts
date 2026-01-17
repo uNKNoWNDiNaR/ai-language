@@ -23,12 +23,21 @@ export type Lesson = {
  */
 export const loadLesson = (language: string, lessonId: string): Lesson | null => {
     try{
-        const lessonPath = path.join(__dirname, "..","lessons", language, `${lessonId}.json`);
-        if(!fs.existsSync(lessonPath)) {
-            console.error("Lesson file not found at: ", lessonPath);
+
+        //Normalise to pevent case issues
+        const lang = (language || "").trim().toLowerCase();
+
+        const candidatePaths = [
+            path.join(__dirname, "..", "lessons", lang, `${lessonId}.json`),
+            path.join(process.cwd(), "src", "lessons", lang, `${lessonId}.json`),
+        ];
+
+        const lessonPath = candidatePaths.find(p => fs.existsSync(p));
+        if(!lessonPath) {
+            console.error("Lesson file not found. Tried", candidatePaths);
             return null;
         }
-        
+
         const lessonData = fs.readFileSync(lessonPath, "utf-8");
         return JSON.parse(lessonData) as Lesson;
     } catch (err) {
