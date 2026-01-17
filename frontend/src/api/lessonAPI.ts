@@ -46,8 +46,12 @@ export async function startLesson(
     return res.data;
 }
 
-export async function submitAnswer(userId:string, answer:string): Promise<SubmitAnswerResponse> {
-    const res = await axios.post(`${BASE_URL}/lesson/submit`, {userId, answer});
+export async function submitAnswer(userId:string, language:string, lessonId:string, answer:string): Promise<SubmitAnswerResponse> {
+    const res = await axios.post(`${BASE_URL}/lesson/submit`, {
+        userId, 
+        language,
+        lessonId,
+        answer});
     return res.data;
 }
 

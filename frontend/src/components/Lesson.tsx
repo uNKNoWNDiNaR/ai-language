@@ -99,7 +99,7 @@ const Lesson: React.FC = () => {
 
         
         try {
-            const res = await submitAnswer(userId, answer);
+            const res = await submitAnswer(userId, language, lessonId, answer);
 
             //Append only tutor message to avoid duplicating
             const tutorReply: Message = {

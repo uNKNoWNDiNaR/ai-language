@@ -9,7 +9,6 @@ import { generateTutorResponse } from "../ai/openaiClient";
 import { TutorIntent } from "../ai/tutorIntent";
 import { updateSession, } from "../storage/sessionStore";
 import { Lesson, loadLesson } from "../state/lessonLoader";
-import { error } from "node:console";
 
 
 
@@ -34,15 +33,30 @@ export const startLesson = async (req: Request, res: Response) => {
         return res.status(400).json({error: "UserId is required"});
     }
 
+    //require language + lessonId
+    if(!language || !lessonId) {
+        return res.status(400).json({error: "Language and lessonId are required"});
+    }
+
     try {
         //Check exisiting session
         let session = await LessonSessionModel.findOne({userId});
 
         //-----------------------
-        //If session alraedy exists -> return it 
+        //If session alraedy exists 
+        //Reuse only if it matches the requested lesson + language
+        // otherwise reset it so that we dont accidentally default to old english 
         //-----------------------
         if(session) {
-            return res.status(200).json({ session });
+            const sameLesson = session.lessonId === lessonId && session.language === language;
+
+            if(sameLesson) {
+                return res.status(200).json({ session });
+            }
+
+            //Reset session if user picked a different language/lesson
+            await LessonSessionModel.deleteOne({ userId });
+            session = null;
         }
 
         //------------------------
@@ -104,7 +118,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
     }
 
     //Load lesson dynamically via lessonLoader
-    const lesson: Lesson | null = loadLesson(session.language || "en", session.lessonId);
+    const lesson: Lesson | null = loadLesson(session.language, session.lessonId);
     if(!lesson){
         return res.status(404).json({error: "Lesson not found"});
     }
