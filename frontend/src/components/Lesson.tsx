@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { startLesson, submitAnswer, getSession } from "../api/lessonAPI";
-import type { BackendSession, Evaluation, Progress } from "../api/lessonAPI";
+import type { BackendSession, Evaluation, Progress, ProgressStatus } from "../api/lessonAPI";
 
 type Message = {
   sender: "tutor" | "student";
@@ -78,13 +78,11 @@ const Lesson: React.FC = () => {
     return null;
   }, [progress]);
 
-  const statusLabel = (p: ProgressStatusLike) => {
+  const statusLabel = (p: ProgressStatus) => {
     if (p === "completed") return "✅ completed";
     if (p === "needs_review") return "🔁 needs review";
     return "⏳ in progress";
   };
-
-  type ProgressStatusLike = "completed" | "in_progress" | "needs_review";
 
   const mapReasonToGuidance = (evaluation?: Evaluation): string | null => {
     if (!evaluation) return null;
