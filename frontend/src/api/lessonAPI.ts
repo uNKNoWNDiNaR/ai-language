@@ -11,9 +11,29 @@ const BASE_URL = "https://ai-language-tutor-2ff9.onrender.com";
 };
 
 
+export type EvaluationResult = "correct" | "almost" | "wrong";
+
+export type Evaluation = {
+    result: EvaluationResult;
+    reasonCode: string;  // e.g ARTICLE, WORD_ORDER, etc
+};
+
+export type Hint = {
+    level: number; //2 => light, 3+ => strong
+    text: string;
+}
+
+export type ProgressStatus = "Completed" | "in_progress" | "needs_review";
+
+export type Progress = {
+    current: number; //1-based question number 
+    total: number;
+    status: ProgressStatus;
+};
 export interface LessonSession {
     userId: string;
     lessonId: string;
+    language?: string;
     state: string;
     attempts: number;
     maxAttempts: number;
@@ -23,30 +43,40 @@ export interface LessonSession {
 
 export interface StartLessonResponse {
     session: LessonSession;
-    tutorPrompt: string;
     tutorMessage: string;
+    progress?: Progress;
 }
+
 
 export interface SubmitAnswerResponse {
     session: LessonSession;
-    tutorPrompt: string;
     tutorMessage: string;
+    evaluation?: Evaluation;
+    hint?: Hint;
+    progress?: Progress;
 }
 
 export async function startLesson(
     userId: string,
     language: string,
     lessonId: string,
+    options?:{ restart?: boolean}
 ): Promise<StartLessonResponse> {
     const res = await axios.post(`${BASE_URL}/lesson/start`, {
         userId,
         language,
-        lessonId
+        lessonId,
+        ...(options?.restart ? {restart: true} : {}),
 });
     return res.data;
 }
 
-export async function submitAnswer(userId:string, language:string, lessonId:string, answer:string): Promise<SubmitAnswerResponse> {
+export async function submitAnswer(
+    userId:string, 
+    language:string, 
+    lessonId:string, 
+    answer:string
+): Promise<SubmitAnswerResponse> {
     const res = await axios.post(`${BASE_URL}/lesson/submit`, {
         userId, 
         language,
@@ -55,15 +85,15 @@ export async function submitAnswer(userId:string, language:string, lessonId:stri
     return res.data;
 }
 
-
-export type BackendChatMessage = {
-    role: "user" | "assistant";
-    content: string; 
-};
-
 export type BackendSession = {
     userId: string;
-    messages: BackendChatMessage[];
+    lessonId?: string;
+    language?: string;
+    state?: string;
+    attempts?: number;
+    maxAttempts?: number;
+    currentQuestionIndex?: number;
+    messages: BackendMessage[];
 };
 
 export const getSession = async (userId:string): Promise<BackendSession | null> => {

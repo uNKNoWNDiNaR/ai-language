@@ -5,9 +5,15 @@ import Lesson from './components/Lesson';
 
 function App(){
   return(
-    <div>
-      <h1 style={{textAlign: "center"}}>AI Language Tutor</h1>
-      <Lesson />
+    <div className="appShell">
+      <header className="appHeader">
+        <h1 className="appTitle">AI Language Tutor</h1>
+        <p className='appSubtitle'>A calm, conversational practice space</p>
+      </header>
+
+      <main className='appMain'>
+        <Lesson />
+      </main>
     </div>
   );
 }
