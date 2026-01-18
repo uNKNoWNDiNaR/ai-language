@@ -4,30 +4,27 @@
 import { connectMongo } from "./db/mongo";
 import "dotenv/config";
 import express from "express";
-import lessonRoutes from "./routes/lesson"
-import cors from "cors"
+import lessonRoutes from "./routes/lesson";
+import progressRoutes from "./routes/progress";
+import cors from "cors";
 
-//this uses theexpress backend
 const app = express();
 app.use(express.json());
 
-
-// Mount all lesson related rouutes under /lesson
 const PORT = process.env.PORT || 3000;
 
-
-app.use(cors({
-    origin: "*",  //    Vite frontend
+app.use(
+  cors({
+    origin: "*",
     methods: ["GET", "POST"],
-}));
+  })
+);
 
 connectMongo();
 
-app.use("/lesson", lessonRoutes)
-app.listen(PORT, () =>{
-    console.log(`Backend running on http://localhost:${PORT}`);
+app.use("/lesson", lessonRoutes);
+app.use("/progress", progressRoutes);
+
+app.listen(PORT, () => {
+  console.log(`Backend running on http://localhost:${PORT}`);
 });
-
-
-// http://localhost:5173.  CORS launch site
-

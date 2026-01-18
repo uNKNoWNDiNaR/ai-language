@@ -7,221 +7,309 @@ import { LessonSession, LessonState } from "../state/lessonState";
 import { buildTutorPrompt } from "../ai/promptBuilder";
 import { generateTutorResponse } from "../ai/openaiClient";
 import { TutorIntent } from "../ai/tutorIntent";
-import { updateSession, } from "../storage/sessionStore";
+import { updateSession } from "../storage/sessionStore";
 import { Lesson, loadLesson } from "../state/lessonLoader";
-
-
+import { evaluateAnswer } from "../state/answerEvaluator";
+import { getDeterministicRetryMessage } from "../ai/staticTutorMessages";
+import { LessonProgressModel } from "../state/progressState";
 
 //----------------------
 // Helper: map state ->tutor intent
 //----------------------
-function getTutorIntent(state: LessonState, isCorrect?: boolean): TutorIntent{
-    if(state === "COMPLETE") return "END_LESSON";
-    if(state === "ADVANCE") return "ADVANCE_LESSON" 
-    if(isCorrect === false) return "ENCOURAGE_RETRY"
-        return "ASK_QUESTION";
-    }
+function getTutorIntent(state: LessonState, isCorrect?: boolean): TutorIntent {
+  if (state === "COMPLETE") return "END_LESSON";
+  if (state === "ADVANCE") return "ADVANCE_LESSON";
+  if (isCorrect === false) return "ENCOURAGE_RETRY";
+  return "ASK_QUESTION";
+}
+
+type HintResponse = { level: number; text: string };
+
+function chooseHintForAttempt(question: any, attemptCount: number): HintResponse | undefined {
+  // Attempt 1 -> no hint
+  if (attemptCount <= 1) return undefined;
+
+  // Support BOTH formats:
+  // - hint?: string (legacy)
+  // - hints?: string[] (new)
+  const hintsArr: string[] = Array.isArray(question.hints) ? question.hints : [];
+  const legacyHint: string = typeof question.hint === "string" ? question.hint : "";
+
+  // Attempt 2 -> light hint
+  // Attempt 3 -> stronger hint
+  if (attemptCount === 2) {
+    const text = (hintsArr[0] || legacyHint || "").trim();
+    if (!text) return undefined;
+    return { level: 1, text };
+  }
+
+  if (attemptCount === 3) {
+    const text = (hintsArr[1] || hintsArr[0] || legacyHint || "").trim();
+    if (!text) return undefined;
+    return { level: 2, text };
+  }
+
+  // Attempt 4+ -> reveal answer + short explanation
+  const reveal = `Answer: ${question.answer}. Explanation: this is the expected structure for this question.`;
+  return { level: 3, text: reveal };
+}
+
+function incMistake(m: Map<string, number>, qid: number) {
+  const key = String(qid);
+  const prev = m.get(key) || 0;
+  m.set(key, prev + 1);
+}
 
 //----------------------
 // Start lesson
 //----------------------
 export const startLesson = async (req: Request, res: Response) => {
-    const { userId, language, lessonId} = req.body;
+  const { userId, language, lessonId } = req.body;
 
-    //check for presence of userId
-    if(!userId) {
-        return res.status(400).json({error: "UserId is required"});
+  if (!userId) return res.status(400).json({ error: "UserId is required" });
+  if (!language || !lessonId) return res.status(400).json({ error: "Language and lessonId are required" });
+
+  try {
+    let session = await LessonSessionModel.findOne({ userId });
+
+    if (session) {
+      const sameLesson = session.lessonId === lessonId && session.language === language;
+      if (sameLesson) return res.status(200).json({ session });
+
+      await LessonSessionModel.deleteOne({ userId });
+      session = null;
     }
 
-    //require language + lessonId
-    if(!language || !lessonId) {
-        return res.status(400).json({error: "Language and lessonId are required"});
-    }
+    const lesson: Lesson | null = loadLesson(language, lessonId);
+    if (!lesson) return res.status(404).json({ error: "Lesson not found" });
 
+    const newSession: LessonSession = {
+      userId,
+      lessonId,
+      state: "USER_INPUT",
+      attempts: 0,
+      maxAttempts: 4, // Phase 2.2 requires attempt 4+ behavior
+      currentQuestionIndex: 0,
+      messages: [],
+      language,
+    };
+
+    const firstQuestion = lesson.questions[0];
+    const intent: TutorIntent = "ASK_QUESTION";
+    const tutorPrompt = buildTutorPrompt(newSession, intent, firstQuestion.question);
+
+    let tutorMessage: string;
     try {
-        //Check exisiting session
-        let session = await LessonSessionModel.findOne({userId});
-
-        //-----------------------
-        //If session alraedy exists 
-        //Reuse only if it matches the requested lesson + language
-        // otherwise reset it so that we dont accidentally default to old english 
-        //-----------------------
-        if(session) {
-            const sameLesson = session.lessonId === lessonId && session.language === language;
-
-            if(sameLesson) {
-                return res.status(200).json({ session });
-            }
-
-            //Reset session if user picked a different language/lesson
-            await LessonSessionModel.deleteOne({ userId });
-            session = null;
-        }
-
-        //------------------------
-        //load lesson Dynamically using lessonLoader.ts
-        //------------------------
-        const lesson: Lesson | null = loadLesson(language, lessonId);
-        if(!lesson) return res.status(404).json({error: "Lesson not found"});
-
-        //create new session
-        const newSession: LessonSession = {
-            userId,
-            lessonId,
-            state: "USER_INPUT",
-            attempts: 0,
-            maxAttempts: 3,
-            currentQuestionIndex: 0,
-            messages: [],
-            language,
-        };
-
-        //Build First tutor question)
-        const firstQuestion = lesson.questions[0];
-        const intent: TutorIntent = "ASK_QUESTION";
-        const tutorPrompt = 
-            buildTutorPrompt(newSession, intent, firstQuestion.question) + 
-            `\nQuestion: ${firstQuestion.question}`;
-
-        let tutorMessage: string;
-        try {
-            tutorMessage = await generateTutorResponse(tutorPrompt, intent);
-        } catch {
-            tutorMessage = "I'm having trouble responding right now. Please try again later.";
-        }
-
-        //Save tutor message to session
-        const intitialMessage = {role: "assistant", content: tutorMessage};
-        session = await LessonSessionModel.create({...newSession,messages: [intitialMessage]});
-
-        return res.status(201).json({ session, tutorMessage })
-    } catch(err) {
-        console.error("Start  lesson error", err);
-        return res.status(500).json({ error: "Server error"});
+      tutorMessage = await generateTutorResponse(tutorPrompt, intent);
+    } catch {
+      tutorMessage = "I'm having trouble responding right now. Please try again later.";
     }
+
+    const intitialMessage = { role: "assistant", content: tutorMessage };
+    session = await LessonSessionModel.create({ ...newSession, messages: [intitialMessage] });
+
+    // Progress: first interaction => in_progress
+    await LessonProgressModel.updateOne(
+      { userId, language: language.trim().toLowerCase(), lessonId },
+      {
+        $setOnInsert: { status: "in_progress" },
+        $set: {
+          currentQuestionIndex: 0,
+          lastActiveAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+
+    return res.status(201).json({ session, tutorMessage });
+  } catch (err) {
+    console.error("Start  lesson error", err);
+    return res.status(500).json({ error: "Server error" });
+  }
 };
 
 //----------------------
 // Submit answer
 //----------------------
-export const submitAnswer = async (req: Request, res: Response) => { 
-    const {userId, answer, language, lessonId} = req.body;
-    if (!userId || typeof answer !== "string") {
-        return res.status(400).json({error: "Invalid Payload (userId and answer are required)"});
-    }
-    
-    // Fetch Mongo session
-    const session = await LessonSessionModel.findOne({ userId});
-    if(!session) {
-        return res.status(404).json({error: "No active session found"});
-    }
+export const submitAnswer = async (req: Request, res: Response) => {
+  const { userId, answer, language, lessonId } = req.body;
+  if (!userId || typeof answer !== "string") {
+    return res.status(400).json({ error: "Invalid Payload (userId and answer are required)" });
+  }
 
-    //Load lesson dynamically via lessonLoader
-    if(!session.language && typeof language === "string"){
-        session.language = language.trim().toLowerCase();
-    }
+  const session = await LessonSessionModel.findOne({ userId });
+  if (!session) return res.status(404).json({ error: "No active session found" });
 
-    if(!session.lessonId && typeof lessonId === "string"){
-        session.lessonId = lessonId;
-    }
-    
-    const lesson: Lesson | null = loadLesson(session.language, session.lessonId);
-    if(!lesson){
-        return res.status(404).json({error: "Lesson not found"});
-    }
+  // Keep legacy behavior: session fields only set if missing
+  if (!session.language && typeof language === "string") session.language = language.trim().toLowerCase();
+  if (!session.lessonId && typeof lessonId === "string") session.lessonId = lessonId;
 
-    //Push user message
-    const userMessage = {role: "user", content: answer};
-    session.messages.push(userMessage);
+  const lesson: Lesson | null = loadLesson(session.language, session.lessonId);
+  if (!lesson) return res.status(404).json({ error: "Lesson not found" });
 
-    const currentIndex = session.currentQuestionIndex || 0;
-    const currentQuestion = lesson.questions[currentIndex];
+  session.messages.push({ role: "user", content: answer });
 
-    const normalizedAnswer = answer.trim().toLowerCase();
-    const isCorrect = normalizedAnswer === currentQuestion.answer.toLowerCase();
+  const currentIndex = session.currentQuestionIndex || 0;
+  const currentQuestion = lesson.questions[currentIndex];
 
+  // Phase 2.2: per-question attempt count
+  const qid = String(currentQuestion.id);
+  const attemptMap: Map<string, number> = session.attemptCountByQuestionId || new Map();
+  const lastAnswerMap: Map<string, string> = session.lastAnswerByQuestionId || new Map();
 
-//----------------------
-// Lesson progress Logic
-//----------------------
+  const prevAttemptCount = attemptMap.get(qid) || 0;
+  const attemptCount = prevAttemptCount + 1;
+  attemptMap.set(qid, attemptCount);
 
-    if(isCorrect) {
-        session.attempts = 0;
-        if(currentIndex + 1 >= lesson.questions.length) {
-            session.state = "COMPLETE";
-        } else{
-            session.currentQuestionIndex = currentIndex + 1;
-            session.state = "ADVANCE";
-        }
+  const prevAnswer = (lastAnswerMap.get(qid) || "").trim().toLowerCase();
+  const nowAnswer = answer.trim().toLowerCase();
+  const repeatedSameWrong = prevAnswer.length > 0 && prevAnswer === nowAnswer;
+  lastAnswerMap.set(qid, nowAnswer);
+
+  session.attemptCountByQuestionId = attemptMap as any;
+  session.lastAnswerByQuestionId = lastAnswerMap as any;
+
+  // Evaluation (Phase 2.2)
+  const evaluation = evaluateAnswer(currentQuestion, answer, session.language);
+  const isCorrect = evaluation.result === "correct";
+
+  // Hint selection (Phase 2.2)
+  const hintObj = chooseHintForAttempt(currentQuestion, attemptCount);
+  const hintForResponse = hintObj && hintObj.level < 3 ? hintObj : hintObj; // include reveal hint too
+  const hintTextForPrompt = hintObj ? hintObj.text : "";
+
+  // Progress update data (Phase 2.2)
+  const mistakesMap: Map<string, number> = new Map();
+  let markNeedsReview = false;
+
+  // Lesson progression rules:
+  // - correct => advance/reset attempt count for this question
+  // - wrong/almost:
+  //    - attempt 1-3 => stay on question
+  //    - attempt 4+ => move on AND mark needs_review AND count mistake
+  if (isCorrect) {
+    // reset per-question attempt count after correct
+    attemptMap.set(qid, 0);
+
+    if (currentIndex + 1 >= lesson.questions.length) {
+      session.state = "COMPLETE";
     } else {
-        session.attempts++;
-        if(session.attempts < session.maxAttempts) {
-            session.state = "USER_INPUT";
-        }
-        else {
-            session.attempts = 0;
-            if(currentIndex + 1 >= lesson.questions.length){
-                session.state = "COMPLETE";
-            } else {
-                session.currentQuestionIndex = currentIndex + 1;
-                session.state = "ADVANCE";
-            }
-        } 
+      session.currentQuestionIndex = currentIndex + 1;
+      session.state = "ADVANCE";
     }
+  } else {
+    // treat almost as retry (still not correct)
+    if (attemptCount >= 4) {
+      // attempt 4+ => move on & mark review
+      markNeedsReview = true;
 
-    // save session
-    await updateSession(session);
+      // record mistake
+      const progDoc = await LessonProgressModel.findOne({ userId: session.userId, language: session.language, lessonId: session.lessonId });
+      if (progDoc && progDoc.mistakesByQuestion) {
+        // existing map
+      }
 
-
-    // --------------------
-    // Build next tutor prompt
-    // --------------------
-    const intent = getTutorIntent(session.state, isCorrect);
-    let questionText = 
-        session.state !== "COMPLETE" ? lesson.questions[session.currentQuestionIndex].question : ""; 
-    const tutorPrompt = buildTutorPrompt(session, intent, questionText);
-
-
-    // --------------------
-    // Call AI
-    // --------------------
-    let tutorMessage: string;
-    try{
-        tutorMessage = await generateTutorResponse(tutorPrompt, intent);
-    } catch{
-        tutorMessage = "I'm having trouble responding right now. please try again.";
+      if (currentIndex + 1 >= lesson.questions.length) {
+        session.state = "COMPLETE";
+      } else {
+        session.currentQuestionIndex = currentIndex + 1;
+        session.state = "ADVANCE";
+      }
+    } else {
+      // attempts 1-3 => retry same question
+      session.state = "USER_INPUT";
     }
+  }
 
-    // Save tutor message to MongoDB
-    const tutorMessageObj = { role: "assistant", content: tutorMessage};
-    session.messages.push(tutorMessageObj);
-    await session.save();
+  await updateSession(session);
 
+  // ---- Progress persistence (Phase 2.2) ----
+  // First interaction => in_progress
+  // Finish last question => completed (unless needs_review triggered)
+  // Repeated failures => needs_review
+  const baseStatus =
+    session.state === "COMPLETE"
+      ? (markNeedsReview ? "needs_review" : "completed")
+      : "in_progress";
 
-    return res.status(200).json({ session, tutorMessage });    
+  // mistakesByQuestion: increment when forced move-on at attempt 4+
+  const updateMistakes: any = {};
+  if (markNeedsReview) {
+    updateMistakes[`mistakesByQuestion.${qid}`] = 1;
+  }
+
+  await LessonProgressModel.updateOne(
+    { userId: session.userId, language: session.language, lessonId: session.lessonId },
+    {
+      $setOnInsert: { status: "in_progress" },
+      $set: {
+        status: baseStatus,
+        currentQuestionIndex: session.currentQuestionIndex || 0,
+        lastActiveAt: new Date(),
+      },
+      $inc: {
+        attemptsTotal: 1,
+        ...(markNeedsReview ? updateMistakes : {}),
+      },
+    },
+    { upsert: true }
+  );
+
+  // ---- Deterministic retry message (Phase 2.2) ----
+  const intent = getTutorIntent(session.state, isCorrect);
+  const questionText = session.state !== "COMPLETE" ? lesson.questions[session.currentQuestionIndex].question : "";
+
+  const retryMessage =
+    intent === "ENCOURAGE_RETRY"
+      ? getDeterministicRetryMessage({
+          reasonCode: evaluation.reasonCode,
+          attemptCount,
+          repeatedSameWrong,
+        })
+      : "";
+
+  const tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
+    retryMessage,
+    hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+  });
+
+  let tutorMessage: string;
+  try {
+    tutorMessage = await generateTutorResponse(tutorPrompt, intent);
+  } catch {
+    tutorMessage = "I'm having trouble responding right now. please try again.";
+  }
+
+  session.messages.push({ role: "assistant", content: tutorMessage });
+  await session.save();
+
+  // Phase 2.2 required response additions:
+  return res.status(200).json({
+    session,
+    tutorMessage,
+    evaluation: {
+      result: evaluation.result,
+      reasonCode: evaluation.reasonCode,
+    },
+    ...(hintForResponse ? { hint: hintForResponse } : {}),
+  });
 };
 
 //----------------------
 // Get session (debug)
 //----------------------
-export const getSessionHandler = async (req: Request, res:Response) => {
-    const { userId} = req.params;
+export const getSessionHandler = async (req: Request, res: Response) => {
+  const { userId } = req.params;
 
-    if(!userId){
-        return res.status(400).json({error: "UserId is required"});
-    }
+  if (!userId) return res.status(400).json({ error: "UserId is required" });
 
-    try {
-        const session = await LessonSessionModel.findOne({ userId });
-        if(!session) {
-            return res.status(404).json({error: "No active sessions found"});
-        }
-        // Return full session including chart history
-        return res.status(200).json({ session, messages: session.messages});
-    } catch(err) {
-        console.error(err);
-        return res.status(500).json({error: "Failed to fetch session"})
-    }
+  try {
+    const session = await LessonSessionModel.findOne({ userId });
+    if (!session) return res.status(404).json({ error: "No active sessions found" });
 
+    return res.status(200).json({ session, messages: session.messages });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to fetch session" });
+  }
 };

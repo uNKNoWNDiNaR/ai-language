@@ -1,35 +1,53 @@
 // src/ai/promptBuiler.ts
 
-
 import { LessonSession } from "../state/lessonState";
 import { TutorIntent } from "./tutorIntent";
 
-export function buildTutorPrompt (session: LessonSession,intent: TutorIntent, questionText: string): string {
+type PromptOptions = {
+  retryMessage?: string; // deterministic, provided by backend
+  hintText?: string;     // chosen from lesson hints/hint or reveal
+};
 
-    return`
-You are alesson tutor engine.
-You must follow theinstructions exactly.
+export function buildTutorPrompt(
+  session: LessonSession,
+  intent: TutorIntent,
+  questionText: string,
+  options: PromptOptions = {}
+): string {
+  const retryMessage = (options.retryMessage || "").trim();
+  const hintText = (options.hintText || "").trim();
+
+  const retryBlock = `
+ENCOURAGE_RETRY:
+Say exactly:
+"${retryMessage}"
+${hintText ? `Then include exactly one hint line:
+"Hint: ${hintText}"` : ""}
+Then ask exactly this question:
+"${questionText}"
+`.trim();
+
+  return `
+You are a lesson tutor engine.
+You must follow the instructions exactly.
 Do not invent new lesson content.
-Do not repeat preious questions.
+Do not repeat previous questions.
 Do not ask extra questions.
 Do not change the lesson order.
 Do not add side explanation.
 
-You must only do the following based on the Intent: 
+You must only do the following based on the Intent:
 
 ASK_QUESTION:
-say: "Let's begin."
-Then ask exactly this question: 
+Say: "Let's begin."
+Then ask exactly this question:
 "${questionText}"
 
-ENCOURAGE_RETRY:
-Say: "Almost! Try again."
-Then ask exactly this question: 
-"${questionText}"
+${retryBlock}
 
 ADVANCE_LESSON:
 Say: "Nice work! Next question:"
-Then ask exactly this question: 
+Then ask exactly this question:
 "${questionText}"
 
 END_LESSON:
