@@ -23,7 +23,7 @@ export type Hint = {
     text: string;
 }
 
-export type ProgressStatus = "Completed" | "in_progress" | "needs_review";
+export type ProgressStatus = "completed" | "in_progress" | "needs_review";
 
 export type Progress = {
     current: number; //1-based question number 
