@@ -2,6 +2,7 @@
 
 import fs from "fs"
 import path from "path"
+import type { LessonSession } from "./lessonState"; 
 
 export type LessonQuestion = {
     id: number;
@@ -24,25 +25,29 @@ export type Lesson = {
  */
 export const loadLesson = (language: string, lessonId: string): Lesson | null => {
     try{
-
         //Normalise to pevent case issues
         const lang = (language || "").trim().toLowerCase();
+        const id = (lessonId || "").trim();
 
         const candidatePaths = [
-            path.join(__dirname, "..", "lessons", lang, `${lessonId}.json`),
-            path.join(process.cwd(), "src", "lessons", lang, `${lessonId}.json`),
+
+            //prefered: build assets copied into dist/lessons
+            path.join(process.cwd(), "dist", "lessons", lang, `${id}.json`),
+            //Fallback: source lessons incase dist copy fails on deploy
+
+            path.join(process.cwd(), "src", "lessons", lang, `${id}.json`),
         ];
 
-        const lessonPath = candidatePaths.find(p => fs.existsSync(p));
+        const lessonPath = candidatePaths.find((p) => fs.existsSync(p));
         if(!lessonPath) {
-            console.error("Lesson file not found. Tried", candidatePaths);
+            console.error("[lessonLoader] Lesson file not found. Tried:", candidatePaths);
             return null;
         }
 
         const lessonData = fs.readFileSync(lessonPath, "utf-8");
         return JSON.parse(lessonData) as Lesson;
     } catch (err) {
-        console.error("Failed to load session:", err);
+        console.error("[lessonLoader] Failed to load session:", err);
         return null;
     }
 }
