@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { startLesson, submitAnswer, getSession } from "../api/lessonAPI";
-import type { BackendSession, Evaluation, Hint, Progress } from "../api/lessonAPI";
+import type { BackendSession, Evaluation, Progress } from "../api/lessonAPI";
 
 type Message = {
   sender: "tutor" | "student";
