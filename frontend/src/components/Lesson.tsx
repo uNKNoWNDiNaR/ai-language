@@ -256,7 +256,7 @@ const Lesson: React.FC = () => {
   };
 
   const handleComposerKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleSubmitAnswer();
     }
@@ -384,22 +384,28 @@ const Lesson: React.FC = () => {
           {errorMessage && <div className="error">{errorMessage}</div>}
 
           <div className="chatWindow" aria-live="polite">
-            {messages.map((msg, index) => (
-              <div key={index} className={`bubbleRow ${msg.sender}`}>
+            {messages.map((msg, index) => {
+              const prev = messages[index - 1];
+              const isGrouped = prev && prev.sender === msg.sender;
+
+              return (
+              <div key={index} className={`bubbleRow ${msg.sender} ${isGrouped ? "grouped" : ""}`}>
                 <div className={`bubble ${msg.sender}`}>
+                  {!isGrouped && (
                   <div className="bubbleName">
                     {msg.sender === "tutor" ? tutorName : userId}
                   </div>
+                  )}
                   <div className="bubbleText">{msg.text}</div>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {sendLoading && (
-              <div className="bubbleRow tutor">
+              <div className="bubbleRow tutor grouped">
                 <div className="bubble tutor">
-                  <div className="bubbleName">{tutorName}</div>
-                  <div className="bubbleText">...</div>
+                  <div className="bubbleText">Typing...</div>
                 </div>
               </div>
             )}
