@@ -405,7 +405,7 @@ const Lesson: React.FC = () => {
             {sendLoading && (
               <div className="bubbleRow tutor grouped">
                 <div className="bubble tutor">
-                  <div className="bubbleText">Typing...</div>
+                  <div className="bubbleText">{(tutorName || "Tutor" )} is Typing...</div>
                 </div>
               </div>
             )}
