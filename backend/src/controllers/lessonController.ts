@@ -7,7 +7,6 @@ import { LessonSession, LessonState } from "../state/lessonState";
 import { buildTutorPrompt } from "../ai/promptBuilder";
 import { generateTutorResponse } from "../ai/openaiClient";
 import { TutorIntent } from "../ai/tutorIntent";
-import { updateSession } from "../storage/sessionStore";
 import { Lesson, loadLesson } from "../state/lessonLoader";
 import { evaluateAnswer } from "../state/answerEvaluator";
 import { getDeterministicRetryMessage } from "../ai/staticTutorMessages";
@@ -52,12 +51,6 @@ function chooseHintForAttempt(question: any, attemptCount: number): HintResponse
   // Attempt 4+ -> reveal answer + short explanation
   const reveal = `Answer: ${question.answer}. Explanation: this is the expected structure for this question.`;
   return { level: 3, text: reveal };
-}
-
-function incMistake(m: Map<string, number>, qid: number) {
-  const key = String(qid);
-  const prev = m.get(key) || 0;
-  m.set(key, prev + 1);
 }
 
 //----------------------
@@ -132,6 +125,7 @@ export const startLesson = async (req: Request, res: Response) => {
 // Submit answer
 //----------------------
 export const submitAnswer = async (req: Request, res: Response) => {
+try{
   const { userId, answer, language, lessonId } = req.body;
   if (!userId || typeof answer !== "string") {
     return res.status(400).json({ error: "Invalid Payload (userId and answer are required)" });
@@ -178,8 +172,6 @@ export const submitAnswer = async (req: Request, res: Response) => {
   const hintForResponse = hintObj && hintObj.level < 3 ? hintObj : hintObj; // include reveal hint too
   const hintTextForPrompt = hintObj ? hintObj.text : "";
 
-  // Progress update data (Phase 2.2)
-  const mistakesMap: Map<string, number> = new Map();
   let markNeedsReview = false;
 
   // Lesson progression rules:
@@ -203,12 +195,6 @@ export const submitAnswer = async (req: Request, res: Response) => {
       // attempt 4+ => move on & mark review
       markNeedsReview = true;
 
-      // record mistake
-      const progDoc = await LessonProgressModel.findOne({ userId: session.userId, language: session.language, lessonId: session.lessonId });
-      if (progDoc && progDoc.mistakesByQuestion) {
-        // existing map
-      }
-
       if (currentIndex + 1 >= lesson.questions.length) {
         session.state = "COMPLETE";
       } else {
@@ -220,8 +206,6 @@ export const submitAnswer = async (req: Request, res: Response) => {
       session.state = "USER_INPUT";
     }
   }
-
-  await updateSession(session);
 
   // ---- Progress persistence (Phase 2.2) ----
   // First interaction => in_progress
@@ -293,6 +277,10 @@ export const submitAnswer = async (req: Request, res: Response) => {
     },
     ...(hintForResponse ? { hint: hintForResponse } : {}),
   });
+} catch (err) {
+    console.error("Submit answer error:", err);
+    return res.status(500).json({error: "Server error"})
+}
 };
 
 //----------------------
