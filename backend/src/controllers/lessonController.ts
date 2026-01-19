@@ -11,7 +11,6 @@ import { Lesson, loadLesson } from "../state/lessonLoader";
 import { evaluateAnswer } from "../state/answerEvaluator";
 import { getDeterministicRetryMessage } from "../ai/staticTutorMessages";
 import { LessonProgressModel } from "../state/progressState";
-import { error } from "node:console";
 
 //----------------------
 // Helper: map state ->tutor intent
@@ -139,14 +138,14 @@ try{
   if (!session.language && typeof language === "string") session.language = language.trim().toLowerCase();
   if (!session.lessonId && typeof lessonId === "string") session.lessonId = lessonId;
 
-  if(session.language || !session.lessonId) {
+  if(!session.language || !session.lessonId) {
     return res.status(409).json({
       error: "Session missing language/lessonId. Please restart the lesson",
       code: "SESSION_INCMPLETE"
     });
   }
   const lesson: Lesson | null = loadLesson(session.language, session.lessonId);
-  
+
   if (!lesson) return res.status(404).json({ error: "Lesson not found" });
 
   session.messages.push({ role: "user", content: answer });
@@ -239,7 +238,7 @@ try{
   await LessonProgressModel.updateOne(
     { userId: session.userId, language: session.language, lessonId: session.lessonId },
     {
-      $setOnInsert: { status: "in_progress" },
+      $setOnInsert: { attemptsTotal: 0 },
       $set: {
         status: baseStatus,
         currentQuestionIndex: session.currentQuestionIndex || 0,
