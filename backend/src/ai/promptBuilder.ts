@@ -8,6 +8,7 @@ type PromptOptions = {
   hintText?: string;     // chosen from lesson hints/hint or reveal
   forcedAdvanceMessage?: string;
   revealAnswer?: string;
+  hintLeadIn?: string;
 };
 
 export function buildTutorPrompt(
@@ -19,14 +20,17 @@ export function buildTutorPrompt(
   const retryMessage = (options.retryMessage || "").trim();
   const hintText = (options.hintText || "").trim();
   const forcedAdvanceMessage = (options.forcedAdvanceMessage || "").trim();
-  const revealAnswer = (options.revealAnswer || "").trim()
+  const revealAnswer = (options.revealAnswer || "").trim();
+  const hintLeadIn = (options.hintLeadIn || "").trim();
 
   const retryBlock = `
 ENCOURAGE_RETRY:
 Say exactly:
 "${retryMessage}"
-${hintText ? `Then include exactly one hint line:
-"Hint: ${hintText}"` : ""}
+${hintText ? `Then say exactly:
+${hintLeadIn}"
+Then include exactly one line:
+"Hint: ${hintText}` : ""}
 Then ask exactly this question:
 "${questionText}"
 `.trim();
@@ -59,8 +63,8 @@ Say exactly:
 "${forcedAdvanceMessage}"
 Then say exactly:
 "The correct answer is: ${revealAnswer}"
-Then say: "Next question"
-Then as exactly this question:
+Then say: "Next question:"
+Then ask exactly this question:
 "${questionText}"
 
 END_LESSON:

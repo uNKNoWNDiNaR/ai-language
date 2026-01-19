@@ -10,6 +10,36 @@ const lessonLoader_1 = require("../state/lessonLoader");
 const answerEvaluator_1 = require("../state/answerEvaluator");
 const staticTutorMessages_1 = require("../ai/staticTutorMessages");
 const progressState_1 = require("../state/progressState");
+async function ensureTutorPromptOnResume(session) {
+    const last = session.messages?.[session.messages.length - 1];
+    if (last && last.role === "assistant")
+        return null;
+    const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
+    if (!lesson)
+        return null;
+    const idx = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
+    const q = lesson.questions[idx];
+    const questionText = q ? q.question : "";
+    let intent;
+    if (session.state === "COMPLETE")
+        intent = "END_LESSON";
+    else if (session.state === "ADVANCE")
+        intent = "ADVANCE_LESSON";
+    else
+        intent = "ASK_QUESTION";
+    const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText);
+    let tutorMessage;
+    try {
+        tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent);
+    }
+    catch {
+        tutorMessage = "I'm having trouble responding right now. Please try again later.";
+    }
+    session.messages = session.messages || [];
+    session.messages.push({ role: "assistant", content: tutorMessage });
+    await session.save();
+    return tutorMessage;
+}
 //----------------------
 // Helper: map state ->tutor intent
 //----------------------
@@ -62,8 +92,10 @@ const startLesson = async (req, res) => {
         let session = await sessionState_1.LessonSessionModel.findOne({ userId });
         if (session) {
             const sameLesson = session.lessonId === lessonId && session.language === language;
-            if (sameLesson)
-                return res.status(200).json({ session });
+            if (sameLesson) {
+                const tutorMessage = await ensureTutorPromptOnResume(session);
+                return res.status(200).json({ session, ...(tutorMessage ? { tutorMessage } : {}) });
+            }
             await sessionState_1.LessonSessionModel.deleteOne({ userId });
             session = null;
         }
@@ -238,6 +270,9 @@ const submitAnswer = async (req, res) => {
         const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
             retryMessage,
             hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+            hintLeadIn: intent === "ENCOURAGE_RETRY" && hintTextForPrompt
+                ? (0, staticTutorMessages_1.getHintLeadIn)(attemptCount)
+                : "",
             forcedAdvanceMessage: intent === "FORCED_ADVANCE" ? (0, staticTutorMessages_1.getForcedAdvanceMessage)() : "",
             revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
         });
@@ -278,7 +313,12 @@ const getSessionHandler = async (req, res) => {
         const session = await sessionState_1.LessonSessionModel.findOne({ userId });
         if (!session)
             return res.status(404).json({ error: "No active sessions found" });
-        return res.status(200).json({ session, messages: session.messages });
+        const tutorMessage = await ensureTutorPromptOnResume(session);
+        return res.status(200).json({
+            session,
+            messages: session.messages,
+            ...(tutorMessage ? { tutorMessage } : {}),
+        });
     }
     catch (err) {
         console.error(err);

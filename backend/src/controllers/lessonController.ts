@@ -9,9 +9,41 @@ import { generateTutorResponse } from "../ai/openaiClient";
 import { TutorIntent } from "../ai/tutorIntent";
 import { Lesson, loadLesson } from "../state/lessonLoader";
 import { evaluateAnswer } from "../state/answerEvaluator";
-import { getDeterministicRetryMessage, getForcedAdvanceMessage } from "../ai/staticTutorMessages";
+import { getDeterministicRetryMessage, getForcedAdvanceMessage, getHintLeadIn } from "../ai/staticTutorMessages";
 import { LessonProgressModel } from "../state/progressState";
-import strict from "node:assert/strict";
+
+async function ensureTutorPromptOnResume(session: any): Promise<string | null> {
+  const last = session.messages?.[session.messages.length - 1];
+  if (last && last.role === "assistant") return null;
+
+  const lesson = loadLesson(session.language, session.lessonId);
+  if (!lesson) return null;
+
+  const idx = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
+  const q = lesson.questions[idx];
+  const questionText = q ? q.question : "";
+
+  let intent: TutorIntent;
+  if (session.state === "COMPLETE") intent = "END_LESSON";
+  else if (session.state === "ADVANCE") intent = "ADVANCE_LESSON";
+  else intent = "ASK_QUESTION";
+
+  const tutorPrompt = buildTutorPrompt(session as any, intent, questionText);
+
+  let tutorMessage: string;
+  try {
+    tutorMessage = await generateTutorResponse(tutorPrompt, intent);
+  } catch {
+    tutorMessage = "I'm having trouble responding right now. Please try again later.";
+  }
+
+  session.messages = session.messages || [];
+  session.messages.push({ role: "assistant", content: tutorMessage });
+  await session.save();
+
+  return tutorMessage;
+}
+
 
 //----------------------
 // Helper: map state ->tutor intent
@@ -69,7 +101,10 @@ export const startLesson = async (req: Request, res: Response) => {
 
     if (session) {
       const sameLesson = session.lessonId === lessonId && session.language === language;
-      if (sameLesson) return res.status(200).json({ session });
+      if (sameLesson) {
+        const tutorMessage = await ensureTutorPromptOnResume(session);
+        return res.status(200).json({ session, ...(tutorMessage ? { tutorMessage } : {}) });
+      }
 
       await LessonSessionModel.deleteOne({ userId });
       session = null;
@@ -279,6 +314,10 @@ try{
   const tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
     retryMessage,
     hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+    hintLeadIn: 
+      intent === "ENCOURAGE_RETRY" && hintTextForPrompt 
+      ? getHintLeadIn(attemptCount)
+      : "",
     forcedAdvanceMessage: intent === "FORCED_ADVANCE" ? getForcedAdvanceMessage() : "",
     revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
   });
@@ -322,9 +361,17 @@ export const getSessionHandler = async (req: Request, res: Response) => {
     const session = await LessonSessionModel.findOne({ userId });
     if (!session) return res.status(404).json({ error: "No active sessions found" });
 
-    return res.status(200).json({ session, messages: session.messages });
+    const tutorMessage = await ensureTutorPromptOnResume(session);
+
+
+    return res.status(200).json({
+      session,
+      messages: session.messages,
+      ...(tutorMessage ? { tutorMessage } : {}),
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Failed to fetch session" });
   }
 };
+

@@ -13,14 +13,21 @@ type RetryMessageArgs = {
 };
 
 export function getForcedAdvanceMessage(): string {
-  return "That one was tricky - here's the correct. then we'll continue."
+  return "That one was tricky - here's the correct answer, then we'll continue."
 }
+
 export function getDeterministicRetryMessage(args: RetryMessageArgs): string {
   const { reasonCode, attemptCount, repeatedSameWrong } = args;
 
   // If user repeats the same wrong answer, change strategy (still deterministic).
   if (repeatedSameWrong) {
-    return "Let's try a different approach — focus on the structure.";
+    if(attemptCount <= 2) {
+      return "You gave the same answer again - try changing one part of it.";
+    }
+    if(attemptCount === 3) {
+      return "Same answer again - use the hint and adjust your wording.";
+    }
+    return "Let's move on - this one needs a different review.";
   }
 
   switch (reasonCode) {
@@ -35,4 +42,10 @@ export function getDeterministicRetryMessage(args: RetryMessageArgs): string {
     default:
       return attemptCount >= 3 ? "Not quite — try again using the expected structure." : "Not quite — try again.";
   }
+}
+
+export function getHintLeadIn(attemptCount: number): string {
+  if(attemptCount <= 2) return "Here's a small hint to help you.";
+  if(attemptCount === 3) return "This hint should make it clearer.";
+  return "Here's the answer.";
 }
