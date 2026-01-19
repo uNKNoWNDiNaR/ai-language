@@ -211,7 +211,6 @@ const submitAnswer = async (req, res) => {
             updateMistakes[`mistakesByQuestion.${qid}`] = 1;
         }
         await progressState_1.LessonProgressModel.updateOne({ userId: session.userId, language: session.language, lessonId: session.lessonId }, {
-            $setOnInsert: { attemptsTotal: 0 },
             $set: {
                 status: baseStatus,
                 currentQuestionIndex: session.currentQuestionIndex || 0,

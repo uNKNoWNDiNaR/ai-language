@@ -16,13 +16,19 @@ const LessonSessionSchema = new mongoose_1.default.Schema({
     lessonId: String,
     language: { type: String, required: true },
     state: { type: String, required: true },
-    // Legacy global attempts (keep for backward compatibility)
     attempts: { type: Number, required: true },
     maxAttempts: { type: Number, required: true },
     currentQuestionIndex: { type: Number, required: true },
+    attemptCountByQuestionId: {
+        type: Map,
+        of: Number,
+        default: () => new Map()
+    },
+    lastAnswerByQuestionId: {
+        type: Map,
+        of: String,
+        default: () => new Map()
+    },
     messages: { type: [ChatMessageSchema], default: [] },
-    // Phase 2.2: per-question attempt counts + last answer (optional, backward compatible)
-    attemptCountByQuestionId: { type: Map, of: Number, default: {} },
-    lastAnswerByQuestionId: { type: Map, of: String, default: {} },
 }, { timestamps: true });
 exports.LessonSessionModel = mongoose_1.default.models.LessonSession || mongoose_1.default.model("LessonSession", LessonSessionSchema);

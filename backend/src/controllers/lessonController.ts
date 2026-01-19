@@ -238,7 +238,6 @@ try{
   await LessonProgressModel.updateOne(
     { userId: session.userId, language: session.language, lessonId: session.lessonId },
     {
-      $setOnInsert: { attemptsTotal: 0 },
       $set: {
         status: baseStatus,
         currentQuestionIndex: session.currentQuestionIndex || 0,
