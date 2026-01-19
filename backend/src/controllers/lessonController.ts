@@ -11,6 +11,7 @@ import { Lesson, loadLesson } from "../state/lessonLoader";
 import { evaluateAnswer } from "../state/answerEvaluator";
 import { getDeterministicRetryMessage } from "../ai/staticTutorMessages";
 import { LessonProgressModel } from "../state/progressState";
+import { error } from "node:console";
 
 //----------------------
 // Helper: map state ->tutor intent
@@ -138,14 +139,27 @@ try{
   if (!session.language && typeof language === "string") session.language = language.trim().toLowerCase();
   if (!session.lessonId && typeof lessonId === "string") session.lessonId = lessonId;
 
+  if(session.language || !session.lessonId) {
+    return res.status(409).json({
+      error: "Session missing language/lessonId. Please restart the lesson",
+      code: "SESSION_INCMPLETE"
+    });
+  }
   const lesson: Lesson | null = loadLesson(session.language, session.lessonId);
+  
   if (!lesson) return res.status(404).json({ error: "Lesson not found" });
 
   session.messages.push({ role: "user", content: answer });
 
-  const currentIndex = session.currentQuestionIndex || 0;
+  const currentIndex = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0 ;
   const currentQuestion = lesson.questions[currentIndex];
 
+  if(!currentQuestion){
+    return res.status(409).json({
+      error: "Session out of sync with lesson content. Please restart the lesson",
+      code: "SESSION_OUT_OF_SYNC"
+    })
+  }
   // Phase 2.2: per-question attempt count
   const qid = String(currentQuestion.id);
   const attemptMap: Map<string, number> = session.attemptCountByQuestionId || new Map();
@@ -241,7 +255,14 @@ try{
 
   // ---- Deterministic retry message (Phase 2.2) ----
   const intent = getTutorIntent(session.state, isCorrect);
-  const questionText = session.state !== "COMPLETE" ? lesson.questions[session.currentQuestionIndex].question : "";
+
+  const safeIndex = 
+  typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
+
+  const questionText = 
+    session.state !== "COMPLETE" && lesson.questions[safeIndex]
+    ? lesson.questions[safeIndex].question 
+    : "";
 
   const retryMessage =
     intent === "ENCOURAGE_RETRY"
