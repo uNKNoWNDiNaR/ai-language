@@ -9,16 +9,20 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const ChatMessageSchema = new mongoose_1.default.Schema({
     role: { type: String, enum: ["user", "assistant"], required: true },
     content: { type: String, required: true },
-    timestamp: { type: Date, default: Date.now }
+    timestamp: { type: Date, default: Date.now },
 });
 const LessonSessionSchema = new mongoose_1.default.Schema({
     userId: { type: String, required: true, unique: true },
     lessonId: String,
+    language: { type: String, required: true },
     state: { type: String, required: true },
+    // Legacy global attempts (keep for backward compatibility)
     attempts: { type: Number, required: true },
     maxAttempts: { type: Number, required: true },
     currentQuestionIndex: { type: Number, required: true },
-    messages: { type: [ChatMessageSchema], default: [] }
+    messages: { type: [ChatMessageSchema], default: [] },
+    // Phase 2.2: per-question attempt counts + last answer (optional, backward compatible)
+    attemptCountByQuestionId: { type: Map, of: Number, default: {} },
+    lastAnswerByQuestionId: { type: Map, of: String, default: {} },
 }, { timestamps: true });
-exports.LessonSessionModel = mongoose_1.default.models.LessonSession ||
-    mongoose_1.default.model("LessonSession", LessonSessionSchema);
+exports.LessonSessionModel = mongoose_1.default.models.LessonSession || mongoose_1.default.model("LessonSession", LessonSessionSchema);
