@@ -13,11 +13,11 @@ const progressState_1 = require("../state/progressState");
 //----------------------
 // Helper: map state ->tutor intent
 //----------------------
-function getTutorIntent(state, isCorrect) {
+function getTutorIntent(state, isCorrect, markNeedsReview) {
     if (state === "COMPLETE")
         return "END_LESSON";
     if (state === "ADVANCE")
-        return "ADVANCE_LESSON";
+        return markNeedsReview ? "FORCED_ADVANCE" : "ADVANCE_LESSON";
     if (isCorrect === false)
         return "ENCOURAGE_RETRY";
     return "ASK_QUESTION";
@@ -222,11 +222,12 @@ const submitAnswer = async (req, res) => {
             },
         }, { upsert: true });
         // ---- Deterministic retry message (Phase 2.2) ----
-        const intent = getTutorIntent(session.state, isCorrect);
+        const intent = getTutorIntent(session.state, isCorrect, markNeedsReview);
         const safeIndex = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
         const questionText = session.state !== "COMPLETE" && lesson.questions[safeIndex]
             ? lesson.questions[safeIndex].question
             : "";
+        const revealAnswer = intent === "FORCED_ADVANCE" ? String(currentQuestion.answer || "").trim() : "";
         const retryMessage = intent === "ENCOURAGE_RETRY"
             ? (0, staticTutorMessages_1.getDeterministicRetryMessage)({
                 reasonCode: evaluation.reasonCode,
@@ -237,6 +238,8 @@ const submitAnswer = async (req, res) => {
         const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
             retryMessage,
             hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+            forcedAdvanceMessage: intent === "FORCED_ADVANCE" ? (0, staticTutorMessages_1.getForcedAdvanceMessage)() : "",
+            revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
         });
         let tutorMessage;
         try {

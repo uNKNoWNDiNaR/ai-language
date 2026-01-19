@@ -9,15 +9,16 @@ import { generateTutorResponse } from "../ai/openaiClient";
 import { TutorIntent } from "../ai/tutorIntent";
 import { Lesson, loadLesson } from "../state/lessonLoader";
 import { evaluateAnswer } from "../state/answerEvaluator";
-import { getDeterministicRetryMessage } from "../ai/staticTutorMessages";
+import { getDeterministicRetryMessage, getForcedAdvanceMessage } from "../ai/staticTutorMessages";
 import { LessonProgressModel } from "../state/progressState";
+import strict from "node:assert/strict";
 
 //----------------------
 // Helper: map state ->tutor intent
 //----------------------
-function getTutorIntent(state: LessonState, isCorrect?: boolean): TutorIntent {
+function getTutorIntent(state: LessonState, isCorrect?: boolean, markNeedsReview?: boolean): TutorIntent {
   if (state === "COMPLETE") return "END_LESSON";
-  if (state === "ADVANCE") return "ADVANCE_LESSON";
+  if (state === "ADVANCE") return markNeedsReview ? "FORCED_ADVANCE" : "ADVANCE_LESSON";
   if (isCorrect === false) return "ENCOURAGE_RETRY";
   return "ASK_QUESTION";
 }
@@ -52,6 +53,7 @@ function chooseHintForAttempt(question: any, attemptCount: number): HintResponse
   const reveal = `Answer: ${question.answer}. Explanation: this is the expected structure for this question.`;
   return { level: 3, text: reveal };
 }
+
 
 //----------------------
 // Start lesson
@@ -252,15 +254,18 @@ try{
   );
 
   // ---- Deterministic retry message (Phase 2.2) ----
-  const intent = getTutorIntent(session.state, isCorrect);
+  const intent = getTutorIntent(session.state, isCorrect, markNeedsReview);
 
   const safeIndex = 
-  typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
+    typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
 
   const questionText = 
     session.state !== "COMPLETE" && lesson.questions[safeIndex]
     ? lesson.questions[safeIndex].question 
     : "";
+
+  const revealAnswer = 
+    intent === "FORCED_ADVANCE" ? String(currentQuestion.answer || "").trim() : "";
 
   const retryMessage =
     intent === "ENCOURAGE_RETRY"
@@ -274,7 +279,10 @@ try{
   const tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
     retryMessage,
     hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+    forcedAdvanceMessage: intent === "FORCED_ADVANCE" ? getForcedAdvanceMessage() : "",
+    revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
   });
+
 
   let tutorMessage: string;
   try {

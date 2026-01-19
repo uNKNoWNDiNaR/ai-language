@@ -12,12 +12,15 @@ type RetryMessageArgs = {
   repeatedSameWrong: boolean;
 };
 
+export function getForcedAdvanceMessage(): string {
+  return "That one was tricky - here's the correct. then we'll continue."
+}
 export function getDeterministicRetryMessage(args: RetryMessageArgs): string {
   const { reasonCode, attemptCount, repeatedSameWrong } = args;
 
   // If user repeats the same wrong answer, change strategy (still deterministic).
   if (repeatedSameWrong) {
-    return "Let’s try a different approach — focus on the structure.";
+    return "Let's try a different approach — focus on the structure.";
   }
 
   switch (reasonCode) {

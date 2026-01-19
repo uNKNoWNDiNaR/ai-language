@@ -5,6 +5,8 @@ exports.buildTutorPrompt = buildTutorPrompt;
 function buildTutorPrompt(session, intent, questionText, options = {}) {
     const retryMessage = (options.retryMessage || "").trim();
     const hintText = (options.hintText || "").trim();
+    const forcedAdvanceMessage = (options.forcedAdvanceMessage || "").trim();
+    const revealAnswer = (options.revealAnswer || "").trim();
     const retryBlock = `
 ENCOURAGE_RETRY:
 Say exactly:
@@ -37,12 +39,23 @@ Say: "Nice work! Next question:"
 Then ask exactly this question:
 "${questionText}"
 
+FORCED_ADVANCE:
+Say exactly:
+"${forcedAdvanceMessage}"
+Then say exactly:
+"The correct answer is: ${revealAnswer}"
+Then say: "Next question"
+Then as exactly this question:
+"${questionText}"
+
 END_LESSON:
 Say: "Great job! 🎉 You’ve completed this lesson."
 
 Do not output anything else.
 Do not add additional content.
 Do not add follow-up questions.
+
+
 
 Intent: ${intent}
 `;

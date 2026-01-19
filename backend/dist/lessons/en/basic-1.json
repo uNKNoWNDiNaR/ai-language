@@ -5,14 +5,14 @@
     "questions": [
         {
             "id": 1,
-            "question": "How do you say 'Hello' in English",
+            "question": "How do you say 'Hello' in English?",
             "answer": "Hello",
             "hint": "It's a common greeting used to start a conversation",
             "examples": ["Hello", "Hi", "Hey"]
         },
         {
             "id": 2,
-            "question": "How do you ask someone their name",
+            "question": "How do you ask someone their name?",
             "answer": "What is your name?",
             "hint": "It starts with 'what'.",
             "examples": ["What is your name", "May i know your name"]
