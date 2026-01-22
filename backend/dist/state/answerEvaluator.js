@@ -35,6 +35,54 @@ function levenshtein(a, b) {
     }
     return dp[m][n];
 }
+function matchesAnyExact(question, userNorm) {
+    const primary = normalize(question.answer);
+    if (userNorm === primary)
+        return true;
+    const examples = Array.isArray(question.examples) ? question.examples : [];
+    for (const ex of examples) {
+        if (userNorm === normalize(ex))
+            return true;
+    }
+    return false;
+}
+function matchPlaceholderTemplate(expectedRaw, userNorm) {
+    const hasPlaceholder = /\[[^\]]+\]/.test(expectedRaw) || /\{[^]}+\}/.test(expectedRaw) || /<[^>]+>/.test(expectedRaw) || /your name/i.test(expectedRaw);
+    if (!hasPlaceholder)
+        return null;
+    const expectedPrefixRaw = expectedRaw
+        .replace(/\[[^\]]+\]/g, "")
+        .replace(/\{[^}]+\}/g, "")
+        .replace(/<[^>]+>/g, "")
+        .replace(/\byour name\b/gi, "")
+        .trim();
+    const prefix = normalize(expectedPrefixRaw);
+    if (!prefix)
+        return null;
+    if (userNorm === prefix)
+        return "almost";
+    if (!userNorm.startsWith(prefix + " "))
+        return null;
+    const remainder = userNorm.slice(prefix.length).trim();
+    return remainder.length > 0 ? "correct" : "almost";
+}
+function matchIntroduceYourselfEquivalent(userNorm) {
+    const prefix = "i am";
+    if (userNorm === prefix)
+        return "almost";
+    if (userNorm.startsWith(prefix + " ")) {
+        const rest = userNorm.slice(prefix.length).trim();
+        return rest.length > 0 ? "correct" : "almost";
+    }
+    const prefix2 = "im";
+    if (userNorm === prefix2)
+        return "almost";
+    if (userNorm.startsWith(prefix2 + " ")) {
+        const rest = userNorm.slice(prefix2.length).trim();
+        return rest.length > 0 ? "correct" : "almost";
+    }
+    return null;
+}
 function isWrongLanguageHeuristic(language, userAnswer) {
     const lang = (language || "").trim().toLowerCase();
     const tokens = tokenize(userAnswer);
@@ -53,17 +101,6 @@ function isWrongLanguageHeuristic(language, userAnswer) {
     // For es/fr: conservative. Only flag if very obvious English answer.
     if (lang === "es" || lang === "fr") {
         return hitsEnglish >= 3;
-    }
-    return false;
-}
-function matchesAnyExact(question, userNorm) {
-    const primary = normalize(question.answer);
-    if (userNorm === primary)
-        return true;
-    const examples = Array.isArray(question.examples) ? question.examples : [];
-    for (const ex of examples) {
-        if (userNorm === normalize(ex))
-            return true;
     }
     return false;
 }
@@ -98,10 +135,82 @@ function detectWordOrderMismatch(expected, user) {
     const usrSorted = [...usrTokens].sort().join("|");
     return expSorted === usrSorted;
 }
+const ruleIntroduceYourself = (question, _userAnswer, _language, userNorm, expectedNorm) => {
+    const isIntroduceYourself = /\[your name\]/i.test(question.answer) &&
+        expectedNorm.startsWith("my name is");
+    if (!isIntroduceYourself)
+        return null;
+    const eq = matchIntroduceYourselfEquivalent(userNorm);
+    if (eq === "correct")
+        return { result: "correct" };
+    if (eq === "almost")
+        return { result: "almost", reasonCode: "MISSING_SLOT" };
+    return null;
+};
+const ruleAskName = (_question, _userAnswer, _language, userNorm, expectedNorm) => {
+    const isAskName = expectedNorm === "what is your name" || expectedNorm === "whats your name";
+    if (!isAskName)
+        return null;
+    if (userNorm === "what is your name" || userNorm === "whats your name") {
+        return { result: "correct" };
+    }
+    return null;
+};
+const ruleHowAreYouShortFine = (question, _userAnswer, _language, userNorm, expectedNorm) => {
+    const isHowAreYouReply = expectedNorm === "i am fine" &&
+        Array.isArray(question.examples) &&
+        question.examples.some((e) => normalize(e).includes("doing well"));
+    if (!isHowAreYouReply)
+        return null;
+    if (userNorm === "fine")
+        return { result: "correct" };
+    return null;
+};
+const ruleGreetingThere = (question, _userAnswer, _language, userNorm, expectedNorm) => {
+    const isGreetingHello = expectedNorm === "hello" &&
+        Array.isArray(question.examples) &&
+        question.examples.some((e) => {
+            const n = normalize(e);
+            return n === "hi" || n === "hey";
+        });
+    if (!isGreetingHello)
+        return null;
+    if (userNorm === "hi there" || userNorm === "hey there")
+        return { result: "correct" };
+    return null;
+};
+const ruleGoodMorningShort = (question, _userAnswer, _language, userNorm, expectedNorm) => {
+    const isGoodMorning = expectedNorm === "good morning" &&
+        ((question.hint && normalize(question.hint).includes("before noon")) ||
+            (Array.isArray(question.examples) && question.examples.some((e) => normalize(e) === "morning")));
+    if (!isGoodMorning)
+        return null;
+    if (userNorm === "morning")
+        return { result: "correct" };
+    return null;
+};
+const SPECIAL_EQUIVALENCE_RULES = [
+    ruleIntroduceYourself,
+    ruleAskName,
+    ruleHowAreYouShortFine,
+    ruleGreetingThere,
+    ruleGoodMorningShort,
+];
 function evaluateAnswer(question, userAnswer, language) {
     const userNorm = normalize(userAnswer);
+    const expectedNorm = normalize(question.answer);
     if (matchesAnyExact(question, userNorm)) {
         return { result: "correct" };
+    }
+    const templateMatch = matchPlaceholderTemplate(question.answer, userNorm);
+    if (templateMatch === "correct")
+        return { result: "correct" };
+    if (templateMatch === "almost")
+        return { result: "almost", reasonCode: "MISSING_SLOT" };
+    for (const rule of SPECIAL_EQUIVALENCE_RULES) {
+        const out = rule(question, userAnswer, language, userNorm, expectedNorm);
+        if (out)
+            return out;
     }
     // Wrong language (deterministic heuristic)
     if (isWrongLanguageHeuristic(language, userAnswer)) {
@@ -118,7 +227,6 @@ function evaluateAnswer(question, userAnswer, language) {
         return { result: "almost", reasonCode: "WORD_ORDER" };
     }
     // Typo: small edit distance against expected or any example
-    const expectedNorm = normalize(question.answer);
     const dist = levenshtein(userNorm, expectedNorm);
     const length = Math.max(1, expectedNorm.length);
     const allowed = length <= 6 ? 1 : 2;

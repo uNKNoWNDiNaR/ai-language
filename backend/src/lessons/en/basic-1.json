@@ -22,7 +22,7 @@
             "question": "Reply to 'How are you' in English",
             "answer": "I am fine",
             "hint": "It starts with 'I am'.",
-            "examples": ["I am fine", "I am good", "I'm doing well"]
+            "examples": ["I am fine", "I am good", "I'm doing well", "I'm fine"]
         },
         {
             "id": 4,

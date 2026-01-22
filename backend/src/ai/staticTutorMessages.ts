@@ -39,6 +39,8 @@ export function getDeterministicRetryMessage(args: RetryMessageArgs): string {
       return attemptCount >= 3 ? "Almost — check word order and structure." : "Check word order.";
     case "WRONG_LANGUAGE":
       return "Answer in the selected language.";
+    case "MISSING_SLOT":
+      return "Almost - You'r missing the name part.";
     default:
       return attemptCount >= 3 ? "Not quite — try again using the expected structure." : "Not quite — try again.";
   }

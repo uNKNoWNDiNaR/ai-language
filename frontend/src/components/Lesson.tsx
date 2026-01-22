@@ -41,10 +41,10 @@ const Lesson: React.FC = () => {
   }, [messages, sendLoading]);
 
   useEffect(() => {
-    if (sessionStarted) {
+    if (!sendLoading && sessionStarted) {
       answerInputRef.current?.focus();
     }
-  }, [sessionStarted]);
+  }, [sendLoading, sessionStarted]);
 
   const languageLabel = useMemo(() => {
     switch (language) {
@@ -228,22 +228,20 @@ const Lesson: React.FC = () => {
     try {
       const res = await submitAnswer(userId.trim(), language, lessonId, clean);
 
-      // 1) Reason-based retry feedback (only when backend provides evaluation)
-      const guidance = mapReasonToGuidance(res.evaluation);
-      if (guidance) {
-        pushTutorBubble(guidance);
-      }
+      const isRetry = 
+        res.evaluation && res.evaluation.result && res.evaluation.result !== "correct";
 
-      // 2) Hint display (only when backend sends hint)
-      // Attempt 2 => light hint, Attempt 3+ => stronger hint, final attempt => answer/explanation (backend decides)
-      if (res.hint && res.hint.text) {
-        const hintPrefix =
-          res.hint.level >= 3 ? "Hint (strong): " : "Hint: ";
-        pushTutorBubble(`${hintPrefix}${res.hint.text}`);
+      if(isRetry) {
+        const guidance = mapReasonToGuidance(res.evaluation);
+        const hintLine = 
+          res.hint && res.hint.text
+            ?`\nHint: ${res.hint.text}`
+            : "";
+        
+        pushTutorBubble(`${guidance ?? "Not quite - let's try again."}${hintLine}`);
+      } else {
+        pushTutorBubble(res.tutorMessage);
       }
-
-      // 3) Tutor message (normal AI flow)
-      pushTutorBubble(res.tutorMessage);
 
       // 4) Progress update (if provided)
       setProgress(res.progress ?? null);
@@ -457,7 +455,7 @@ const Lesson: React.FC = () => {
                 onChange={(e) => setAnswer(e.target.value)}
                 onKeyDown={handleComposerKeyDown}
                 disabled={sendLoading}
-                autoComplete="off"
+                autoComplete="on"
               />
               <button
                 className="button"

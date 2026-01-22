@@ -8,21 +8,29 @@
       "question": "How do you say 'Hello' in German?",
       "answer": "Hallo",
       "hint": "Common greeting.",
-      "examples": ["Hallo", "Hi", "Guten Tag"]
+      "examples": ["Hallo", "Hi", "Guten Tag", "Hey"]
     },
     {
       "id": 2,
       "question": "How do you ask someone's name?",
       "answer": "Wie heißt du?",
       "hint": "Starts with 'Wie'.",
-      "examples": ["Wie heißt du?", "Wie ist dein Name?"]
+      "examples": [
+        "Wie heißt du?", 
+        "Wie ist dein Name?", 
+        "Wie heisst du?"]
     },
     {
       "id": 3,
       "question": "Respond to 'Wie geht's?' in German.",
       "answer": "Mir geht's gut",
       "hint": "Starts with 'Mir geht'.",
-      "examples": ["Mir geht's gut", "Gut", "Alles gut"]
+      "examples": [
+        "Mir geht's gut", 
+        "Mir geht es gut",
+        "Ganz gut",
+        "Gut", 
+        "Alles gut"]
     }
   ]
 }
