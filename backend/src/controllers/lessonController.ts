@@ -91,7 +91,7 @@ function chooseHintForAttempt(question: any, attemptCount: number): HintResponse
 // Start lesson
 //----------------------
 export const startLesson = async (req: Request, res: Response) => {
-  const { userId, language, lessonId } = req.body;
+  const { userId, language, lessonId, restart } = req.body;
 
   if (!userId) return res.status(400).json({ error: "UserId is required" });
   if (!language || !lessonId) return res.status(400).json({ error: "Language and lessonId are required" });
@@ -102,8 +102,18 @@ export const startLesson = async (req: Request, res: Response) => {
     if (session) {
       const sameLesson = session.lessonId === lessonId && session.language === language;
       if (sameLesson) {
-        const tutorMessage = await ensureTutorPromptOnResume(session);
-        return res.status(200).json({ session, ...(tutorMessage ? { tutorMessage } : {}) });
+        if(restart === true) {
+          await LessonProgressModel.deleteOne({userId});
+          session = null;
+        }
+        else if(session.state === "COMPLETE") {
+          const tutorMessage = await ensureTutorPromptOnResume(session);
+          return res.status(200).json({ session, ...(tutorMessage ? { tutorMessage } : {}) });   
+        }
+        else{
+          const tutorMessage = await ensureTutorPromptOnResume(session);
+          return res.status(200).json({session, ...(tutorMessage ? {tutorMessage} : {}) })
+        }
       }
 
       await LessonSessionModel.deleteOne({ userId });

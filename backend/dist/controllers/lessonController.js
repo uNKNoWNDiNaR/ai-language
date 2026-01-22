@@ -83,7 +83,7 @@ function chooseHintForAttempt(question, attemptCount) {
 // Start lesson
 //----------------------
 const startLesson = async (req, res) => {
-    const { userId, language, lessonId } = req.body;
+    const { userId, language, lessonId, restart } = req.body;
     if (!userId)
         return res.status(400).json({ error: "UserId is required" });
     if (!language || !lessonId)
@@ -93,8 +93,18 @@ const startLesson = async (req, res) => {
         if (session) {
             const sameLesson = session.lessonId === lessonId && session.language === language;
             if (sameLesson) {
-                const tutorMessage = await ensureTutorPromptOnResume(session);
-                return res.status(200).json({ session, ...(tutorMessage ? { tutorMessage } : {}) });
+                if (restart === true) {
+                    await progressState_1.LessonProgressModel.deleteOne({ userId });
+                    session = null;
+                }
+                else if (session.state === "COMPLETE") {
+                    const tutorMessage = await ensureTutorPromptOnResume(session);
+                    return res.status(200).json({ session, ...(tutorMessage ? { tutorMessage } : {}) });
+                }
+                else {
+                    const tutorMessage = await ensureTutorPromptOnResume(session);
+                    return res.status(200).json({ session, ...(tutorMessage ? { tutorMessage } : {}) });
+                }
             }
             await sessionState_1.LessonSessionModel.deleteOne({ userId });
             session = null;
