@@ -13,7 +13,10 @@ async function createSession(session) {
     await sessionState_1.LessonSessionModel.create(session);
 }
 async function updateSession(session) {
-    await sessionState_1.LessonSessionModel.updateOne({ userId: session.userId }, session);
+    const doc = session?.toObject ? session.toObject() : session;
+    delete doc._id;
+    delete doc._v;
+    await sessionState_1.LessonSessionModel.updateOne({ userId: doc.userId }, { $set: doc });
 }
 async function deleteSession(userId) {
     await sessionState_1.LessonSessionModel.deleteOne({ userId });

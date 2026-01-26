@@ -11,6 +11,7 @@ const express_1 = __importDefault(require("express"));
 const lesson_1 = __importDefault(require("./routes/lesson"));
 const progress_1 = __importDefault(require("./routes/progress"));
 const cors_1 = __importDefault(require("cors"));
+const practice_1 = __importDefault(require("./routes/practice"));
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 const PORT = process.env.PORT || 3000;
@@ -21,6 +22,7 @@ app.use((0, cors_1.default)({
 (0, mongo_1.connectMongo)();
 app.use("/lesson", lesson_1.default);
 app.use("/progress", progress_1.default);
+app.use("/practice", practice_1.default);
 app.listen(PORT, () => {
     console.log(`Backend running on http://localhost:${PORT}`);
 });

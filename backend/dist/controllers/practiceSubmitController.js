@@ -1,0 +1,119 @@
+"use strict";
+//backend/src/controllers/practiceSubmitController.ts
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.submitPractice = void 0;
+const sessionStore_1 = require("../storage/sessionStore");
+const answerEvaluator_1 = require("../state/answerEvaluator");
+const practiceTutorEplainer_1 = require("../ai/practiceTutorEplainer");
+function parseQuestionIdFromConceptTag(tag) {
+    if (typeof tag !== "string")
+        return null;
+    const m = tag.match(/\bq(\d+)\b/i);
+    return m ? String(Number(m[1])) : null;
+}
+function getHintForAttempt(item, attemptCount) {
+    // attemptCount is 1-based
+    if (attemptCount <= 1)
+        return null;
+    const hints = Array.isArray(item.hints)
+        ? item.hints.map((h) => (typeof h === "string" ? h.trim() : "")).filter(Boolean)
+        : [];
+    const hint = typeof item.hint === "string" ? item.hint.trim() : "";
+    if (attemptCount === 2)
+        return hints[0] || hint || null;
+    if (attemptCount === 3)
+        return hints[1] || hints[0] || hint || null;
+    // Attempt 4+
+    return `Answer: ${item.expectedAnswerRaw}`;
+}
+function buildTutorMessage(result, hint) {
+    if (result === "correct")
+        return "Nice — that’s correct.";
+    if (result === "almost")
+        return hint ? `Almost. ${hint}` : "Almost. Try again.";
+    return hint ? `Not quite. ${hint}` : "Not quite. Try again.";
+}
+const submitPractice = async (req, res) => {
+    const { userId, practiceId, answer } = req.body ?? {};
+    if (typeof userId !== "string" || userId.trim() === "") {
+        return res.status(400).json({ error: "userId is required" });
+    }
+    if (typeof practiceId !== "string" || practiceId.trim() === "") {
+        return res.status(400).json({ error: "practiceId is required" });
+    }
+    if (typeof answer !== "string" || answer.trim() === "") {
+        return res.status(400).json({ error: "answer is required" });
+    }
+    const session = await (0, sessionStore_1.getSession)(userId);
+    if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+    }
+    const practiceById = session.practiceById ?? {};
+    const item = typeof practiceById.get === "function" ? practiceById.get(practiceId) : practiceById[practiceId];
+    if (!item) {
+        return res.status(404).json({ error: "Practice item not found" });
+    }
+    const practiceAttempts = session.practiceAttempts ?? {};
+    const prev = typeof practiceAttempts.get === "function"
+        ? (practiceAttempts.get(practiceId) ?? 0)
+        : (typeof practiceAttempts[practiceId] === "number" ? practiceAttempts[practiceId] : 0);
+    const attemptCount = prev + 1;
+    if (typeof practiceAttempts.set === "function")
+        practiceAttempts.set(practiceId, attemptCount);
+    else
+        practiceAttempts[practiceId] = attemptCount;
+    session.practiceAttempts = practiceAttempts;
+    // Adapt PracticeItem -> LessonQuestion for your existing evaluator
+    const q = {
+        id: 0,
+        question: item.prompt,
+        answer: item.expectedAnswerRaw,
+        hint: typeof item.hint === "string" ? item.hint : undefined,
+        examples: item.examples,
+    };
+    const evalRes = (0, answerEvaluator_1.evaluateAnswer)(q, answer, item.language);
+    const hint = getHintForAttempt(item, attemptCount);
+    const baseMessage = buildTutorMessage(evalRes.result, hint);
+    let explanation = null;
+    if (evalRes.result === "correct" || hint === null) {
+        explanation = await (0, practiceTutorEplainer_1.explainPracticeResult)({
+            language: item.language,
+            result: evalRes.result,
+            reasonCode: evalRes.reasonCode,
+            expectedAnswer: item.expectedAnswerRaw,
+            userAnswer: answer,
+        });
+    }
+    const tutorMessage = explanation ?? baseMessage;
+    if (evalRes.result === "correct") {
+        // 1) Clear cooldown for the source question (so future "almost" can generate again)
+        const qid = parseQuestionIdFromConceptTag(item?.meta?.conceptTag);
+        if (qid) {
+            const cd = session.practiceCooldownByQuestionId ?? new Map();
+            if (typeof cd.set === "function")
+                cd.set(qid, 0);
+            else
+                cd[qid] = 0;
+            session.practiceCooldownByQuestionId = cd;
+        }
+        // 2) Consume practice item (remove it + its attempts counter)
+        if (typeof practiceById.delete === "function")
+            practiceById.delete(practiceId);
+        else
+            delete practiceById[practiceId];
+        if (typeof practiceAttempts.delete === "function")
+            practiceAttempts.delete(practiceId);
+        else
+            delete practiceAttempts[practiceId];
+        session.practiceById = practiceById;
+        session.practiceAttempts = practiceAttempts;
+    }
+    await (0, sessionStore_1.updateSession)(session);
+    return res.status(200).json({
+        result: evalRes.result,
+        reasonCode: evalRes.reasonCode,
+        attemptCount,
+        tutorMessage,
+    });
+};
+exports.submitPractice = submitPractice;

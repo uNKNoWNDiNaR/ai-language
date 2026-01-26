@@ -30,5 +30,20 @@ const LessonSessionSchema = new mongoose_1.default.Schema({
         default: () => new Map()
     },
     messages: { type: [ChatMessageSchema], default: [] },
+    practiceById: {
+        type: Map,
+        of: mongoose_1.default.Schema.Types.Mixed,
+        default: () => new Map(),
+    },
+    practiceAttempts: {
+        type: Map,
+        of: Number,
+        default: () => new Map(),
+    },
+    practiceCooldownByQuestionId: {
+        type: Map,
+        of: Number,
+        default: () => new Map(),
+    },
 }, { timestamps: true });
 exports.LessonSessionModel = mongoose_1.default.models.LessonSession || mongoose_1.default.model("LessonSession", LessonSessionSchema);

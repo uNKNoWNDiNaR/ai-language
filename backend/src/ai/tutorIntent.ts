@@ -8,3 +8,4 @@ export type TutorIntent =   //AI behaviour only
     | "ADVANCE_LESSON"
     | "FORCED_ADVANCE"
     | "END_LESSON"
+    | "EXPLAIN_PRACTICE_RESULT"

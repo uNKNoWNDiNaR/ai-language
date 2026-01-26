@@ -1,6 +1,6 @@
 // src/sessionState.ts
 
-import mongoose from "mongoose";
+import mongoose, { mongo } from "mongoose";
 
 const ChatMessageSchema = new mongoose.Schema({
   role: { type: String, enum: ["user", "assistant"], required: true },
@@ -30,6 +30,23 @@ const LessonSessionSchema = new mongoose.Schema(
     },
 
     messages: { type: [ChatMessageSchema], default: []},
+
+    practiceById: { 
+      type: Map,
+      of: mongoose.Schema.Types.Mixed,
+      default: () => new Map(),
+    },
+    practiceAttempts: { 
+      type: Map,
+      of: Number,
+      default: () => new Map(),
+    },
+    practiceCooldownByQuestionId: {
+      type: Map,
+      of: Number,
+      default: () => new Map(),
+    },
+
   },
   { timestamps: true });
 

@@ -10,6 +10,8 @@ const lessonLoader_1 = require("../state/lessonLoader");
 const answerEvaluator_1 = require("../state/answerEvaluator");
 const staticTutorMessages_1 = require("../ai/staticTutorMessages");
 const progressState_1 = require("../state/progressState");
+const practiceGenerator_1 = require("../services/practiceGenerator");
+const openaiClient_2 = require("../ai/openaiClient");
 async function ensureTutorPromptOnResume(session) {
     const last = session.messages?.[session.messages.length - 1];
     if (last && last.role === "assistant")
@@ -187,6 +189,8 @@ const submitAnswer = async (req, res) => {
         }
         // Phase 2.2: per-question attempt count
         const qid = String(currentQuestion.id);
+        const practiceCooldown = session.practiceCooldownByQuestionId || new Map();
+        const practiceCooldownActive = (practiceCooldown.get(qid) || 0) >= 1;
         const attemptMap = session.attemptCountByQuestionId || new Map();
         const lastAnswerMap = session.lastAnswerByQuestionId || new Map();
         const prevAttemptCount = attemptMap.get(qid) || 0;
@@ -213,6 +217,8 @@ const submitAnswer = async (req, res) => {
         //    - attempt 4+ => move on AND mark needs_review AND count mistake
         if (isCorrect) {
             // reset per-question attempt count after correct
+            practiceCooldown.set(qid, 0);
+            session.practiceCooldownByQuestionId = practiceCooldown;
             attemptMap.set(qid, 0);
             if (currentIndex + 1 >= lesson.questions.length) {
                 session.state = "COMPLETE";
@@ -225,6 +231,8 @@ const submitAnswer = async (req, res) => {
         else {
             // treat almost as retry (still not correct)
             if (attemptCount >= 4) {
+                practiceCooldown.set(qid, 0);
+                session.practiceCooldownByQuestionId = practiceCooldown;
                 // attempt 4+ => move on & mark review
                 markNeedsReview = true;
                 if (currentIndex + 1 >= lesson.questions.length) {
@@ -295,6 +303,45 @@ const submitAnswer = async (req, res) => {
         }
         session.messages.push({ role: "assistant", content: tutorMessage });
         await session.save();
+        let practice;
+        if (evaluation.result === "almost" && !practiceCooldownActive) {
+            try {
+                const aiClient = { generatePracticeJSON: openaiClient_2.generatePracticeJSON };
+                const conceptTag = `lesson-${session.lessonId}-q${currentQuestion.id}`;
+                const practiceType = "variation";
+                const { item: practiceItem } = await (0, practiceGenerator_1.generatePracticeItem)({
+                    language: session.language,
+                    lessonId: session.lessonId,
+                    sourceQuestionText: currentQuestion.question,
+                    expectedAnswerRaw: currentQuestion.answer,
+                    conceptTag,
+                    type: practiceType
+                }, aiClient);
+                const pb = session.practiceById ?? {};
+                const pa = session.practiceAttempts ?? {};
+                if (typeof pb.set === "function")
+                    pb.set(practiceItem.practiceId, practiceItem);
+                else
+                    pb[practiceItem.practiceId] = practiceItem;
+                if (typeof pa.set === "function") {
+                    if (pa.get(practiceItem.practiceId) === undefined)
+                        pa.set(practiceItem.practiceId, 0);
+                }
+                else {
+                    if (pa[practiceItem.practiceId] === undefined)
+                        pa[practiceItem.practiceId] = 0;
+                }
+                session.practiceById = pb;
+                session.practiceAttempts = pa;
+                practiceCooldown.set(qid, 1);
+                session.practiceCooldownByQuestionId = practiceCooldown;
+                await session.save();
+                practice = { practiceId: practiceItem.practiceId, prompt: practiceItem.prompt };
+            }
+            catch (e) {
+                practice = undefined;
+            }
+        }
         // Phase 2.2 required response additions:
         return res.status(200).json({
             session,
@@ -304,6 +351,7 @@ const submitAnswer = async (req, res) => {
                 reasonCode: evaluation.reasonCode,
             },
             ...(hintForResponse ? { hint: hintForResponse } : {}),
+            ...(practice ? { practice } : {}),
         });
     }
     catch (err) {

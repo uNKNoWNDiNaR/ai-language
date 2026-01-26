@@ -1,0 +1,64 @@
+"use strict";
+//backend/src/controllers/practiceController.ts
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.generatePractice = void 0;
+const lessonLoader_1 = require("../state/lessonLoader");
+const practiceGenerator_1 = require("../services/practiceGenerator");
+const openaiClient_1 = require("../ai/openaiClient");
+const sessionStore_1 = require("../storage/sessionStore");
+function isSupportedLanguage(v) {
+    return v === "en" || v === "de" || v === "es" || v === "fr";
+}
+function isPracticeMetaType(v) {
+    return v === "variation" || v === "dialogue_turn" || v === "cloze";
+}
+const generatePractice = async (req, res) => {
+    const { userId, lessonId, language, sourceQuestionId, type, conceptTag } = req.body ?? {};
+    if (typeof userId !== "string" || userId.trim() === "") {
+        return res.status(400).json({ error: "userId is required" });
+    }
+    if (typeof lessonId !== "string" || lessonId.trim() === "") {
+        return res.status(400).json({ error: "LessonId is required" });
+    }
+    if (!isSupportedLanguage(language)) {
+        return res.status(400).json({ error: "language must be one of en, de, es, fr" });
+    }
+    const lesson = (0, lessonLoader_1.loadLesson)(language, lessonId);
+    if (!lesson) {
+        return res.status(404).json({ error: "Lesson not found" });
+    }
+    let q = typeof sourceQuestionId === "number"
+        ? lesson.questions.find((x) => x.id === sourceQuestionId)
+        : lesson.questions[0];
+    if (!q) {
+        return res.status(404).json({ error: "Source question not found" });
+    }
+    const practiceType = isPracticeMetaType(type) ? type : "variation";
+    const tag = typeof conceptTag === "string" && conceptTag.trim() ? conceptTag.trim() : `q${q.id}`;
+    const aiClient = {
+        generatePracticeJSON: openaiClient_1.generatePracticeJSON,
+    };
+    const { item: practiceItem, source } = await (0, practiceGenerator_1.generatePracticeItem)({
+        language,
+        lessonId,
+        sourceQuestionText: q.question,
+        expectedAnswerRaw: q.answer,
+        examples: q.examples,
+        conceptTag: tag,
+        type: practiceType
+    }, aiClient);
+    const session = await (0, sessionStore_1.getSession)(userId);
+    if (!session) {
+        return res.status(404).json({ error: "Session not found. Start a lesson first." });
+    }
+    const pb = session.practiceById ?? {};
+    pb[practiceItem.practiceId] = practiceItem;
+    session.practiceById = pb;
+    const pa = session.practiceAttempts ?? {};
+    if (pa[practiceItem.practiceId] === undefined)
+        pa[practiceItem.practiceId] = 0;
+    session.practiceAttempts = pa;
+    await (0, sessionStore_1.updateSession)(session);
+    return res.status(200).json({ practiceItem, source });
+};
+exports.generatePractice = generatePractice;

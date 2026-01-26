@@ -1,6 +1,7 @@
 //src/state/LessonState.ts
 
 import { TutorIntent } from "../ai/tutorIntent";
+import type { PracticeItem } from "../types";
 
 export type LessonState =   // backend control only
     | "USER_INPUT" 
@@ -22,7 +23,10 @@ export type LessonSession = {
     currentQuestionIndex: number;  
     messages: BackendMessage[];
     language: string;
+    practiceById?: Record<string, PracticeItem>;
+    practiceAttempts?: Record<string, number>;
 };
+
 export type BackendSession = {
     userId: string;
     lessonId: string;

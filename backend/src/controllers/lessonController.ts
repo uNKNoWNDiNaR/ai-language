@@ -2,7 +2,7 @@
 // Day 2 MVP backend lesson loop and retry logic
 
 import { LessonSessionModel } from "../state/sessionState";
-import { Request, Response } from "express";
+import e, { Request, Response } from "express";
 import { LessonSession, LessonState } from "../state/lessonState";
 import { buildTutorPrompt } from "../ai/promptBuilder";
 import { generateTutorResponse } from "../ai/openaiClient";
@@ -11,6 +11,12 @@ import { Lesson, loadLesson } from "../state/lessonLoader";
 import { evaluateAnswer } from "../state/answerEvaluator";
 import { getDeterministicRetryMessage, getForcedAdvanceMessage, getHintLeadIn } from "../ai/staticTutorMessages";
 import { LessonProgressModel } from "../state/progressState";
+import { generatePracticeItem } from "../services/practiceGenerator";
+import { generatePracticeJSON } from "../ai/openaiClient";
+import { PracticeMetaType } from "../types";
+import { isTutorMessageAcceptable, buildTutorFallback } from "../ai/tutorOutputGuard";
+
+
 
 async function ensureTutorPromptOnResume(session: any): Promise<string | null> {
   const last = session.messages?.[session.messages.length - 1];
@@ -30,12 +36,29 @@ async function ensureTutorPromptOnResume(session: any): Promise<string | null> {
 
   const tutorPrompt = buildTutorPrompt(session as any, intent, questionText);
 
-  let tutorMessage: string;
+    let tutorMessage: string;
   try {
-    tutorMessage = await generateTutorResponse(tutorPrompt, intent);
+    tutorMessage = await generateTutorResponse(tutorPrompt, intent, {language: session.language});
   } catch {
     tutorMessage = "I'm having trouble responding right now. Please try again later.";
   }
+
+  if (
+    !isTutorMessageAcceptable({
+      intent,
+      language: session.language,
+      message: tutorMessage,
+      questionText,
+    })
+  ) {
+    tutorMessage = buildTutorFallback({
+      intent,
+      language: session.language,
+      message: tutorMessage,
+      questionText,
+    });
+  }
+
 
   session.messages = session.messages || [];
   session.messages.push({ role: "assistant", content: tutorMessage });
@@ -138,12 +161,29 @@ export const startLesson = async (req: Request, res: Response) => {
     const intent: TutorIntent = "ASK_QUESTION";
     const tutorPrompt = buildTutorPrompt(newSession, intent, firstQuestion.question);
 
-    let tutorMessage: string;
+        let tutorMessage: string;
     try {
-      tutorMessage = await generateTutorResponse(tutorPrompt, intent);
+      tutorMessage = await generateTutorResponse(tutorPrompt, intent, {language: session.language});
     } catch {
       tutorMessage = "I'm having trouble responding right now. Please try again later.";
     }
+
+    if (
+      !isTutorMessageAcceptable({
+        intent,
+        language,
+        message: tutorMessage,
+        questionText: firstQuestion.question,
+      })
+    ) {
+      tutorMessage = buildTutorFallback({
+        intent,
+        language,
+        message: tutorMessage,
+        questionText: firstQuestion.question,
+      });
+    }
+
 
     const intitialMessage = { role: "assistant", content: tutorMessage };
     session = await LessonSessionModel.create({ ...newSession, messages: [intitialMessage] });
@@ -208,6 +248,8 @@ try{
   }
   // Phase 2.2: per-question attempt count
   const qid = String(currentQuestion.id);
+  const practiceCooldown: Map<string, number> = (session as any).practiceCooldownByQuestionId || new Map();
+  const practiceCooldownActive = (practiceCooldown.get(qid) || 0) >= 1;
   const attemptMap: Map<string, number> = session.attemptCountByQuestionId || new Map();
   const lastAnswerMap: Map<string, string> = session.lastAnswerByQuestionId || new Map();
 
@@ -241,6 +283,8 @@ try{
   //    - attempt 4+ => move on AND mark needs_review AND count mistake
   if (isCorrect) {
     // reset per-question attempt count after correct
+    practiceCooldown.set(qid, 0);
+    (session as any).practiceCooldownByQuestionId = practiceCooldown as any;
     attemptMap.set(qid, 0);
 
     if (currentIndex + 1 >= lesson.questions.length) {
@@ -252,6 +296,10 @@ try{
   } else {
     // treat almost as retry (still not correct)
     if (attemptCount >= 4) {
+      practiceCooldown.set(qid, 0);
+      (session as any).practiceCooldownByQuestionId = practiceCooldown as any;
+
+
       // attempt 4+ => move on & mark review
       markNeedsReview = true;
 
@@ -261,6 +309,7 @@ try{
         session.currentQuestionIndex = currentIndex + 1;
         session.state = "ADVANCE";
       }
+
     } else {
       // attempts 1-3 => retry same question
       session.state = "USER_INPUT";
@@ -321,28 +370,106 @@ try{
         })
       : "";
 
+    const forcedAdvanceMessage =
+    intent === "FORCED_ADVANCE" ? getForcedAdvanceMessage() : "";
+
+  const hintLeadIn =
+    intent === "ENCOURAGE_RETRY" && hintTextForPrompt
+      ? getHintLeadIn(attemptCount)
+      : "";
+
   const tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
     retryMessage,
     hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-    hintLeadIn: 
-      intent === "ENCOURAGE_RETRY" && hintTextForPrompt 
-      ? getHintLeadIn(attemptCount)
-      : "",
-    forcedAdvanceMessage: intent === "FORCED_ADVANCE" ? getForcedAdvanceMessage() : "",
+    hintLeadIn,
+    forcedAdvanceMessage,
     revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
   });
 
 
-  let tutorMessage: string;
+    let tutorMessage: string;
   try {
-    tutorMessage = await generateTutorResponse(tutorPrompt, intent);
+    tutorMessage = await generateTutorResponse(tutorPrompt, intent, {language: session.language});
   } catch {
     tutorMessage = "I'm having trouble responding right now. please try again.";
   }
 
+  if (
+    !isTutorMessageAcceptable({
+      intent,
+      language: session.language,
+      message: tutorMessage,
+      questionText,
+      retryMessage,
+      hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+      hintLeadIn,
+      forcedAdvanceMessage,
+      revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
+    })
+  ) {
+    tutorMessage = buildTutorFallback({
+      intent,
+      language: session.language,
+      message: tutorMessage,
+      questionText,
+      retryMessage,
+      hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+      hintLeadIn,
+      forcedAdvanceMessage,
+      revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
+    });
+  }
+
+
   session.messages.push({ role: "assistant", content: tutorMessage });
   await session.save();
 
+  let practice: {practiceId: string; prompt: string} | undefined;
+
+  if(evaluation.result === "almost" && !practiceCooldownActive) {
+    try {
+      const aiClient = { generatePracticeJSON};
+
+      const conceptTag = `lesson-${session.lessonId}-q${currentQuestion.id}`;
+      const practiceType: PracticeMetaType = "variation";
+
+      const { item: practiceItem } = await generatePracticeItem(
+        {
+          language: session.language,
+          lessonId: session.lessonId,
+          sourceQuestionText: currentQuestion.question,
+          expectedAnswerRaw: currentQuestion.answer,
+          conceptTag,
+          type: practiceType
+        },
+        aiClient,
+      );
+
+      const pb: any = (session as any).practiceById ?? {};
+      const pa: any = (session as any).practiceAttempts ?? {};
+
+      if(typeof pb.set === "function") pb.set(practiceItem.practiceId, practiceItem);
+      else pb[practiceItem.practiceId] = practiceItem;
+
+      if(typeof pa.set === "function") {
+        if(pa.get(practiceItem.practiceId) === undefined) pa.set(practiceItem.practiceId, 0);
+      } else {
+        if(pa[practiceItem.practiceId] === undefined) pa[practiceItem.practiceId] = 0;
+      }
+
+      (session as any).practiceById = pb;
+      (session as any).practiceAttempts = pa;
+
+      practiceCooldown.set(qid, 1);
+      (session as any).practiceCooldownByQuestionId = practiceCooldown as any;
+
+      await session.save();
+
+      practice = {practiceId: practiceItem.practiceId, prompt: practiceItem.prompt};
+    } catch(e) {
+      practice = undefined;
+    }
+  }
   // Phase 2.2 required response additions:
   return res.status(200).json({
     session,
@@ -352,6 +479,7 @@ try{
       reasonCode: evaluation.reasonCode,
     },
     ...(hintForResponse ? { hint: hintForResponse } : {}),
+    ...(practice ? { practice } : {}),
   });
 } catch (err) {
     console.error("Submit answer error:", err);
@@ -384,4 +512,3 @@ export const getSessionHandler = async (req: Request, res: Response) => {
     return res.status(500).json({ error: "Failed to fetch session" });
   }
 };
-

@@ -7,6 +7,7 @@ import express from "express";
 import lessonRoutes from "./routes/lesson";
 import progressRoutes from "./routes/progress";
 import cors from "cors";
+import practiceRoutes from "./routes/practice"
 
 const app = express();
 app.use(express.json());
@@ -24,7 +25,9 @@ connectMongo();
 
 app.use("/lesson", lessonRoutes);
 app.use("/progress", progressRoutes);
+app.use("/practice", practiceRoutes);
 
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
 });
+
