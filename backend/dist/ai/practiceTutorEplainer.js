@@ -14,6 +14,9 @@ function sanitizeExplanation(text) {
     const banned = /(acceptable answers|correct answer|incorrect|grading|rubric|score|points|marking scheme)/i;
     if (banned.test(t))
         return null;
+    const fallbackish = /(I'm haviing trouble responding right now | sorry,\s*i couldn't generate a response)/i;
+    if (fallbackish.test(t))
+        return null;
     return t;
 }
 async function explainPracticeResult(p) {

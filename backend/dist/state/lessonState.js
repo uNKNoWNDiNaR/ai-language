@@ -1,3 +1,3 @@
 "use strict";
-//src/state/LessonState.ts
+// src/state/lessonState.ts
 Object.defineProperty(exports, "__esModule", { value: true });

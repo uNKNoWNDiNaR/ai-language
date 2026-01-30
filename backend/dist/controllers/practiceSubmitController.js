@@ -33,6 +33,17 @@ function buildTutorMessage(result, hint) {
         return hint ? `Almost. ${hint}` : "Almost. Try again.";
     return hint ? `Not quite. ${hint}` : "Not quite. Try again.";
 }
+function stripDebugPrefixes(text) {
+    if (!text)
+        return text;
+    return text
+        .replace(/^\s*Result:\s*/gim, "")
+        .replace(/^\s*Reason:\s*/gim, "")
+        .replace(/^\s*(Expected Answer|Expected):\s*/gim, "")
+        .replace(/^\s*(User Answer|Your Answer):\s*/gim, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+}
 const submitPractice = async (req, res) => {
     const { userId, practiceId, answer } = req.body ?? {};
     if (typeof userId !== "string" || userId.trim() === "") {
@@ -75,16 +86,21 @@ const submitPractice = async (req, res) => {
     const hint = getHintForAttempt(item, attemptCount);
     const baseMessage = buildTutorMessage(evalRes.result, hint);
     let explanation = null;
-    if (evalRes.result === "correct" || hint === null) {
-        explanation = await (0, practiceTutorEplainer_1.explainPracticeResult)({
-            language: item.language,
-            result: evalRes.result,
-            reasonCode: evalRes.reasonCode,
-            expectedAnswer: item.expectedAnswerRaw,
-            userAnswer: answer,
-        });
+    if (evalRes.result === "correct") {
+        try {
+            explanation = await (0, practiceTutorEplainer_1.explainPracticeResult)({
+                language: item.language,
+                result: evalRes.result,
+                reasonCode: evalRes.reasonCode,
+                expectedAnswer: item.expectedAnswerRaw,
+                userAnswer: answer,
+            });
+        }
+        catch {
+            explanation = null;
+        }
     }
-    const tutorMessage = explanation ?? baseMessage;
+    const tutorMessage = stripDebugPrefixes(explanation ?? baseMessage);
     if (evalRes.result === "correct") {
         // 1) Clear cooldown for the source question (so future "almost" can generate again)
         const qid = parseQuestionIdFromConceptTag(item?.meta?.conceptTag);

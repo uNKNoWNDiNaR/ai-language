@@ -122,7 +122,7 @@ body {
     border-top-right-radius: 18px;
 }
 
-.bubbleRow.tutor {justify-content: flext-start;}
+.bubbleRow.tutor {justify-content: flex-start;}
 .bubbleRow.student {justify-content: flex-end;}
 
 .bubble {
@@ -201,4 +201,79 @@ body {
 
 @media(max-width: 520px) {
     .chatWindow { height: 380px;}
+}
+
+.hintCard {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  background: #fafafa;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.hintTitle {
+  font-weight: 800;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.hintText {
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.practiceCard {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.practiceHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.practiceTitle {
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.practiceDismiss {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.practiceDismiss:hover {
+  text-decoration: underline;
+}
+
+.practicePrompt {
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  margin-bottom: 10px;
+}
+
+.practiceControls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.practiceInput {
+  flex: 1;
 }

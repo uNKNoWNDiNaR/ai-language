@@ -1,40 +1,42 @@
-//src/state/LessonState.ts
+// src/state/lessonState.ts
 
-import { TutorIntent } from "../ai/tutorIntent";
 import type { PracticeItem } from "../types";
 
-export type LessonState =   // backend control only
-    | "USER_INPUT" 
-    | "ADVANCE"
-    | "COMPLETE";
+export type LessonState = "USER_INPUT" | "ADVANCE" | "COMPLETE";
 
-  export type BackendMessage = {
-    role: "user" | "assistant";
-    content: string;
+export type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: Date;
 };
+
+// Note: In persistence we store some fields as Mongoose Map types.
+// In tests/mocks you may still see plain objects. We allow both shapes here.
+export type StringNumberMap = Map<string, number> | Record<string, number>;
+export type StringStringMap = Map<string, string> | Record<string, string>;
+export type PracticeItemMap = Map<string, PracticeItem> | Record<string, PracticeItem>;
+export type PracticeAttemptMap = Map<string, number> | Record<string, number>;
 
 export type LessonSession = {
-    userId: string;
-    lessonId: string;
-    state: string;
-    tutorIntent?: TutorIntent;
-    attempts: number;
-    maxAttempts: number; 
-    currentQuestionIndex: number;  
-    messages: BackendMessage[];
-    language: string;
-    practiceById?: Record<string, PracticeItem>;
-    practiceAttempts?: Record<string, number>;
-};
+  userId: string;
+  lessonId: string;
+  language: string;
+  state: LessonState;
 
-export type BackendSession = {
-    userId: string;
-    lessonId: string;
-    state: string;
-    tutorIntent?: TutorIntent;
-    attempts: number;
-    maxAttempts: number; 
-    currentQuestionIndex: number;  
-    messages: BackendMessage[];
-};
+  attempts: number;
+  maxAttempts: number;
+  currentQuestionIndex: number;
 
+  messages: ChatMessage[];
+
+  // Phase 2.2+: per-question tracking
+  attemptCountByQuestionId?: StringNumberMap;
+  lastAnswerByQuestionId?: StringStringMap;
+
+  // Practice persistence
+  practiceById?: PracticeItemMap;
+  practiceAttempts?: PracticeAttemptMap;
+
+  // Practice scheduling cooldown (per source question)
+  practiceCooldownByQuestionId?: StringNumberMap;
+};

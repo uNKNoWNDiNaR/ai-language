@@ -22,12 +22,12 @@ const LessonSessionSchema = new mongoose_1.default.Schema({
     attemptCountByQuestionId: {
         type: Map,
         of: Number,
-        default: () => new Map()
+        default: () => new Map(),
     },
     lastAnswerByQuestionId: {
         type: Map,
         of: String,
-        default: () => new Map()
+        default: () => new Map(),
     },
     messages: { type: [ChatMessageSchema], default: [] },
     practiceById: {

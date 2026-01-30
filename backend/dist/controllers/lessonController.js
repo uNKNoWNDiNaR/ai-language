@@ -1,6 +1,5 @@
 "use strict";
-// src/controllers/lessonController.ts
-// Day 2 MVP backend lesson loop and retry logic
+// backend/src/controllers/lessonController.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getSessionHandler = exports.submitAnswer = exports.startLesson = void 0;
 const sessionState_1 = require("../state/sessionState");
@@ -12,6 +11,16 @@ const staticTutorMessages_1 = require("../ai/staticTutorMessages");
 const progressState_1 = require("../state/progressState");
 const practiceGenerator_1 = require("../services/practiceGenerator");
 const openaiClient_2 = require("../ai/openaiClient");
+const tutorOutputGuard_1 = require("../ai/tutorOutputGuard");
+function isSupportedLanguage(v) {
+    return v === "en" || v === "de" || v === "es" || v === "fr";
+}
+function normalizeLanguage(v) {
+    if (typeof v !== "string")
+        return null;
+    const t = v.trim().toLowerCase();
+    return isSupportedLanguage(t) ? t : null;
+}
 async function ensureTutorPromptOnResume(session) {
     const last = session.messages?.[session.messages.length - 1];
     if (last && last.role === "assistant")
@@ -32,10 +41,24 @@ async function ensureTutorPromptOnResume(session) {
     const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText);
     let tutorMessage;
     try {
-        tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent);
+        tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: session.language });
     }
     catch {
         tutorMessage = "I'm having trouble responding right now. Please try again later.";
+    }
+    // Drift guard
+    if (!(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
+        intent,
+        language: session.language,
+        message: tutorMessage,
+        questionText,
+    })) {
+        tutorMessage = (0, tutorOutputGuard_1.buildTutorFallback)({
+            intent,
+            language: session.language,
+            message: tutorMessage,
+            questionText,
+        });
     }
     session.messages = session.messages || [];
     session.messages.push({ role: "assistant", content: tutorMessage });
@@ -81,37 +104,62 @@ function chooseHintForAttempt(question, attemptCount) {
     const reveal = `Answer: ${question.answer}. Explanation: this is the expected structure for this question.`;
     return { level: 3, text: reveal };
 }
+function buildProgressPayload(session, lesson, statusOverride) {
+    const total = Array.isArray(lesson.questions) ? lesson.questions.length : 0;
+    const idx = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
+    const safeTotal = total > 0 ? total : 1;
+    const clampedIdx = Math.max(0, Math.min(safeTotal - 1, idx));
+    const status = statusOverride ?? (session.state === "COMPLETE" ? "completed" : "in_progress");
+    return {
+        currentQuestionIndex: clampedIdx,
+        totalQuestions: safeTotal,
+        status,
+    };
+}
 //----------------------
 // Start lesson
 //----------------------
 const startLesson = async (req, res) => {
     const { userId, language, lessonId, restart } = req.body;
+    const lang = normalizeLanguage(language);
     if (!userId)
         return res.status(400).json({ error: "UserId is required" });
-    if (!language || !lessonId)
+    if (!lang || !lessonId)
         return res.status(400).json({ error: "Language and lessonId are required" });
     try {
         let session = await sessionState_1.LessonSessionModel.findOne({ userId });
         if (session) {
-            const sameLesson = session.lessonId === lessonId && session.language === language;
+            const sameLesson = session.lessonId === lessonId && session.language === lang;
             if (sameLesson) {
                 if (restart === true) {
                     await progressState_1.LessonProgressModel.deleteOne({ userId });
                     session = null;
                 }
                 else if (session.state === "COMPLETE") {
+                    const resumeLesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
+                    const progress = resumeLesson ? buildProgressPayload(session, resumeLesson) : undefined;
                     const tutorMessage = await ensureTutorPromptOnResume(session);
-                    return res.status(200).json({ session, ...(tutorMessage ? { tutorMessage } : {}) });
+                    return res.status(200).json({
+                        session,
+                        ...(tutorMessage ? { tutorMessage } : {}),
+                        ...(progress ? { progress } : {}),
+                    });
                 }
                 else {
+                    const resumeLesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
+                    const progress = resumeLesson ? buildProgressPayload(session, resumeLesson) : undefined;
                     const tutorMessage = await ensureTutorPromptOnResume(session);
-                    return res.status(200).json({ session, ...(tutorMessage ? { tutorMessage } : {}) });
+                    return res.status(200).json({
+                        session,
+                        ...(tutorMessage ? { tutorMessage } : {}),
+                        ...(progress ? { progress } : {}),
+                    });
                 }
             }
             await sessionState_1.LessonSessionModel.deleteOne({ userId });
             session = null;
         }
-        const lesson = (0, lessonLoader_1.loadLesson)(language, lessonId);
+        const lesson = (0, lessonLoader_1.loadLesson)(lang, lessonId);
         if (!lesson)
             return res.status(404).json({ error: "Lesson not found" });
         const newSession = {
@@ -122,29 +170,44 @@ const startLesson = async (req, res) => {
             maxAttempts: 4, // Phase 2.2 requires attempt 4+ behavior
             currentQuestionIndex: 0,
             messages: [],
-            language,
+            language: lang,
         };
         const firstQuestion = lesson.questions[0];
         const intent = "ASK_QUESTION";
         const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(newSession, intent, firstQuestion.question);
         let tutorMessage;
         try {
-            tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent);
+            tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: lang });
         }
         catch {
             tutorMessage = "I'm having trouble responding right now. Please try again later.";
         }
+        // Drift guard
+        if (!(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
+            intent,
+            language: lang,
+            message: tutorMessage,
+            questionText: firstQuestion.question,
+        })) {
+            tutorMessage = (0, tutorOutputGuard_1.buildTutorFallback)({
+                intent,
+                language: lang,
+                message: tutorMessage,
+                questionText: firstQuestion.question,
+            });
+        }
         const intitialMessage = { role: "assistant", content: tutorMessage };
         session = await sessionState_1.LessonSessionModel.create({ ...newSession, messages: [intitialMessage] });
         // Progress: first interaction => in_progress
-        await progressState_1.LessonProgressModel.updateOne({ userId, language: language.trim().toLowerCase(), lessonId }, {
+        await progressState_1.LessonProgressModel.updateOne({ userId, language: lang, lessonId }, {
             $setOnInsert: { status: "in_progress" },
             $set: {
                 currentQuestionIndex: 0,
                 lastActiveAt: new Date(),
             },
         }, { upsert: true });
-        return res.status(201).json({ session, tutorMessage });
+        const progress = buildProgressPayload(session, lesson);
+        return res.status(201).json({ session, tutorMessage, progress });
     }
     catch (err) {
         console.error("Start  lesson error", err);
@@ -165,14 +228,15 @@ const submitAnswer = async (req, res) => {
         if (!session)
             return res.status(404).json({ error: "No active session found" });
         // Keep legacy behavior: session fields only set if missing
-        if (!session.language && typeof language === "string")
-            session.language = language.trim().toLowerCase();
+        if (!session.language && isSupportedLanguage(String(language || "").trim().toLowerCase())) {
+            session.language = String(language).trim().toLowerCase();
+        }
         if (!session.lessonId && typeof lessonId === "string")
             session.lessonId = lessonId;
         if (!session.language || !session.lessonId) {
             return res.status(409).json({
                 error: "Session missing language/lessonId. Please restart the lesson",
-                code: "SESSION_INCMPLETE"
+                code: "SESSION_INCMPLETE",
             });
         }
         const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
@@ -184,13 +248,13 @@ const submitAnswer = async (req, res) => {
         if (!currentQuestion) {
             return res.status(409).json({
                 error: "Session out of sync with lesson content. Please restart the lesson",
-                code: "SESSION_OUT_OF_SYNC"
+                code: "SESSION_OUT_OF_SYNC",
             });
         }
         // Phase 2.2: per-question attempt count
         const qid = String(currentQuestion.id);
-        const practiceCooldown = session.practiceCooldownByQuestionId || new Map();
-        const practiceCooldownActive = (practiceCooldown.get(qid) || 0) >= 1;
+        const practiceCooldown = session.practiceCooldownByQuestionId ?? new Map();
+        const practiceCooldownActive = (practiceCooldown.get?.(qid) ?? practiceCooldown[qid] ?? 0) >= 1;
         const attemptMap = session.attemptCountByQuestionId || new Map();
         const lastAnswerMap = session.lastAnswerByQuestionId || new Map();
         const prevAttemptCount = attemptMap.get(qid) || 0;
@@ -210,15 +274,8 @@ const submitAnswer = async (req, res) => {
         const hintForResponse = hintObj && hintObj.level < 3 ? hintObj : hintObj; // include reveal hint too
         const hintTextForPrompt = hintObj ? hintObj.text : "";
         let markNeedsReview = false;
-        // Lesson progression rules:
-        // - correct => advance/reset attempt count for this question
-        // - wrong/almost:
-        //    - attempt 1-3 => stay on question
-        //    - attempt 4+ => move on AND mark needs_review AND count mistake
+        // Lesson progression rules
         if (isCorrect) {
-            // reset per-question attempt count after correct
-            practiceCooldown.set(qid, 0);
-            session.practiceCooldownByQuestionId = practiceCooldown;
             attemptMap.set(qid, 0);
             if (currentIndex + 1 >= lesson.questions.length) {
                 session.state = "COMPLETE";
@@ -227,13 +284,16 @@ const submitAnswer = async (req, res) => {
                 session.currentQuestionIndex = currentIndex + 1;
                 session.state = "ADVANCE";
             }
+            // reset cooldown for this question after correct
+            const cd = session.practiceCooldownByQuestionId ?? new Map();
+            if (typeof cd.set === "function")
+                cd.set(qid, 0);
+            else
+                cd[qid] = 0;
+            session.practiceCooldownByQuestionId = cd;
         }
         else {
-            // treat almost as retry (still not correct)
             if (attemptCount >= 4) {
-                practiceCooldown.set(qid, 0);
-                session.practiceCooldownByQuestionId = practiceCooldown;
-                // attempt 4+ => move on & mark review
                 markNeedsReview = true;
                 if (currentIndex + 1 >= lesson.questions.length) {
                     session.state = "COMPLETE";
@@ -242,20 +302,20 @@ const submitAnswer = async (req, res) => {
                     session.currentQuestionIndex = currentIndex + 1;
                     session.state = "ADVANCE";
                 }
+                // reset cooldown for this question after forced advance
+                const cd = session.practiceCooldownByQuestionId ?? new Map();
+                if (typeof cd.set === "function")
+                    cd.set(qid, 0);
+                else
+                    cd[qid] = 0;
+                session.practiceCooldownByQuestionId = cd;
             }
             else {
-                // attempts 1-3 => retry same question
                 session.state = "USER_INPUT";
             }
         }
         // ---- Progress persistence (Phase 2.2) ----
-        // First interaction => in_progress
-        // Finish last question => completed (unless needs_review triggered)
-        // Repeated failures => needs_review
-        const baseStatus = session.state === "COMPLETE"
-            ? (markNeedsReview ? "needs_review" : "completed")
-            : "in_progress";
-        // mistakesByQuestion: increment when forced move-on at attempt 4+
+        const baseStatus = session.state === "COMPLETE" ? (markNeedsReview ? "needs_review" : "completed") : "in_progress";
         const updateMistakes = {};
         if (markNeedsReview) {
             updateMistakes[`mistakesByQuestion.${qid}`] = 1;
@@ -274,9 +334,7 @@ const submitAnswer = async (req, res) => {
         // ---- Deterministic retry message (Phase 2.2) ----
         const intent = getTutorIntent(session.state, isCorrect, markNeedsReview);
         const safeIndex = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
-        const questionText = session.state !== "COMPLETE" && lesson.questions[safeIndex]
-            ? lesson.questions[safeIndex].question
-            : "";
+        const questionText = session.state !== "COMPLETE" && lesson.questions[safeIndex] ? lesson.questions[safeIndex].question : "";
         const revealAnswer = intent === "FORCED_ADVANCE" ? String(currentQuestion.answer || "").trim() : "";
         const retryMessage = intent === "ENCOURAGE_RETRY"
             ? (0, staticTutorMessages_1.getDeterministicRetryMessage)({
@@ -285,21 +343,45 @@ const submitAnswer = async (req, res) => {
                 repeatedSameWrong,
             })
             : "";
+        const forcedAdvanceMessage = intent === "FORCED_ADVANCE" ? (0, staticTutorMessages_1.getForcedAdvanceMessage)() : "";
+        const hintLeadIn = intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? (0, staticTutorMessages_1.getHintLeadIn)(attemptCount) : "";
         const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
             retryMessage,
             hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-            hintLeadIn: intent === "ENCOURAGE_RETRY" && hintTextForPrompt
-                ? (0, staticTutorMessages_1.getHintLeadIn)(attemptCount)
-                : "",
-            forcedAdvanceMessage: intent === "FORCED_ADVANCE" ? (0, staticTutorMessages_1.getForcedAdvanceMessage)() : "",
+            hintLeadIn,
+            forcedAdvanceMessage,
             revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
         });
         let tutorMessage;
         try {
-            tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent);
+            tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: session.language });
         }
         catch {
             tutorMessage = "I'm having trouble responding right now. please try again.";
+        }
+        // ✅ Drift guard (this is what your failing test expects)
+        if (!(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
+            intent,
+            language: session.language,
+            message: tutorMessage,
+            questionText,
+            retryMessage,
+            hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+            hintLeadIn,
+            forcedAdvanceMessage,
+            revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
+        })) {
+            tutorMessage = (0, tutorOutputGuard_1.buildTutorFallback)({
+                intent,
+                language: session.language,
+                message: tutorMessage,
+                questionText,
+                retryMessage,
+                hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+                hintLeadIn,
+                forcedAdvanceMessage,
+                revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
+            });
         }
         session.messages.push({ role: "assistant", content: tutorMessage });
         await session.save();
@@ -315,7 +397,7 @@ const submitAnswer = async (req, res) => {
                     sourceQuestionText: currentQuestion.question,
                     expectedAnswerRaw: currentQuestion.answer,
                     conceptTag,
-                    type: practiceType
+                    type: practiceType,
                 }, aiClient);
                 const pb = session.practiceById ?? {};
                 const pa = session.practiceAttempts ?? {};
@@ -333,17 +415,22 @@ const submitAnswer = async (req, res) => {
                 }
                 session.practiceById = pb;
                 session.practiceAttempts = pa;
-                practiceCooldown.set(qid, 1);
-                session.practiceCooldownByQuestionId = practiceCooldown;
+                const cd = session.practiceCooldownByQuestionId ?? new Map();
+                if (typeof cd.set === "function")
+                    cd.set(qid, 1);
+                else
+                    cd[qid] = 1;
+                session.practiceCooldownByQuestionId = cd;
                 await session.save();
                 practice = { practiceId: practiceItem.practiceId, prompt: practiceItem.prompt };
             }
-            catch (e) {
+            catch {
                 practice = undefined;
             }
         }
-        // Phase 2.2 required response additions:
+        const progress = buildProgressPayload(session, lesson, baseStatus);
         return res.status(200).json({
+            progress,
             session,
             tutorMessage,
             evaluation: {
@@ -372,10 +459,13 @@ const getSessionHandler = async (req, res) => {
         if (!session)
             return res.status(404).json({ error: "No active sessions found" });
         const tutorMessage = await ensureTutorPromptOnResume(session);
+        const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
+        const progress = lesson ? buildProgressPayload(session, lesson) : undefined;
         return res.status(200).json({
             session,
             messages: session.messages,
             ...(tutorMessage ? { tutorMessage } : {}),
+            ...(progress ? { progress } : {}),
         });
     }
     catch (err) {

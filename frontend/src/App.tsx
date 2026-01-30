@@ -1,6 +1,6 @@
 // frontend/src/App.tsc
 
-import Lesson from './components/Lesson';
+import { Lesson } from './components/Lesson';
 
 
 function App(){
@@ -19,4 +19,3 @@ function App(){
 }
 
 export default App;
-

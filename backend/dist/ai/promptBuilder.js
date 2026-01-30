@@ -1,21 +1,30 @@
 "use strict";
-// src/ai/promptBuiler.ts
+// backend/src/ai/promptBuilder.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildTutorPrompt = buildTutorPrompt;
+function normalizeLang(v) {
+    const s = String(v || "").trim().toLowerCase();
+    if (s === "en" || s === "de" || s === "es" || s === "fr")
+        return s;
+    return "unknown";
+}
 function buildTutorPrompt(session, intent, questionText, options = {}) {
     const retryMessage = (options.retryMessage || "").trim();
     const hintText = (options.hintText || "").trim();
     const forcedAdvanceMessage = (options.forcedAdvanceMessage || "").trim();
     const revealAnswer = (options.revealAnswer || "").trim();
     const hintLeadIn = (options.hintLeadIn || "").trim();
+    const lessonLang = normalizeLang(session?.language);
     const retryBlock = `
 ENCOURAGE_RETRY:
 Say exactly:
 "${retryMessage}"
-${hintText ? `Then say exactly:
-${hintLeadIn}"
+${hintText
+        ? `Then say exactly:
+"${hintLeadIn}"
 Then include exactly one line:
-"Hint: ${hintText}` : ""}
+"Hint: ${hintText}"`
+        : ""}
 Then ask exactly this question:
 "${questionText}"
 `.trim();
@@ -23,10 +32,19 @@ Then ask exactly this question:
 You are a lesson tutor engine.
 You must follow the instructions exactly.
 Do not invent new lesson content.
-Do not repeat previous questions.
-Do not ask extra questions.
 Do not change the lesson order.
+Do not ask extra questions.
 Do not add side explanation.
+
+LANGUAGE GUARD:
+- The lesson language is "${lessonLang}".
+- Respond ONLY in the lesson language.
+- Do NOT introduce other languages.
+- You may ONLY quote foreign words if they appear verbatim in the provided question/hint/examples/answer.
+- Do NOT turn the prompt into a translation task unless the provided question already is one.
+
+IMPORTANT CONSISTENCY:
+- Do not repeat previous questions unless the Intent is ENCOURAGE_RETRY (then repeat the current question exactly as instructed).
 
 You must only do the following based on the Intent:
 
@@ -58,8 +76,6 @@ Do not output anything else.
 Do not add additional content.
 Do not add follow-up questions.
 
-
-
 Intent: ${intent}
-`;
+`.trim();
 }

@@ -1,5 +1,5 @@
 "use strict";
-// src/storage/sessionStore.ts
+// backend/src/storage/sessionStore.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getSession = getSession;
 exports.createSession = createSession;
@@ -13,10 +13,13 @@ async function createSession(session) {
     await sessionState_1.LessonSessionModel.create(session);
 }
 async function updateSession(session) {
-    const doc = session?.toObject ? session.toObject() : session;
-    delete doc._id;
-    delete doc._v;
-    await sessionState_1.LessonSessionModel.updateOne({ userId: doc.userId }, { $set: doc });
+    // If it's a mongoose document, save it (best for Map fields)
+    const anySession = session;
+    if (anySession && typeof anySession.save === "function") {
+        await anySession.save();
+        return;
+    }
+    await sessionState_1.LessonSessionModel.updateOne({ userId: session.userId }, session);
 }
 async function deleteSession(userId) {
     await sessionState_1.LessonSessionModel.deleteOne({ userId });

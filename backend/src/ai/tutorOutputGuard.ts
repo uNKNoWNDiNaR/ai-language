@@ -8,17 +8,11 @@ import type { SupportedLanguage } from "../types";
 export type TutorGuardInput = {
   intent: TutorIntent;
   language: SupportedLanguage;
-
-  // model output
   message: string;
-
-  // deterministic context we expect to appear (depending on intent)
   questionText: string;
-
   retryMessage?: string;
   hintText?: string;
   hintLeadIn?: string;
-
   forcedAdvanceMessage?: string;
   revealAnswer?: string;
 };

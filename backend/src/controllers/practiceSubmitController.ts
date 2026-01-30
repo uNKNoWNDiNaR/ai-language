@@ -36,6 +36,18 @@ function buildTutorMessage(result: "correct" | "almost" | "wrong", hint: string 
   return hint ? `Not quite. ${hint}` : "Not quite. Try again.";
 }
 
+function stripDebugPrefixes(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/^\s*Result:\s*/gim, "")
+    .replace(/^\s*Reason:\s*/gim, "")
+    .replace(/^\s*(Expected Answer|Expected):\s*/gim, "")
+    .replace(/^\s*(User Answer|Your Answer):\s*/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+
 export const submitPractice = async (req: Request, res: Response) => {
   const { userId, practiceId, answer } = req.body ?? {};
 
@@ -92,19 +104,24 @@ export const submitPractice = async (req: Request, res: Response) => {
 
   const baseMessage = buildTutorMessage(evalRes.result, hint);
 
-  let explanation: string | null = null;
+let explanation: string | null = null;
 
- if(evalRes.result === "correct" || hint === null) {
-    explanation = await explainPracticeResult ({
-    language: item.language,
-    result: evalRes.result,
-    reasonCode: evalRes.reasonCode,
-    expectedAnswer: item.expectedAnswerRaw,
-    userAnswer: answer,
-  });
- }
+if (evalRes.result === "correct") {
+  try {
+    explanation = await explainPracticeResult({
+      language: item.language,
+      result: evalRes.result,
+      reasonCode: evalRes.reasonCode,
+      expectedAnswer: item.expectedAnswerRaw,
+      userAnswer: answer,
+    });
+  } catch {
+    explanation = null;
+  }
+}
 
-  const tutorMessage = explanation ?? baseMessage;
+const tutorMessage = stripDebugPrefixes(explanation ?? baseMessage);
+
 
   if (evalRes.result === "correct") {
     // 1) Clear cooldown for the source question (so future "almost" can generate again)

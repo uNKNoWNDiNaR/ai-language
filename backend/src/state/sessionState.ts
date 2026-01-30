@@ -1,6 +1,6 @@
 // src/sessionState.ts
 
-import mongoose, { mongo } from "mongoose";
+import mongoose from "mongoose";
 
 const ChatMessageSchema = new mongoose.Schema({
   role: { type: String, enum: ["user", "assistant"], required: true },
@@ -21,36 +21,35 @@ const LessonSessionSchema = new mongoose.Schema(
     attemptCountByQuestionId: {
       type: Map,
       of: Number,
-      default: () => new Map()
+      default: () => new Map(),
     },
     lastAnswerByQuestionId: {
       type: Map,
       of: String,
-      default: () => new Map()
+      default: () => new Map(),
     },
 
-    messages: { type: [ChatMessageSchema], default: []},
+    messages: { type: [ChatMessageSchema], default: [] },
 
-    practiceById: { 
+    practiceById: {
       type: Map,
       of: mongoose.Schema.Types.Mixed,
       default: () => new Map(),
     },
-    practiceAttempts: { 
+    practiceAttempts: {
       type: Map,
       of: Number,
       default: () => new Map(),
     },
+
     practiceCooldownByQuestionId: {
       type: Map,
       of: Number,
       default: () => new Map(),
     },
-
   },
-  { timestamps: true });
+  { timestamps: true },
+);
 
 export const LessonSessionModel =
   mongoose.models.LessonSession || mongoose.model("LessonSession", LessonSessionSchema);
-
-

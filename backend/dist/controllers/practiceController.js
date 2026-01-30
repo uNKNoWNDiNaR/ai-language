@@ -27,7 +27,7 @@ const generatePractice = async (req, res) => {
     if (!lesson) {
         return res.status(404).json({ error: "Lesson not found" });
     }
-    let q = typeof sourceQuestionId === "number"
+    const q = typeof sourceQuestionId === "number"
         ? lesson.questions.find((x) => x.id === sourceQuestionId)
         : lesson.questions[0];
     if (!q) {
@@ -45,18 +45,28 @@ const generatePractice = async (req, res) => {
         expectedAnswerRaw: q.answer,
         examples: q.examples,
         conceptTag: tag,
-        type: practiceType
+        type: practiceType,
     }, aiClient);
     const session = await (0, sessionStore_1.getSession)(userId);
     if (!session) {
         return res.status(404).json({ error: "Session not found. Start a lesson first." });
     }
-    const pb = session.practiceById ?? {};
-    pb[practiceItem.practiceId] = practiceItem;
+    // ---- Map-based persistence (primary path) ----
+    const pb = session.practiceById ?? new Map();
+    if (typeof pb.set === "function")
+        pb.set(practiceItem.practiceId, practiceItem);
+    else
+        pb[practiceItem.practiceId] = practiceItem;
     session.practiceById = pb;
-    const pa = session.practiceAttempts ?? {};
-    if (pa[practiceItem.practiceId] === undefined)
-        pa[practiceItem.practiceId] = 0;
+    const pa = session.practiceAttempts ?? new Map();
+    if (typeof pa.get === "function") {
+        if (pa.get(practiceItem.practiceId) === undefined)
+            pa.set(practiceItem.practiceId, 0);
+    }
+    else {
+        if (pa[practiceItem.practiceId] === undefined)
+            pa[practiceItem.practiceId] = 0;
+    }
     session.practiceAttempts = pa;
     await (0, sessionStore_1.updateSession)(session);
     return res.status(200).json({ practiceItem, source });
