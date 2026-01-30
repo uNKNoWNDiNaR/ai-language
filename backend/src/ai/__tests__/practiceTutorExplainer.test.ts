@@ -48,6 +48,22 @@ describe("explanaPracticeResult", () => {
     expect(res).toBe("Good — ‘Hello’ is the standard greeting.");
   });
 
+  it("returns null if model leaks debug labels like Result/Reason", async () => {
+    (generateTutorResponse as any).mockResolvedValueOnce(
+      "Result: correct\nReason: some internal code\nGood job."
+    );
+
+    const res = await explainPracticeResult({
+      language: "en",
+      result: "correct",
+      expectedAnswer: "Hello",
+      userAnswer: "Hello",
+    });
+
+    expect(res).toBeNull();
+  });
+
+
   it("calls generateTutorResponse with EXPLAIN_PRACTICE_RESULT intent and low-cost opts", async () => {
     (generateTutorResponse as any).mockResolvedValueOnce("Short explanation.");
 

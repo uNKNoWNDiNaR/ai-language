@@ -7,12 +7,16 @@ function sanitizeExplanation(text) {
     const t = text.trim();
     if (!t)
         return null;
-    // Hard length guard (keeps outputs short even if model drifts)
-    if (t.length > 260)
+    // Keep explanations short so adding them doesn't overpack the UI
+    if (t.length > 220)
         return null;
-    // No grading / rubric contamination
-    const banned = /(acceptable answers|correct answer|incorrect|grading|rubric|score|points|marking scheme)/i;
+    // Reject rubric/grading artifacts (but allow normal words like "correct")
+    const banned = /(acceptable answers|grading|rubric|score|points|marking scheme)/i;
     if (banned.test(t))
+        return null;
+    // Never leak internal/debug-ish labels to the UI
+    const labelLeak = /(^|\n)\s*(result|reason|expected(\s*answer)?|user\s*answer|your\s*answer)\s*[:\-–—>]/i;
+    if (labelLeak.test(t))
         return null;
     const fallbackish = /(I'm haviing trouble responding right now | sorry,\s*i couldn't generate a response)/i;
     if (fallbackish.test(t))
@@ -34,13 +38,16 @@ Rules:
 - Be encouraging.
 - No grading language.
 - No questions.
+- Do not include labels like "Result:", "Reason:", "Expected answer:", or "User answer:".
+- Never combine single encouraging sentenceslike Almost.Try again. Geat effort!. in one explnation.Only choose one relevant one 
+- If a hint is provided, use it as guidance for what to focus on.
 - Use the learner's language: ${p.language}.`
             .trim();
         const userPrompt = `
-Expected answer: "${p.expectedAnswer}"
-User answer: "${p.userAnswer}"
-Result: "${p.result}"
-Reason: ${p.reasonCode ?? "none"}`
+Target phrase (for you): "${p.expectedAnswer}"
+Learner wrote: "${p.userAnswer}"
+Outcome (already decided): "${p.result}"
+${p.hint ? `Hint to focus on (for you): "${p.hint}"` : ""}`
             .trim();
         const prompt = `${systemPrompt}\n\n${userPrompt}`;
         const intent = "EXPLAIN_PRACTICE_RESULT";

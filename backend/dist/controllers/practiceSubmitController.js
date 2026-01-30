@@ -36,13 +36,33 @@ function buildTutorMessage(result, hint) {
 function stripDebugPrefixes(text) {
     if (!text)
         return text;
-    return text
-        .replace(/^\s*Result:\s*/gim, "")
-        .replace(/^\s*Reason:\s*/gim, "")
-        .replace(/^\s*(Expected Answer|Expected):\s*/gim, "")
-        .replace(/^\s*(User Answer|Your Answer):\s*/gim, "")
+    // Strip common internal/debug label prefixes (colon, dash, arrow variants)
+    const prefix = /^(\s*(Result|Reason|Expected\s*Answer|Expected|User\s*Answer|Your\s*Answer)\s*[:\-–—>]+\s*)/i;
+    const cleaned = text
+        .split(/\r?\n/)
+        .map((line) => {
+        const l = line.trimEnd();
+        if (!l.trim())
+            return "";
+        const without = l.replace(prefix, "").trim();
+        return without;
+    })
+        .filter((l) => l.length > 0)
+        .join("\n")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
+    return cleaned;
+}
+function looksInternal(text) {
+    if (!text)
+        return true;
+    const labelLeak = /(^|\n)\s*(result|reason|expected(\s*answer)?|user\s*answer|your\s*answer)\s*[:\-–—>]/i;
+    if (labelLeak.test(text))
+        return true;
+    // Too-short outputs are usually not user-facing (e.g. "almost")
+    if (text.trim().length < 8)
+        return true;
+    return false;
 }
 const submitPractice = async (req, res) => {
     const { userId, practiceId, answer } = req.body ?? {};
@@ -86,7 +106,12 @@ const submitPractice = async (req, res) => {
     const hint = getHintForAttempt(item, attemptCount);
     const baseMessage = buildTutorMessage(evalRes.result, hint);
     let explanation = null;
-    if (evalRes.result === "correct") {
+    // Only add an explanation when it helps learning without overpacking:
+    // - correct: short "why it works"
+    // - almost/wrong: only after attempt 2/3 (attempt 1 stays "try again"; attempt 4+ reveals answer)
+    const shouldExplain = evalRes.result === "correct" ||
+        ((evalRes.result === "almost" || evalRes.result === "wrong") && attemptCount >= 2 && attemptCount <= 3);
+    if (shouldExplain) {
         try {
             explanation = await (0, practiceTutorEplainer_1.explainPracticeResult)({
                 language: item.language,
@@ -94,13 +119,22 @@ const submitPractice = async (req, res) => {
                 reasonCode: evalRes.reasonCode,
                 expectedAnswer: item.expectedAnswerRaw,
                 userAnswer: answer,
+                hint,
+                attemptCount,
             });
         }
         catch {
             explanation = null;
         }
     }
-    const tutorMessage = stripDebugPrefixes(explanation ?? baseMessage);
+    const rawLabelLeak = /(^|\n)\s*(result|reason|expected(\s*answer)?|user\s*answer|your\s*answer)\s*[:\-–—>]/i;
+    // If the explainer output looks like internal/debug formatting, reject it entirely.
+    // (Do NOT try to "strip" and salvage it.)
+    const explainerText = explanation && !rawLabelLeak.test(explanation) ? explanation : null;
+    const cleanedExplanation = explainerText ? stripDebugPrefixes(explainerText) : "";
+    const safeExplanation = cleanedExplanation && !looksInternal(cleanedExplanation) ? cleanedExplanation : "";
+    // Keep the deterministic base (with hint escalation), and add a short user-facing explanation if available.
+    const tutorMessage = safeExplanation ? `${baseMessage} ${safeExplanation}`.trim() : baseMessage;
     if (evalRes.result === "correct") {
         // 1) Clear cooldown for the source question (so future "almost" can generate again)
         const qid = parseQuestionIdFromConceptTag(item?.meta?.conceptTag);

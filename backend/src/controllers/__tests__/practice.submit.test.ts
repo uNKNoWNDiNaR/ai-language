@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { submitPractice } from "../practiceSubmitController";
+import { explainPracticeResult } from "../../ai/practiceTutorEplainer";
 
 vi.mock("../../storage/sessionStore", () => {
   return {
@@ -99,6 +100,44 @@ describe("POST /practice/submit (controller)", () => {
     expect(payload.attemptCount).toBe(1);
     expect(updateSession).toHaveBeenCalled();
   });
+
+  it("never returns internal labels in tutorMessage (falls back to baseMessage)", async () => {
+  (getSession as any).mockResolvedValue({
+    userId: "u1",
+    practiceById: {
+      p1: {
+        practiceId: "p1",
+        lessonId: "basic-1",
+        language: "en",
+        prompt: "Say Hi",
+        expectedAnswerRaw: "Hi",
+        examples: ["Hi", "Hello"],
+        meta: { type: "variation", conceptTag: "q1" },
+      },
+    },
+    practiceAttempts: { p1: 0 },
+  });
+
+    (evaluateAnswer as any).mockReturnValue({ result: "correct" });
+    (explainPracticeResult as any).mockResolvedValueOnce(
+      "Result: correct\nReason: some internal\nNice work."
+    );
+  
+    const req: any = { body: { userId: "u1", practiceId: "p1", answer: "Hi" } };
+    const res = makeRes();
+  
+    await submitPractice(req, res);
+  
+    expect(res.status).toHaveBeenCalledWith(200);
+    const payload = res.json.mock.calls[0][0];
+  
+    expect(payload.tutorMessage).not.toMatch(/\bResult\b\s*[:\-–—>]/i);
+    expect(payload.tutorMessage).not.toMatch(/\bReason\b\s*[:\-–—>]/i);
+  
+    // Debug-labeled explainer output is rejected; we return calm deterministic copy instead.
+    expect(payload.tutorMessage).toBe("Nice — that’s correct.");
+  });
+
 
     it("correct practice submit consumes item and resets cooldown for source question", async () => {
     const practiceById = new Map<string, any>();

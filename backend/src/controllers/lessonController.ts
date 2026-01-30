@@ -288,6 +288,14 @@ export const submitAnswer = async (req: Request, res: Response) => {
     const lesson: Lesson | null = loadLesson(session.language, session.lessonId);
     if (!lesson) return res.status(404).json({ error: "Lesson not found" });
 
+    // ✅ Phase 4: If lesson is already complete, do NOT accept further answers.
+    // Return current session + progress without mutating messages or attempts.
+    if (session.state === "COMPLETE") {
+      const progress = buildProgressPayload(session, lesson, "completed");
+      return res.status(200).json({ progress, session });
+    }
+
+
     session.messages.push({ role: "user", content: answer });
 
     const currentIndex = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;

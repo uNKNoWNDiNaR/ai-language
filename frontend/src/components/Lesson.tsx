@@ -117,7 +117,7 @@ export  function Lesson() {
   const [practicePrompt, setPracticePrompt] = useState<string | null>(null);
   const [practiceAnswer, setPracticeAnswer] = useState("");
   const [practiceTutorMessage, setPracticeTutorMessage] = useState<string | null>(null);
-  const [practiceAttemptCount, setPracticeAttemptCount] = useState<number | null>(null);
+  const [, setPracticeAttemptCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<null | "start" | "resume" | "answer" | "practice">(null);
@@ -149,9 +149,20 @@ export  function Lesson() {
   const disableStartResume = loading || practiceActive || sessionActive;
   const disableRestart = loading || practiceActive || !sessionActive;
 
+  const lessonCompleted = useMemo(() => {
+    return (progress?.status ?? "").toLowerCase() === "completed";
+  }, [progress]);
+
   const canSubmitAnswer = useMemo(() => {
-    return Boolean(session) && answer.trim().length > 0 && !loading && !practiceActive;
-  }, [session, answer, loading, practiceActive]);
+    return (
+      Boolean(session) &&
+      answer.trim().length > 0 &&
+      !loading &&
+      !practiceActive &&
+      !lessonCompleted
+    );
+  }, [session, answer, loading, practiceActive, lessonCompleted]);
+
 
   const canSubmitPractice = useMemo(() => {
     return Boolean(practiceId) && practiceAnswer.trim().length > 0 && !loading;
@@ -279,9 +290,26 @@ export  function Lesson() {
   }
   }
 
+  function handleExit() {
+    if (!session) return;
+
+    if (!window.confirm("Exit this lesson? You can resume later.")) return;
+
+    setError(null);
+    setSession(null);
+    setMessages([]);
+    setProgress(null);
+    setHintText(null);
+    setAnswer("");
+    setPracticeId(null);
+    setPracticePrompt(null);
+    setPracticeAnswer("");
+    setPracticeTutorMessage(null);
+    setPracticeAttemptCount(null);
+  }
 
   async function handleSendAnswer() {
-    if (!session || practiceActive) return;
+    if (!session || practiceActive || lessonCompleted) return;
 
     setError(null);
     setLoading(true);
@@ -448,7 +476,7 @@ export  function Lesson() {
         </label>
 
         <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, opacity: 0.75 }}>Lesson ID</span>
+          <span style={{ fontSize: 12, opacity: 0.75 }}>Lesson</span>
           <input
             value={lessonId}
             onChange={(e) => setLessonId(e.target.value)}
@@ -511,6 +539,24 @@ export  function Lesson() {
             }}
           >
             Restart
+          </button>
+        )}
+
+        {sessionActive && (
+          <button
+            onClick={handleExit}
+            disabled={loading || practiceActive}
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #ddd",
+              background: (loading || practiceActive) ? "#f6f6f6" : "white",
+              color: "#333",
+              opacity: (loading || practiceActive)? 0.7 : 1,
+              cursor: (loading || practiceActive) ? "not-allowed" : "pointer",
+            }}
+            >
+              Exit
           </button>
         )}
         </div>
@@ -706,11 +752,6 @@ export  function Lesson() {
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Tutor</div>
                 <div style={{ whiteSpace: "pre-wrap" }}>{practiceTutorMessage}</div>
-                {typeof practiceAttemptCount === "number" && (
-                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-                    Attempt: {practiceAttemptCount}
-                  </div>
-                )}
               </div>
             )}
 
@@ -760,10 +801,12 @@ export  function Lesson() {
           placeholder={
             !session 
               ? "Start a lesson first..." 
-              : practiceActive
-                ? "Finish the practice above first..."
-                : "Type your answer..."}
-          disabled={!session || loading || practiceActive }
+              : lessonCompleted
+                ? "Lesson completed - restart or exit."
+                : practiceActive
+                  ? "Finish the practice above first..."
+                  : "Type your answer..."}
+          disabled={!session || loading || practiceActive || lessonCompleted}
           style={{
             flex: 1,
             padding: 12,
