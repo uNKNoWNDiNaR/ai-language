@@ -78,9 +78,12 @@ export type GetSessionResponse = {
 export const API_BASE: string =
   import.meta.env.VITE_API_BASE ?? "http://localhost:3000";
 
+const AUTH_TOKEN: string| undefined = import.meta.env.VITE_AUTH_TOKEN
+
 const http = axios.create({
   baseURL: API_BASE,
   timeout: 15000,
+  headers: AUTH_TOKEN ? {Authorization: `Bearer ${AUTH_TOKEN}`} : undefined,
 })
 
 export async function startLesson(params: {

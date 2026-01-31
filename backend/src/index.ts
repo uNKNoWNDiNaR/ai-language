@@ -8,11 +8,13 @@ import lessonRoutes from "./routes/lesson";
 import progressRoutes from "./routes/progress";
 import cors from "cors";
 import practiceRoutes from "./routes/practice"
-
-const app = express();
-app.use(express.json());
+import { authMiddleware } from "./middleware/auth";
 
 const PORT = process.env.PORT || 3000;
+
+connectMongo();
+
+const app = express();
 
 app.use(
   cors({
@@ -21,7 +23,8 @@ app.use(
   })
 );
 
-connectMongo();
+app.use(express.json());
+app.use(authMiddleware);
 
 app.use("/lesson", lessonRoutes);
 app.use("/progress", progressRoutes);

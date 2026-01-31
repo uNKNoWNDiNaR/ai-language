@@ -12,6 +12,7 @@ const progressState_1 = require("../state/progressState");
 const practiceGenerator_1 = require("../services/practiceGenerator");
 const openaiClient_2 = require("../ai/openaiClient");
 const tutorOutputGuard_1 = require("../ai/tutorOutputGuard");
+const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 function isSupportedLanguage(v) {
     return v === "en" || v === "de" || v === "es" || v === "fr";
 }
@@ -337,6 +338,19 @@ const submitAnswer = async (req, res) => {
                 ...(markNeedsReview ? updateMistakes : {}),
             },
         }, { upsert: true });
+        // ---- Learner profile tracking (BITE 4.1, best-effort; no behavior change) ----
+        try {
+            await (0, learnerProfileStore_1.recordLessonAttempt)({
+                userId: session.userId,
+                language: session.language,
+                result: evaluation.result,
+                reasonCode: evaluation.reasonCode,
+                forcedAdvance: markNeedsReview,
+            });
+        }
+        catch {
+            // best-effort: never break lesson flow
+        }
         // ---- Deterministic retry message (Phase 2.2) ----
         const intent = getTutorIntent(session.state, isCorrect, markNeedsReview);
         const safeIndex = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
@@ -351,12 +365,23 @@ const submitAnswer = async (req, res) => {
             : "";
         const forcedAdvanceMessage = intent === "FORCED_ADVANCE" ? (0, staticTutorMessages_1.getForcedAdvanceMessage)() : "";
         const hintLeadIn = intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? (0, staticTutorMessages_1.getHintLeadIn)(attemptCount) : "";
+        let learnerProfileSummary = null;
+        try {
+            learnerProfileSummary = await (0, learnerProfileStore_1.getLearnerProfileSummary)({
+                userId: session.userId,
+                language: session.language,
+            });
+        }
+        catch {
+            learnerProfileSummary = null;
+        }
         const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
             retryMessage,
             hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
             hintLeadIn,
             forcedAdvanceMessage,
             revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
+            learnerProfileSummary,
         });
         let tutorMessage;
         try {

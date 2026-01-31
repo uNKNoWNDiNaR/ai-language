@@ -9,6 +9,8 @@ type PromptOptions = {
   forcedAdvanceMessage?: string;
   revealAnswer?: string;
   hintLeadIn?: string;
+
+  learnerProfileSummary?: string | null; //Bounded aggregate summary (BITE 4.2)
 };
 
 function normalizeLang(v: unknown): "en" | "de" | "es" | "fr" | "unknown" {
@@ -30,6 +32,19 @@ export function buildTutorPrompt(
   const hintLeadIn = (options.hintLeadIn || "").trim();
 
   const lessonLang = normalizeLang((session as any)?.language);
+
+    const learnerProfileSummaryRaw = (options.learnerProfileSummary || "").trim();
+  const learnerProfileSummary =
+    learnerProfileSummaryRaw.length > 280 ? learnerProfileSummaryRaw.slice(0, 280).trim() : learnerProfileSummaryRaw;
+
+  const learnerProfileBlock = learnerProfileSummary
+    ? `
+LEARNER PROFILE (aggregate signals — do NOT mention tracking or counts to the learner):
+- ${learnerProfileSummary}
+Use this only to choose gentle focus in hints/explanations. Do not claim personal facts.`
+        .trim()
+    : "";
+
 
   const retryBlock = `
 ENCOURAGE_RETRY:
@@ -64,6 +79,8 @@ LANGUAGE GUARD:
 
 IMPORTANT CONSISTENCY:
 - Do not repeat previous questions unless the Intent is ENCOURAGE_RETRY (then repeat the current question exactly as instructed).
+
+${learnerProfileBlock}
 
 You must only do the following based on the Intent:
 

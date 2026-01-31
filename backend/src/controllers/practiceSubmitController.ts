@@ -6,6 +6,8 @@ import { evaluateAnswer } from "../state/answerEvaluator";
 import type { LessonQuestion } from "../state/lessonLoader";
 import type { PracticeItem } from "../types";
 import { explainPracticeResult } from "../ai/practiceTutorEplainer";
+import { recordPracticeAttempt } from "../storage/learnerProfileStore";
+import { Session } from "@clerk/nextjs/server";
 
 function parseQuestionIdFromConceptTag(tag: unknown): string | null {
   if (typeof tag !== "string") return null;
@@ -163,8 +165,17 @@ const safeExplanation = cleanedExplanation && !looksInternal(cleanedExplanation)
 // Keep the deterministic base (with hint escalation), and add a short user-facing explanation if available.
 const tutorMessage = safeExplanation ? `${baseMessage} ${safeExplanation}`.trim() : baseMessage;
 
-
-
+  // ---- Learner profile tracking (BITE 4.1, best-effort; no behavior change) ----
+  try {
+    await recordPracticeAttempt({
+      userId: session.userId,
+      language: session.language,
+      result: evalRes.result,
+      reasonCode: evalRes.reasonCode,
+    });
+  } catch {
+    // best-effort: never break practice flow
+  }
 
 
   if (evalRes.result === "correct") {

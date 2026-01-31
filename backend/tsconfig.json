@@ -8,6 +8,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "moduleResolution": "nodenext",
+    "types": ["node"],
   },
   "exclude": [
     "dist",

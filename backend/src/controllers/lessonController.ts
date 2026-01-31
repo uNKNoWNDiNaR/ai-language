@@ -16,6 +16,7 @@ import { generatePracticeJSON } from "../ai/openaiClient";
 import { PracticeMetaType } from "../types";
 import type { SupportedLanguage } from "../types";
 import { isTutorMessageAcceptable, buildTutorFallback } from "../ai/tutorOutputGuard";
+import { recordLessonAttempt, getLearnerProfileSummary } from "../storage/learnerProfileStore";
 
 function isSupportedLanguage(v: unknown): v is SupportedLanguage {
   return v === "en" || v === "de" || v === "es" || v === "fr";
@@ -402,6 +403,20 @@ export const submitAnswer = async (req: Request, res: Response) => {
       { upsert: true }
     );
 
+        // ---- Learner profile tracking (BITE 4.1, best-effort; no behavior change) ----
+    try {
+      await recordLessonAttempt({
+        userId: session.userId,
+        language: session.language,
+        result: evaluation.result,
+        reasonCode: evaluation.reasonCode,
+        forcedAdvance: markNeedsReview,
+      });
+    } catch {
+      // best-effort: never break lesson flow
+    }
+
+
     // ---- Deterministic retry message (Phase 2.2) ----
     const intent = getTutorIntent(session.state, isCorrect, markNeedsReview);
 
@@ -425,12 +440,23 @@ export const submitAnswer = async (req: Request, res: Response) => {
 
     const hintLeadIn = intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? getHintLeadIn(attemptCount) : "";
 
+    let learnerProfileSummary: string | null = null;
+    try {
+      learnerProfileSummary = await getLearnerProfileSummary({
+        userId: session.userId,
+        language: session.language,
+      });
+    } catch {
+      learnerProfileSummary = null;
+    }
+
     const tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
       retryMessage,
       hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
       hintLeadIn,
       forcedAdvanceMessage,
       revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
+      learnerProfileSummary,
     });
 
     let tutorMessage: string;

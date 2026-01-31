@@ -18,7 +18,7 @@ import {
 type Role = "user" | "assistant";
 
 function rowStyle(role: Role): React.CSSProperties {
-  const isUser = role === "user";
+  const isUser = role === "user"; 
   return {
     display: "flex",
     justifyContent: isUser ? "flex-end" : "flex-start",
@@ -122,11 +122,14 @@ export  function Lesson() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<null | "start" | "resume" | "answer" | "practice">(null);
   const [progress, setProgress] = useState< LessonProgressPayload | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const chatRef = useRef<HTMLDivElement | null>(null);
   const answerInputRef = useRef<HTMLInputElement | null>(null);
   const practiceInputRef = useRef<HTMLInputElement | null>(null);
-
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const el = chatRef.current;
@@ -134,8 +137,6 @@ export  function Lesson() {
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages.length, hintText, practicePrompt, practiceTutorMessage, pending]);
 
-
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({behavior: "smooth", block: "end"});
   }, [messages, hintText, practicePrompt, practiceTutorMessage])
@@ -179,7 +180,37 @@ export  function Lesson() {
     if(session) {
       answerInputRef.current?.focus();
     }
-  }, [session, practiceActive, loading, pending])
+    }, [session, practiceActive, loading, pending])
+
+    useEffect(() => {
+    if (!moreOpen) return;
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setMoreOpen(false);
+    }
+
+    function onMouseDown(e: MouseEvent) {
+      const target = e.target as Node | null;
+      if (!target) return;
+
+      if (moreMenuRef.current?.contains(target)) return;
+      if (moreButtonRef.current?.contains(target)) return;
+
+      setMoreOpen(false);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("mousedown", onMouseDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mousedown", onMouseDown);
+    };
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (!sessionActive) setMoreOpen(false);
+  }, [sessionActive]);
+
 
   async function handleStart() {
     setError(null);
@@ -291,8 +322,6 @@ export  function Lesson() {
   }
 
   function handleExit() {
-    if (!session) return;
-
     if (!window.confirm("Exit this lesson? You can resume later.")) return;
 
     setError(null);
@@ -301,11 +330,15 @@ export  function Lesson() {
     setProgress(null);
     setHintText(null);
     setAnswer("");
+
     setPracticeId(null);
     setPracticePrompt(null);
     setPracticeAnswer("");
     setPracticeTutorMessage(null);
     setPracticeAttemptCount(null);
+
+    setPending(null);
+    setMoreOpen(false);
   }
 
   async function handleSendAnswer() {
@@ -524,41 +557,89 @@ export  function Lesson() {
             Resume
           </button>
 
-        {sessionActive && (
-          <button 
-            onClick={handleRestart}
-            disabled={disableRestart}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid",
-              borderColor: disableRestart ? "#f1c0c0" : "#ff3b30",
-              background: disableRestart ? "#f6f6f6": "white",
-              color: disableRestart ? "#999" : "#ff3b30",
-              cursor: disableRestart ? "not-allowed" : "pointer",
-            }}
-          >
-            Restart
-          </button>
-        )}
+      {sessionActive && (
+      <div style={{ position: "relative" }}>
+      <button
+      ref={moreButtonRef}
+      onClick={() => setMoreOpen((v) => !v)}
+      disabled={disableRestart}
+      aria-label="More"
+      style={{
+        padding: "10px 12px",
+        borderRadius: 12,
+        border: "1px solid #ddd",
+        background: disableRestart ? "#f6f6f6" : "white",
+        color: "#111",
+        cursor: disableRestart ? "not-allowed" : "pointer",
+        minWidth: 44,
+      }}
+      >
+        ⋯
+      </button>
 
-        {sessionActive && (
-          <button
-            onClick={handleExit}
-            disabled={loading || practiceActive}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #ddd",
-              background: (loading || practiceActive) ? "#f6f6f6" : "white",
-              color: "#333",
-              opacity: (loading || practiceActive)? 0.7 : 1,
-              cursor: (loading || practiceActive) ? "not-allowed" : "pointer",
-            }}
-            >
-              Exit
-          </button>
-        )}
+    {moreOpen && !disableRestart && (
+      <div
+        ref={moreMenuRef}
+        style={{
+          position: "absolute",
+          right: 0,
+          top: "calc(100% + 8px)",
+          background: "white",
+          border: "1px solid #e6e6e6",
+          borderRadius: 12,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+          overflow: "hidden",
+          minWidth: 200,
+          zIndex: 50,
+        }}
+      >
+        <button
+          onClick={() => {
+            setMoreOpen(false);
+            void handleRestart();
+          }}
+          disabled={disableRestart}
+          style={{
+            width: "100%",
+            textAlign: "left",
+            padding: "10px 12px",
+            background: "white",
+            border: "none",
+            cursor: disableRestart ? "not-allowed" : "pointer",
+            fontSize: 13,
+            color: disableRestart ? "#999" : "#ff3b30",
+          }}
+        >
+          Restart lesson
+        </button>
+
+        <div style={{ height: 1, background: "#f0f0f0" }} />
+
+        <button
+          onClick={() => {
+            setMoreOpen(false);
+            handleExit();
+          }}
+          disabled={disableRestart}
+          style={{
+            width: "100%",
+            textAlign: "left",
+            padding: "10px 12px",
+            background: "white",
+            border: "none",
+            cursor: disableRestart ? "not-allowed" : "pointer",
+            fontSize: 13,
+            color: disableRestart ? "#999" : "#111",
+          }}
+        >
+          Exit lesson
+        </button>
+      </div>
+    )}
+  </div>
+  )}
+
+
         </div>
       </div>
 

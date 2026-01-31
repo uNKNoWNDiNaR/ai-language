@@ -5,6 +5,7 @@ exports.submitPractice = void 0;
 const sessionStore_1 = require("../storage/sessionStore");
 const answerEvaluator_1 = require("../state/answerEvaluator");
 const practiceTutorEplainer_1 = require("../ai/practiceTutorEplainer");
+const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 function parseQuestionIdFromConceptTag(tag) {
     if (typeof tag !== "string")
         return null;
@@ -135,6 +136,18 @@ const submitPractice = async (req, res) => {
     const safeExplanation = cleanedExplanation && !looksInternal(cleanedExplanation) ? cleanedExplanation : "";
     // Keep the deterministic base (with hint escalation), and add a short user-facing explanation if available.
     const tutorMessage = safeExplanation ? `${baseMessage} ${safeExplanation}`.trim() : baseMessage;
+    // ---- Learner profile tracking (BITE 4.1, best-effort; no behavior change) ----
+    try {
+        await (0, learnerProfileStore_1.recordPracticeAttempt)({
+            userId: session.userId,
+            language: session.language,
+            result: evalRes.result,
+            reasonCode: evalRes.reasonCode,
+        });
+    }
+    catch {
+        // best-effort: never break practice flow
+    }
     if (evalRes.result === "correct") {
         // 1) Clear cooldown for the source question (so future "almost" can generate again)
         const qid = parseQuestionIdFromConceptTag(item?.meta?.conceptTag);
