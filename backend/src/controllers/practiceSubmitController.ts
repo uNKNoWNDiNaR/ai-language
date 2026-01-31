@@ -7,7 +7,6 @@ import type { LessonQuestion } from "../state/lessonLoader";
 import type { PracticeItem } from "../types";
 import { explainPracticeResult } from "../ai/practiceTutorEplainer";
 import { recordPracticeAttempt } from "../storage/learnerProfileStore";
-import { Session } from "@clerk/nextjs/server";
 
 function parseQuestionIdFromConceptTag(tag: unknown): string | null {
   if (typeof tag !== "string") return null;
