@@ -67,8 +67,10 @@ vi.mock("../../ai/staticTutorMessages", () => {
     getDeterministicRetryMessage: vi.fn(() => "retry"),
     getForcedAdvanceMessage: vi.fn(() => "forced advance"),
     getHintLeadIn: vi.fn(() => "Hint:"),
+    getFocusNudge: vi.fn(() => ""),
   };
 });
+
 
 vi.mock("../../ai/openaiClient", () => {
   return {
@@ -83,6 +85,8 @@ const recordLessonAttemptMock = vi.hoisted(() =>
 vi.mock("../../storage/learnerProfileStore", () => {
   return {
     recordLessonAttempt: recordLessonAttemptMock,
+    getLearnerProfileSummary: vi.fn(async () => null),
+    getLearnerTopFocusReason: vi.fn(async () => null),
   };
 });
 

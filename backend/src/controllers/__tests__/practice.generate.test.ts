@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // ---- Hoisted mocks (must exist before importing controller) ----
 const getSessionMock = vi.hoisted(() => vi.fn());
 const updateSessionMock = vi.hoisted(() => vi.fn());
+const getWeakestConceptTagMock = vi.hoisted(() => vi.fn())
 
 vi.mock("../../storage/sessionStore", () => {
   return {
@@ -12,6 +13,13 @@ vi.mock("../../storage/sessionStore", () => {
     updateSession: updateSessionMock,
   };
 });
+
+vi.mock("../../storage/learnerProfileStore", () => {
+  return {
+    getWeakestConceptTag: getWeakestConceptTagMock,
+  };
+});
+
 
 // Mock lessonLoader so tests don’t rely on filesystem
 vi.mock("../../state/lessonLoader", () => {
@@ -23,8 +31,20 @@ vi.mock("../../state/lessonLoader", () => {
         title: "T",
         description: "D",
         questions: [
-          { id: 1, question: "How do you say 'Hello' in English?", answer: "Hello", examples: ["Hello", "Hi"] },
-          { id: 2, question: "How do you ask someone their name?", answer: "What is your name?", examples: ["What is your name?"] },
+          { 
+            id: 1, 
+            question: "How do you say 'Hello' in English?", 
+            answer: "Hello", 
+            examples: ["Hello", "Hi"],
+            conceptTag: "greetings", 
+          },
+          { 
+            id: 2, 
+            question: "How do you ask someone their name?", 
+            answer: "What is your name?", 
+            examples: ["What is your name?"],
+            conceptTag: "asking_name",
+          },
         ],
       };
     },
@@ -79,6 +99,7 @@ describe("POST /practice/generate (controller)", () => {
       practiceAttempts: new Map(),
     });
     updateSessionMock.mockResolvedValue(undefined);
+    getWeakestConceptTagMock.mockResolvedValue(null);
 
     // Import AFTER mocks are in place
     ({ generatePractice } = await import("../practiceController"));
@@ -122,6 +143,20 @@ describe("POST /practice/generate (controller)", () => {
     const payload = res.json.mock.calls[0][0];
     expect(payload.practiceItem).toBeTruthy();
     expect(payload.practiceItem.expectedAnswerRaw).toBe("Hello");
+  });
+
+  it("200 defaults to weakest concept question when no sourceQuestionId", async () => {
+  getWeakestConceptTagMock.mockResolvedValue("asking_name");
+
+  const req: any = { body: { userId: "u1", lessonId: "basic-1", language: "en" } };
+  const res = makeRes();
+
+  await generatePractice(req, res);
+
+  expect(res.status).toHaveBeenCalledWith(200);
+  const payload = res.json.mock.calls[0][0];
+  expect(payload.practiceItem.expectedAnswerRaw).toBe("What is your name?");
+  expect(payload.practiceItem.meta.conceptTag).toBe("asking_name");
   });
 
   it("200 can target sourceQuestionId", async () => {
@@ -180,3 +215,4 @@ describe("POST /practice/generate (controller)", () => {
     expect(updateSessionMock).toHaveBeenCalled();
   });
 });
+

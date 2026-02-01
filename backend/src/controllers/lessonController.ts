@@ -6,17 +6,20 @@ import type { LessonSession, LessonState } from "../state/lessonState";
 import { buildTutorPrompt } from "../ai/promptBuilder";
 import { generateTutorResponse } from "../ai/openaiClient";
 import type { TutorIntent } from "../ai/tutorIntent";
-import type { Lesson, LessonQuestion } from "../state/lessonLoader";
+import type { Lesson } from "../state/lessonLoader";
 import { loadLesson } from "../state/lessonLoader";
 import { evaluateAnswer } from "../state/answerEvaluator";
-import { getDeterministicRetryMessage, getForcedAdvanceMessage, getHintLeadIn } from "../ai/staticTutorMessages";
+import { getDeterministicRetryMessage, getForcedAdvanceMessage, getHintLeadIn,getFocusNudge } from "../ai/staticTutorMessages";
 import { LessonProgressModel } from "../state/progressState";
 import { generatePracticeItem } from "../services/practiceGenerator";
 import { generatePracticeJSON } from "../ai/openaiClient";
 import { PracticeMetaType } from "../types";
 import type { SupportedLanguage } from "../types";
 import { isTutorMessageAcceptable, buildTutorFallback } from "../ai/tutorOutputGuard";
-import { recordLessonAttempt, getLearnerProfileSummary } from "../storage/learnerProfileStore";
+import { recordLessonAttempt, getLearnerProfileSummary, getLearnerTopFocusReason, getConceptMistakeCount } from "../storage/learnerProfileStore";
+import { isPracticeGenEnabled } from "../config/featureFlags";
+
+const FORCED_ADVANCE_PRACTICE_THRESHOLD = 2;
 
 function isSupportedLanguage(v: unknown): v is SupportedLanguage {
   return v === "en" || v === "de" || v === "es" || v === "fr";
@@ -403,6 +406,9 @@ export const submitAnswer = async (req: Request, res: Response) => {
       { upsert: true }
     );
 
+    const promptQuestion =
+      session.state !== "COMPLETE" ? lesson.questions[session.currentQuestionIndex] : null;
+
         // ---- Learner profile tracking (BITE 4.1, best-effort; no behavior change) ----
     try {
       await recordLessonAttempt({
@@ -411,6 +417,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
         result: evaluation.result,
         reasonCode: evaluation.reasonCode,
         forcedAdvance: markNeedsReview,
+        conceptTag: promptQuestion?.conceptTag,
       });
     } catch {
       // best-effort: never break lesson flow
@@ -441,22 +448,39 @@ export const submitAnswer = async (req: Request, res: Response) => {
     const hintLeadIn = intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? getHintLeadIn(attemptCount) : "";
 
     let learnerProfileSummary: string | null = null;
+    let topFocusReason: string | null = null;
+
     try {
-      learnerProfileSummary = await getLearnerProfileSummary({
-        userId: session.userId,
-        language: session.language,
-      });
+      [learnerProfileSummary, topFocusReason] = await Promise.all([
+        getLearnerProfileSummary({ userId: session.userId, language: session.language }),
+        getLearnerTopFocusReason({ userId: session.userId, language: session.language }),
+      ]);
     } catch {
       learnerProfileSummary = null;
+      topFocusReason = null;
     }
+
+    const focusNudge = getFocusNudge(topFocusReason);
+
+    const hintLeadInWithFocus =
+      focusNudge && intent === "ENCOURAGE_RETRY" && hintTextForPrompt
+        ? `${focusNudge} ${hintLeadIn}`.trim()
+        : hintLeadIn;
+
+    const forcedAdvanceMessageWithFocus =
+      focusNudge && intent === "FORCED_ADVANCE"
+        ? `${focusNudge} ${forcedAdvanceMessage}`.trim()
+        : forcedAdvanceMessage;
 
     const tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
       retryMessage,
       hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-      hintLeadIn,
-      forcedAdvanceMessage,
+      hintLeadIn: hintLeadInWithFocus,
+      forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
       revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
       learnerProfileSummary,
+      explanationText: intent === "FORCED_ADVANCE" ? (promptQuestion?.explanation ?? "") : "",
+
     });
 
     let tutorMessage: string;
@@ -498,11 +522,38 @@ export const submitAnswer = async (req: Request, res: Response) => {
 
     let practice: { practiceId: string; prompt: string } | undefined;
 
-    if (evaluation.result === "almost" && !practiceCooldownActive) {
+        const practiceConceptTag =
+      typeof currentQuestion.conceptTag === "string" && currentQuestion.conceptTag.trim().length > 0
+        ? currentQuestion.conceptTag.trim()
+        : `lesson-${session.lessonId}-q${currentQuestion.id}`;
+
+    let allowForcedAdvancePractice = false;
+
+    if (intent === "FORCED_ADVANCE") {
+      try {
+        const conceptCount = await getConceptMistakeCount(
+          session.userId,
+          session.language,
+          practiceConceptTag
+        );
+        allowForcedAdvancePractice = conceptCount >= FORCED_ADVANCE_PRACTICE_THRESHOLD;
+      } catch {
+        allowForcedAdvancePractice = false;
+      }
+    }
+
+
+    if (
+      session.state !== "COMPLETE" && 
+      (evaluation.result === "almost" || allowForcedAdvancePractice) &&
+      isPracticeGenEnabled() &&
+      !practiceCooldownActive
+    ) {
       try {
         const aiClient = { generatePracticeJSON };
 
-        const conceptTag = `lesson-${session.lessonId}-q${currentQuestion.id}`;
+        const conceptTag = practiceConceptTag;
+
         const practiceType: PracticeMetaType = "variation";
 
         const { item: practiceItem } = await generatePracticeItem(

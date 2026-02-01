@@ -171,6 +171,7 @@ const tutorMessage = safeExplanation ? `${baseMessage} ${safeExplanation}`.trim(
       language: session.language,
       result: evalRes.result,
       reasonCode: evalRes.reasonCode,
+      conceptTag: item?.meta?.conceptTag,
     });
   } catch {
     // best-effort: never break practice flow

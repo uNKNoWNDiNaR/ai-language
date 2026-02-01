@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.isTutorMessageAcceptable = isTutorMessageAcceptable;
 exports.buildTutorFallback = buildTutorFallback;
 const calmToneGuard_1 = require("./calmToneGuard");
+const continuityPrivacyGuard_1 = require("./continuityPrivacyGuard");
 function norm(s) {
     return String(s || "").trim();
 }
@@ -56,6 +57,8 @@ function isTutorMessageAcceptable(i) {
     if (hasOtherLanguageDrift(i))
         return false;
     if ((0, calmToneGuard_1.violatesCalmTone)(msg))
+        return false;
+    if ((0, continuityPrivacyGuard_1.violatesContinuityPrivacy)(msg))
         return false;
     // intent contract enforcement (matches your promptBuilder “say exactly” style)
     if (i.intent === "ASK_QUESTION") {

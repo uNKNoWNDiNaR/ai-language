@@ -36,6 +36,11 @@ function levenshtein(a, b) {
     return dp[m][n];
 }
 function matchesAnyExact(question, userNorm) {
+    const accepted = Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [];
+    for (const a of accepted) {
+        if (userNorm === normalize(a))
+            return true;
+    }
     const primary = normalize(question.answer);
     if (userNorm === primary)
         return true;

@@ -71,8 +71,10 @@ vi.mock("../../ai/staticTutorMessages", () => {
     getDeterministicRetryMessage: vi.fn(() => "retry"),
     getForcedAdvanceMessage: vi.fn(() => "forced advance"),
     getHintLeadIn: vi.fn(() => "Hint:"),
+    getFocusNudge: vi.fn(() => ""),
   };
 });
+
 
 vi.mock("../../ai/openaiClient", () => {
   return {

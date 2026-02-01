@@ -55,6 +55,11 @@ function levenshtein(a: string, b: string): number {
 }
 
 function matchesAnyExact(question: LessonQuestion, userNorm: string): boolean {
+  const accepted = Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [];
+  for (const a of accepted) {
+    if (userNorm === normalize(a)) return true;
+  }
+
   const primary = normalize(question.answer);
   if (userNorm === primary) return true;
 
@@ -65,6 +70,7 @@ function matchesAnyExact(question: LessonQuestion, userNorm: string): boolean {
 
   return false;
 }
+
 
 function matchPlaceholderTemplate(expectedRaw: string, userNorm: string): "correct" | "almost" | null{
   const hasPlaceholder = 

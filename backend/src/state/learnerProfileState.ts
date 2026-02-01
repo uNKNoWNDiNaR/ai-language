@@ -13,6 +13,13 @@ const LearnerProfileSchema = new mongoose.Schema(
       default: () => new Map(),
     },
 
+    mistakeCountsByConcept: {
+      type: Map,
+      of: Number,
+      default: () => new Map(),
+    },
+
+
     forcedAdvanceCount: { type: Number, default: 0 },
     attemptsTotal: { type: Number, default: 0 },
     practiceAttemptsTotal: { type: Number, default: 0 },

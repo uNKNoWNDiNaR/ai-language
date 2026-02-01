@@ -5,6 +5,7 @@
 import type { TutorIntent } from "./tutorIntent";
 import type { SupportedLanguage } from "../types";
 import { violatesCalmTone } from "./calmToneGuard";
+import { violatesContinuityPrivacy } from "./continuityPrivacyGuard";
 
 export type TutorGuardInput = {
   intent: TutorIntent;
@@ -75,6 +76,8 @@ export function isTutorMessageAcceptable(i: TutorGuardInput): boolean {
   // language drift guard
   if (hasOtherLanguageDrift(i)) return false;
   if (violatesCalmTone(msg)) return false;
+  if (violatesContinuityPrivacy(msg)) return false;
+
 
   // intent contract enforcement (matches your promptBuilder “say exactly” style)
   if (i.intent === "ASK_QUESTION") {

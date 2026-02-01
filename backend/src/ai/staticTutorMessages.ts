@@ -2,6 +2,27 @@
 
 import type { ReasonCode } from "../state/answerEvaluator";
 
+export function getFocusNudge(reasonCode?: ReasonCode | string | null): string {
+  const c = String(reasonCode || "").trim().toUpperCase();
+  if (!c) return "";
+
+  switch (c) {
+    case "WORD_ORDER":
+      return "Let's focus on word order.";
+    case "ARTICLE":
+      return "Let's pay attention to the article.";
+    case "TYPO":
+      return "Let's double-check spelling.";
+    case "WRONG_LANGUAGE":
+      return "Let's answer in the selected language.";
+    case "MISSING_SLOT":
+      return "Let's make sure nothing is missing.";
+    default:
+      return "";
+  }
+}
+
+
 export function getEndLessonMessage(): string {
   return "Great job! 🎉 You've completed this session.";
 }

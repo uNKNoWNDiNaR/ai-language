@@ -6,6 +6,7 @@ const lessonLoader_1 = require("../state/lessonLoader");
 const practiceGenerator_1 = require("../services/practiceGenerator");
 const openaiClient_1 = require("../ai/openaiClient");
 const sessionStore_1 = require("../storage/sessionStore");
+const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 function isSupportedLanguage(v) {
     return v === "en" || v === "de" || v === "es" || v === "fr";
 }
@@ -27,14 +28,29 @@ const generatePractice = async (req, res) => {
     if (!lesson) {
         return res.status(404).json({ error: "Lesson not found" });
     }
-    const q = typeof sourceQuestionId === "number"
+    let q = typeof sourceQuestionId === "number"
         ? lesson.questions.find((x) => x.id === sourceQuestionId)
-        : lesson.questions[0];
+        : undefined;
+    if (typeof sourceQuestionId === "number" && !q) {
+        return res.status(404).json({ error: "Source question not found" });
+    }
+    if (!q) {
+        const weakest = await (0, learnerProfileStore_1.getWeakestConceptTag)(userId, language);
+        if (weakest) {
+            q = lesson.questions.find((x) => x.conceptTag === weakest);
+        }
+        if (!q)
+            q = lesson.questions[0];
+    }
     if (!q) {
         return res.status(404).json({ error: "Source question not found" });
     }
     const practiceType = isPracticeMetaType(type) ? type : "variation";
-    const tag = typeof conceptTag === "string" && conceptTag.trim() ? conceptTag.trim() : `q${q.id}`;
+    const tag = typeof q.conceptTag === "string" && q.conceptTag.trim()
+        ? q.conceptTag.trim()
+        : typeof conceptTag === "string" && conceptTag.trim()
+            ? conceptTag.trim()
+            : `lesson-${lessonId}-q${q.id}`;
     const aiClient = {
         generatePracticeJSON: openaiClient_1.generatePracticeJSON,
     };

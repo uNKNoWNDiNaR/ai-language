@@ -10,7 +10,9 @@ type PromptOptions = {
   revealAnswer?: string;
   hintLeadIn?: string;
 
-  learnerProfileSummary?: string | null; //Bounded aggregate summary (BITE 4.2)
+  learnerProfileSummary?: string | null; 
+
+  explanationText?: string;
 };
 
 function normalizeLang(v: unknown): "en" | "de" | "es" | "fr" | "unknown" {
@@ -29,11 +31,14 @@ export function buildTutorPrompt(
   const hintText = (options.hintText || "").trim();
   const forcedAdvanceMessage = (options.forcedAdvanceMessage || "").trim();
   const revealAnswer = (options.revealAnswer || "").trim();
+
+  const explanationTextRaw = (options.explanationText || "").trim();
+  const explanationText =
+    explanationTextRaw.length > 360 ? explanationTextRaw.slice(0, 360).trim() : explanationTextRaw;
+
   const hintLeadIn = (options.hintLeadIn || "").trim();
-
   const lessonLang = normalizeLang((session as any)?.language);
-
-    const learnerProfileSummaryRaw = (options.learnerProfileSummary || "").trim();
+  const learnerProfileSummaryRaw = (options.learnerProfileSummary || "").trim();
   const learnerProfileSummary =
     learnerProfileSummaryRaw.length > 280 ? learnerProfileSummaryRaw.slice(0, 280).trim() : learnerProfileSummaryRaw;
 
@@ -58,6 +63,9 @@ Then include exactly one line:
 "Hint: ${hintText}"`
     : ""
 }
+
+${explanationText ? `\nEXPLANATION (use this verbatim-ish, keep it calm):\n${explanationText}\n` : ""}
+
 Then ask exactly this question:
 "${questionText}"
 `.trim();
@@ -97,13 +105,11 @@ Then ask exactly this question:
 "${questionText}"
 
 FORCED_ADVANCE:
-Say exactly:
-"${forcedAdvanceMessage}"
-Then say exactly:
-"The correct answer is: ${revealAnswer}"
-Then say: "Next question:"
-Then ask exactly this question:
-"${questionText}"
+- Use the forced advance message.
+- Reveal the correct answer exactly.
+- If an explanation is provided below, use it as the explanation (do not invent a different one).
+- If no explanation is provided, give a short, calm explanation in one sentence.
+
 
 END_LESSON:
 Say: "Great job! 🎉 You’ve completed this lesson."

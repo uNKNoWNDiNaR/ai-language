@@ -13,6 +13,8 @@ const practiceGenerator_1 = require("../services/practiceGenerator");
 const openaiClient_2 = require("../ai/openaiClient");
 const tutorOutputGuard_1 = require("../ai/tutorOutputGuard");
 const learnerProfileStore_1 = require("../storage/learnerProfileStore");
+const featureFlags_1 = require("../config/featureFlags");
+const FORCED_ADVANCE_PRACTICE_THRESHOLD = 2;
 function isSupportedLanguage(v) {
     return v === "en" || v === "de" || v === "es" || v === "fr";
 }
@@ -338,6 +340,7 @@ const submitAnswer = async (req, res) => {
                 ...(markNeedsReview ? updateMistakes : {}),
             },
         }, { upsert: true });
+        const promptQuestion = session.state !== "COMPLETE" ? lesson.questions[session.currentQuestionIndex] : null;
         // ---- Learner profile tracking (BITE 4.1, best-effort; no behavior change) ----
         try {
             await (0, learnerProfileStore_1.recordLessonAttempt)({
@@ -346,6 +349,7 @@ const submitAnswer = async (req, res) => {
                 result: evaluation.result,
                 reasonCode: evaluation.reasonCode,
                 forcedAdvance: markNeedsReview,
+                conceptTag: promptQuestion?.conceptTag,
             });
         }
         catch {
@@ -366,22 +370,32 @@ const submitAnswer = async (req, res) => {
         const forcedAdvanceMessage = intent === "FORCED_ADVANCE" ? (0, staticTutorMessages_1.getForcedAdvanceMessage)() : "";
         const hintLeadIn = intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? (0, staticTutorMessages_1.getHintLeadIn)(attemptCount) : "";
         let learnerProfileSummary = null;
+        let topFocusReason = null;
         try {
-            learnerProfileSummary = await (0, learnerProfileStore_1.getLearnerProfileSummary)({
-                userId: session.userId,
-                language: session.language,
-            });
+            [learnerProfileSummary, topFocusReason] = await Promise.all([
+                (0, learnerProfileStore_1.getLearnerProfileSummary)({ userId: session.userId, language: session.language }),
+                (0, learnerProfileStore_1.getLearnerTopFocusReason)({ userId: session.userId, language: session.language }),
+            ]);
         }
         catch {
             learnerProfileSummary = null;
+            topFocusReason = null;
         }
+        const focusNudge = (0, staticTutorMessages_1.getFocusNudge)(topFocusReason);
+        const hintLeadInWithFocus = focusNudge && intent === "ENCOURAGE_RETRY" && hintTextForPrompt
+            ? `${focusNudge} ${hintLeadIn}`.trim()
+            : hintLeadIn;
+        const forcedAdvanceMessageWithFocus = focusNudge && intent === "FORCED_ADVANCE"
+            ? `${focusNudge} ${forcedAdvanceMessage}`.trim()
+            : forcedAdvanceMessage;
         const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
             retryMessage,
             hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-            hintLeadIn,
-            forcedAdvanceMessage,
+            hintLeadIn: hintLeadInWithFocus,
+            forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
             revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
             learnerProfileSummary,
+            explanationText: intent === "FORCED_ADVANCE" ? (promptQuestion?.explanation ?? "") : "",
         });
         let tutorMessage;
         try {
@@ -417,10 +431,26 @@ const submitAnswer = async (req, res) => {
         session.messages.push({ role: "assistant", content: tutorMessage });
         await session.save();
         let practice;
-        if (evaluation.result === "almost" && !practiceCooldownActive) {
+        const practiceConceptTag = typeof currentQuestion.conceptTag === "string" && currentQuestion.conceptTag.trim().length > 0
+            ? currentQuestion.conceptTag.trim()
+            : `lesson-${session.lessonId}-q${currentQuestion.id}`;
+        let allowForcedAdvancePractice = false;
+        if (intent === "FORCED_ADVANCE") {
+            try {
+                const conceptCount = await (0, learnerProfileStore_1.getConceptMistakeCount)(session.userId, session.language, practiceConceptTag);
+                allowForcedAdvancePractice = conceptCount >= FORCED_ADVANCE_PRACTICE_THRESHOLD;
+            }
+            catch {
+                allowForcedAdvancePractice = false;
+            }
+        }
+        if (session.state !== "COMPLETE" &&
+            (evaluation.result === "almost" || allowForcedAdvancePractice) &&
+            (0, featureFlags_1.isPracticeGenEnabled)() &&
+            !practiceCooldownActive) {
             try {
                 const aiClient = { generatePracticeJSON: openaiClient_2.generatePracticeJSON };
-                const conceptTag = `lesson-${session.lessonId}-q${currentQuestion.id}`;
+                const conceptTag = practiceConceptTag;
                 const practiceType = "variation";
                 const { item: practiceItem } = await (0, practiceGenerator_1.generatePracticeItem)({
                     language: session.language,

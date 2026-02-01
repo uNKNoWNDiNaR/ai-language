@@ -14,8 +14,17 @@
             "id": 2,
             "question": "How do you ask someone their name?",
             "answer": "What is your name?",
+            "conceptTag": "asking_name",
+            "acceptedAnswers": [
+              "What's your name?",
+              "What’s your name?",
+              "May I know your name?",
+              "Can I know your name?"
+            ],
             "hint": "It starts with 'what'.",
-            "examples": ["What is your name", "May i know your name"]
+            "examples": ["What is your name", "May i know your name"],
+            "explanation": "Use the pattern: What is + possessive pronoun + name? In casual speech, “What’s your name?” is the same meaning."
+
         },
         {
             "id": 3,

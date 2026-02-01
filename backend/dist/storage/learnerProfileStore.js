@@ -6,7 +6,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.recordLessonAttempt = recordLessonAttempt;
 exports.recordPracticeAttempt = recordPracticeAttempt;
+exports.getWeakestConceptTag = getWeakestConceptTag;
+exports.getConceptMistakeCount = getConceptMistakeCount;
 exports.getLearnerProfileSummary = getLearnerProfileSummary;
+exports.getLearnerTopFocusReason = getLearnerTopFocusReason;
 const mongoose_1 = __importDefault(require("mongoose"));
 const learnerProfileState_1 = require("../state/learnerProfileState");
 function isMongoReady() {
@@ -23,15 +26,25 @@ function safeReasonKey(reasonCode) {
     // Protect against Mongo dot-path separators.
     return t.replace(/[.$]/g, "_");
 }
+function safeConceptKey(raw) {
+    const t = (raw || "").trim().toLowerCase();
+    if (!t)
+        return "";
+    return t.replace(/[.$]/g, "_").replace(/\s+/g, "_").slice(0, 48);
+}
 async function recordLessonAttempt(args) {
     if (!isMongoReady())
         return;
     const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
+    const conceptKey = safeConceptKey(args.conceptTag);
     const inc = {
         attemptsTotal: 1,
     };
     if (args.forcedAdvance) {
         inc.forcedAdvanceCount = 1;
+    }
+    if (args.result !== "correct" && conceptKey) {
+        inc[`mistakeCountsByConcept.${conceptKey}`] = 1;
     }
     if (reasonKey) {
         inc[`mistakeCountsByReason.${reasonKey}`] = 1;
@@ -52,6 +65,10 @@ async function recordPracticeAttempt(args) {
     };
     if (reasonKey) {
         inc[`mistakeCountsByReason.${reasonKey}`] = 1;
+    }
+    const conceptKey = safeConceptKey(args.conceptTag);
+    if (args.result !== "correct" && conceptKey) {
+        inc[`mistakeCountsByConcept.${conceptKey}`] = 1;
     }
     await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, {
         $setOnInsert: { userId: args.userId, language: args.language },
@@ -86,6 +103,29 @@ function toReasonEntries(v) {
     }
     return [];
 }
+async function getWeakestConceptTag(userId, language) {
+    const doc = await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language });
+    if (!doc)
+        return null;
+    const conceptEntries = toReasonEntries(doc.mistakeCountsByConcept)
+        .filter((e) => e.count > 0 && e.key)
+        .sort((a, b) => b.count - a.count);
+    if (conceptEntries.length === 0)
+        return null;
+    const key = safeConceptKey(conceptEntries[0].key);
+    return key ?? null;
+}
+async function getConceptMistakeCount(userId, language, conceptTag) {
+    const key = safeConceptKey(conceptTag);
+    if (!key)
+        return 0;
+    const doc = await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language });
+    if (!doc)
+        return 0;
+    const conceptEntries = toReasonEntries(doc.mistakeCountsByConcept);
+    const found = conceptEntries.find((e) => e.key === key);
+    return found?.count ?? 0;
+}
 async function getLearnerProfileSummary(args) {
     const maxReasons = typeof args.maxReasons === "number" ? args.maxReasons : 3;
     const maxChars = typeof args.maxChars === "number" ? args.maxChars : 260;
@@ -106,6 +146,16 @@ async function getLearnerProfileSummary(args) {
     if (entries.length > 0) {
         parts.push(`Focus areas: ${entries.map((e) => `${reasonLabel(e.key)} (${e.count})`).join(", ")}.`);
     }
+    const conceptEntries = toReasonEntries(doc.mistakeCountsByConcept)
+        .filter((e) => e.count > 0 && e.key)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 2);
+    if (conceptEntries.length > 0) {
+        const concepts = conceptEntries
+            .map((e) => String(e.key).replace(/_/g, " "))
+            .join(", ");
+        parts.push(`Focus topics: ${concepts}.`);
+    }
     const forced = Number(doc.forcedAdvanceCount) || 0;
     const practice = Number(doc.practiceAttemptsTotal) || 0;
     parts.push(`Forced advances: ${forced}.`);
@@ -114,4 +164,26 @@ async function getLearnerProfileSummary(args) {
     if (!out)
         return null;
     return out.length > maxChars ? out.slice(0, maxChars).trim() : out;
+}
+async function getLearnerTopFocusReason(args) {
+    // Only read when connected (avoid buffering surprises)
+    if (mongoose_1.default.connection.readyState !== 1)
+        return null;
+    const doc = await learnerProfileState_1.LearnerProfileModel.findOne({
+        userId: args.userId,
+        language: args.language,
+    }).lean();
+    if (!doc)
+        return null;
+    const entries = toReasonEntries(doc.mistakeCountsByReason)
+        .filter((e) => e.count > 0 && e.key)
+        .sort((a, b) => b.count - a.count);
+    if (entries.length === 0)
+        return null;
+    // Prefer something specific over OTHER when available.
+    const top = String(entries[0].key).trim().toUpperCase();
+    if (top === "OTHER" && entries.length > 1) {
+        return String(entries[1].key).trim().toUpperCase() || null;
+    }
+    return top || null;
 }

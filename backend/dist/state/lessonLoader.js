@@ -27,7 +27,40 @@ const loadLesson = (language, lessonId) => {
             return null;
         }
         const lessonData = fs_1.default.readFileSync(lessonPath, "utf-8");
-        return JSON.parse(lessonData);
+        const raw = JSON.parse(lessonData);
+        // Sanitize acceptedAnswers to string[]
+        if (raw && Array.isArray(raw.questions)) {
+            raw.questions = raw.questions.map((q) => {
+                const aaRaw = q?.acceptedAnswers;
+                const acceptedAnswers = Array.isArray(aaRaw)
+                    ? aaRaw
+                        .filter((x) => typeof x === "string" && x.trim().length > 0)
+                        .map((s) => s.trim())
+                    : undefined;
+                const explanationRaw = q?.explanation;
+                const explanation = typeof explanationRaw === "string" && explanationRaw.trim.length > 0
+                    ? explanationRaw.trim()
+                    : undefined;
+                const conceptTagRaw = q?.conceptTag;
+                const conceptTag = typeof conceptTagRaw === "string" && conceptTagRaw.trim().length > 0
+                    ? conceptTagRaw
+                        .trim()
+                        .toLowerCase()
+                        .replace(/[.$]/g, "_")
+                        .replace(/\s+/g, "_")
+                        .slice(0, 48)
+                    : undefined;
+                const out = { ...q };
+                if (acceptedAnswers && acceptedAnswers.length > 0)
+                    out.acceptedAnswers = acceptedAnswers;
+                else
+                    out.acceptedAnswers = undefined;
+                out.conceptTag = conceptTag;
+                out.explanation = explanation;
+                return out;
+            });
+        }
+        return raw;
     }
     catch (err) {
         console.error("[lessonLoader] Failed to load session:", err);

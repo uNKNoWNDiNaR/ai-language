@@ -83,4 +83,27 @@ describe("evaluateAnswer - regression tests", () => {
     expect(r.result).toBe("almost")
   });
 
+  it("accepts answers from acceptedAnswers (deterministic exact match)", () => {
+    const q = makeQ({
+      answer: "I am tired",
+      acceptedAnswers: ["I'm tired", "Im tired"],
+      examples: [],
+    });
+
+    const r = evaluateAnswer(q as any, "I'm tired!", "en");
+    expect(r.result).toBe("correct");
+  });
+
+  it("acceptedAnswers does not require examples to be present", () => {
+    const q = makeQ({
+      answer: "We are ready",
+      acceptedAnswers: ["We're ready"],
+      examples: [],
+    });
+
+    const r = evaluateAnswer(q as any, "were ready", "en");
+    expect(r.result).toBe("correct");
+  });
+
+
 });

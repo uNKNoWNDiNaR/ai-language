@@ -211,6 +211,10 @@ export  function Lesson() {
     if (!sessionActive) setMoreOpen(false);
   }, [sessionActive]);
 
+  useEffect(() => {
+    if (lessonCompleted) setMoreOpen(false);
+  }, [lessonCompleted]);
+
 
   async function handleStart() {
     setError(null);
@@ -462,6 +466,7 @@ export  function Lesson() {
     `}</style>
 
       {/* Controls */}
+      {!sessionActive && (
       <div
         style={{
           display: "grid",
@@ -557,25 +562,25 @@ export  function Lesson() {
             Resume
           </button>
 
-      {sessionActive && (
-      <div style={{ position: "relative" }}>
-      <button
-      ref={moreButtonRef}
-      onClick={() => setMoreOpen((v) => !v)}
-      disabled={disableRestart}
-      aria-label="More"
-      style={{
-        padding: "10px 12px",
-        borderRadius: 12,
-        border: "1px solid #ddd",
-        background: disableRestart ? "#f6f6f6" : "white",
-        color: "#111",
-        cursor: disableRestart ? "not-allowed" : "pointer",
-        minWidth: 44,
-      }}
-      >
-        ⋯
-      </button>
+      {sessionActive && !lessonCompleted && (
+        <div style={{ position: "relative" }}>
+          <button
+            ref={moreButtonRef}
+            onClick={() => setMoreOpen((v) => !v)}
+            disabled={disableRestart}
+            aria-label="More"
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #ddd",
+              background: disableRestart ? "#f6f6f6" : "white",
+              color: "#111",
+              cursor: disableRestart ? "not-allowed" : "pointer",
+              minWidth: 44,
+            }}
+          >
+            ⋯
+          </button>
 
     {moreOpen && !disableRestart && (
       <div
@@ -640,8 +645,9 @@ export  function Lesson() {
   )}
 
 
-        </div>
-      </div>
+    </div>
+  </div>
+)}
 
       {session && (
   <div
@@ -667,9 +673,9 @@ export  function Lesson() {
       {progress && !loading && (
         <>
           <span style={{opacity: 0.45}}>•</span>
-          <span style={{ fontSize: 12, opacity: 0.75 }}/>
+          <span style={{ fontSize: 12, opacity: 0.75 }}>
             Q {progress.currentQuestionIndex + 1}/{progress.totalQuestions}
-          <span/>
+          </span>
         </>
       )}
     </div>
@@ -866,6 +872,41 @@ export  function Lesson() {
                 }}
               >
                 Send
+              </button>
+            </div>
+          </div>
+        )}
+        {lessonCompleted && !practiceActive && (
+          <div
+            style={{
+              alignSelf: "center",
+              maxWidth: 520,
+              background: "rgba(0,0,0,0.04)",
+              border: "1px solid rgba(0,0,0,0.06)",
+              borderRadius: 14,
+              padding: "10px 12px",
+              textAlign: "center",
+            }}
+          >
+            <div style={{fontWeight: 600, marginBottom: 2}}>Lesson Complete.</div>
+            <div style={{fontSize: 13, opacity: 0.78}}>
+              You can exit now, or restart anytime.
+            </div>
+
+            <div style={{ marginTop: 10, display: "flex", justifyContent: "center" }}>
+              <button
+                onClick={handleExit}
+                disabled={loading}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #ddd",
+                  background: loading ? "#f6f6f6" : "white",
+                  cursor: loading ? "not-allowed" : "pointer",
+                  fontSize: 13,
+                }}
+              >
+                Exit Lesson
               </button>
             </div>
           </div>

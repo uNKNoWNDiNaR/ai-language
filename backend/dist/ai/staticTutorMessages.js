@@ -1,10 +1,30 @@
 "use strict";
 // src/ai/staticTutorMessages.ts
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getFocusNudge = getFocusNudge;
 exports.getEndLessonMessage = getEndLessonMessage;
 exports.getForcedAdvanceMessage = getForcedAdvanceMessage;
 exports.getDeterministicRetryMessage = getDeterministicRetryMessage;
 exports.getHintLeadIn = getHintLeadIn;
+function getFocusNudge(reasonCode) {
+    const c = String(reasonCode || "").trim().toUpperCase();
+    if (!c)
+        return "";
+    switch (c) {
+        case "WORD_ORDER":
+            return "Let's focus on word order.";
+        case "ARTICLE":
+            return "Let's pay attention to the article.";
+        case "TYPO":
+            return "Let's double-check spelling.";
+        case "WRONG_LANGUAGE":
+            return "Let's answer in the selected language.";
+        case "MISSING_SLOT":
+            return "Let's make sure nothing is missing.";
+        default:
+            return "";
+    }
+}
 function getEndLessonMessage() {
     return "Great job! 🎉 You've completed this session.";
 }

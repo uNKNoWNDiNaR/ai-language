@@ -2,12 +2,14 @@
 
 import fs from "fs"
 import path from "path"
-import type { LessonSession } from "./lessonState"; 
 
 export type LessonQuestion = {
     id: number;
     question: string;
     answer: string;
+    acceptedAnswers?: string[];
+    explanation?: string;
+    conceptTag?: string; 
     hint?: string;
     hints?: string[];
     examples?: string[];
@@ -45,7 +47,49 @@ export const loadLesson = (language: string, lessonId: string): Lesson | null =>
         }
 
         const lessonData = fs.readFileSync(lessonPath, "utf-8");
-        return JSON.parse(lessonData) as Lesson;
+        
+        const raw = JSON.parse(lessonData) as any;
+
+        // Sanitize acceptedAnswers to string[]
+        if (raw && Array.isArray(raw.questions)) {
+            raw.questions = raw.questions.map((q: any) => {
+                const aaRaw = q?.acceptedAnswers;
+                const acceptedAnswers = Array.isArray(aaRaw)
+                    ? aaRaw
+                        .filter((x: unknown) => typeof x === "string" && x.trim().length > 0)
+                        .map((s: string) => s.trim())
+                    : undefined;
+
+                const explanationRaw = q?.explanation;
+                const explanation =
+                    typeof explanationRaw === "string" && explanationRaw.trim.length>0 
+                        ? explanationRaw.trim()
+                        : undefined
+                
+                const conceptTagRaw = q?.conceptTag;
+                const conceptTag = 
+                    typeof conceptTagRaw === "string" && conceptTagRaw.trim().length > 0
+                        ? conceptTagRaw 
+                            .trim()
+                            .toLowerCase()
+                            .replace(/[.$]/g,"_")
+                            .replace(/\s+/g, "_")
+                            .slice(0, 48)
+                        : undefined;
+                
+                const out: any = {...q};
+                if(acceptedAnswers && acceptedAnswers.length>0)out.acceptedAnswers = acceptedAnswers;
+                else out.acceptedAnswers = undefined;
+
+                out.conceptTag = conceptTag;
+                out.explanation = explanation;
+
+                return out;
+            });
+        }
+
+        return raw as Lesson;
+
     } catch (err) {
         console.error("[lessonLoader] Failed to load session:", err);
         return null;

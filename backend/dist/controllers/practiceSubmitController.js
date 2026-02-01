@@ -143,6 +143,7 @@ const submitPractice = async (req, res) => {
             language: session.language,
             result: evalRes.result,
             reasonCode: evalRes.reasonCode,
+            conceptTag: item?.meta?.conceptTag,
         });
     }
     catch {

@@ -53,15 +53,40 @@ vi.mock("../../state/lessonLoader", () => {
           question: "How do you say 'Hello' in English?",
           answer: "Hello",
           examples: ["Hello", "Hi"],
+          conceptTag: "greetings",
+        },
+        {
+          id: 2,
+          question: "Second question?",
+          answer: "Second answer",
+          examples: ["Second answer"],
+          conceptTag: "Second",
         },
       ],
     })),
   };
 });
 
+const recordLessonAttemptMock = vi.hoisted(() => vi.fn(async () => undefined));
+const getLearnerProfileSummaryMock = vi.hoisted(() => vi.fn(async () => null));
+const getLearnerTopFocusReasonMock = vi.hoisted(() => vi.fn(async () => null));
+const getConceptMistakeCountMock = vi.hoisted(() => vi.fn(async () => 0));
+
+vi.mock("../../storage/learnerProfileStore", () => {
+  return {
+    recordLessonAttempt: recordLessonAttemptMock,
+    getLearnerProfileSummary: getLearnerProfileSummaryMock,
+    getLearnerTopFocusReason: getLearnerTopFocusReasonMock,
+    getConceptMistakeCount: getConceptMistakeCountMock,
+  };
+});
+
+
+const evaluateAnswerMock = vi.hoisted(() => vi.fn());
+
 vi.mock("../../state/answerEvaluator", () => {
   return {
-    evaluateAnswer: vi.fn(() => ({ result: "almost", reasonCode: "TYPO" })),
+    evaluateAnswer: evaluateAnswerMock,
   };
 });
 
@@ -76,8 +101,10 @@ vi.mock("../../ai/staticTutorMessages", () => {
     getDeterministicRetryMessage: vi.fn(() => "retry"),
     getForcedAdvanceMessage: vi.fn(() => "forced advance"),
     getHintLeadIn: vi.fn(() => "Hint:"),
+    getFocusNudge: vi.fn(() => ""),
   };
 });
+
 
 vi.mock("../../ai/openaiClient", () => {
   return {
@@ -96,7 +123,7 @@ const generatePracticeItemMock = vi.hoisted(() =>
       prompt: "Practice prompt",
       expectedAnswerRaw: "Hello",
       examples: ["Hello", "Hi"],
-      meta: { type: "variation", conceptTag: "lesson-basic-1-q1" },
+      meta: { type: "variation", conceptTag: "greetings" },
     },
   })),
 );
@@ -133,6 +160,11 @@ describe("submitAnswer practice scheduling", () => {
 
     generatePracticeItemMock.mockClear();
     sessionDoc.save.mockClear();
+    evaluateAnswerMock.mockReset();
+    evaluateAnswerMock.mockReturnValue({ result: "almost", reasonCode: "TYPO" });
+    getConceptMistakeCountMock.mockReset();
+    getConceptMistakeCountMock.mockResolvedValue(0);
+
   });
 
   it("generates practice only once for repeated 'almost' on same question", async () => {
@@ -146,7 +178,11 @@ describe("submitAnswer practice scheduling", () => {
     expect(res1.status).toHaveBeenCalledWith(200);
     const payload1 = res1.json.mock.calls[0][0];
     expect(payload1.evaluation.result).toBe("almost");
-
+    expect(generatePracticeItemMock).toHaveBeenCalledTimes(1);
+    expect(generatePracticeItemMock).toHaveBeenCalledWith(
+      expect.objectContaining({ conceptTag: "greetings" }),
+      expect.any(Object)
+  );
 
     // 2nd almost (same question) -> should NOT generate another practice
     const req2: any = { body: { userId: "u1", answer: "helo", language: "en", lessonId: "basic-1" } };
@@ -171,4 +207,64 @@ describe("submitAnswer practice scheduling", () => {
     // expect(generatePracticeItemMock).toHaveBeenCalledTimes(1);
 
   });
+
+  it("generates practice on FORCED_ADVANCE (attempt 4+) once per question", async () => {
+    const { submitAnswer } = await import("../lessonController");
+    
+    // force attemptCount to reach 4 in a single submit
+    sessionDoc.attemptCountByQuestionId.set("1", 3);
+    
+    // not almost — forced advance should still schedule practice now
+    evaluateAnswerMock.mockReturnValue({ result: "wrong", reasonCode: "OTHER" });
+    
+    getConceptMistakeCountMock.mockResolvedValue(2);
+
+    const req: any = { body: { userId: "u1", answer: "nope", language: "en", lessonId: "basic-1" } };
+    const res = makeRes();
+    await submitAnswer(req, res);
+    
+    expect(res.status).toHaveBeenCalledWith(200);
+    
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.evaluation.result).toBe("wrong");
+    
+    // practice should be included
+    expect(Boolean(payload.practice)).toBe(true);
+    
+    // generator called once
+    expect(generatePracticeItemMock).toHaveBeenCalledTimes(1);
+    
+    // If you used Option A from earlier (recommended), use this:
+    expect(generatePracticeItemMock).toHaveBeenCalledWith(
+      expect.objectContaining({ conceptTag: "greetings" }),
+      expect.any(Object)
+    );
+  });
+
+    it("does NOT generate practice on FORCED_ADVANCE when concept count is below threshold", async () => {
+    const { submitAnswer } = await import("../lessonController");
+
+    // force attemptCount to reach 4 in a single submit
+    sessionDoc.attemptCountByQuestionId.set("1", 3);
+
+    // not almost — would be forced advance
+    evaluateAnswerMock.mockReturnValue({ result: "wrong", reasonCode: "OTHER" });
+
+    // below threshold => no practice
+    getConceptMistakeCountMock.mockResolvedValue(0);
+
+    const req: any = { body: { userId: "u1", answer: "nope", language: "en", lessonId: "basic-1" } };
+    const res = makeRes();
+    await submitAnswer(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+
+    const payload = res.json.mock.calls[0][0];
+    expect(payload.evaluation.result).toBe("wrong");
+    expect(payload.practice).toBeUndefined();
+
+    // generator should NOT be called
+    expect(generatePracticeItemMock).toHaveBeenCalledTimes(0);
+  });
+
 });
