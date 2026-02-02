@@ -6,6 +6,8 @@ import {
   submitAnswer,
   getSession,
   submitPractice,
+  toUserSafeErrorMessage,
+  getHttpStatus,
   type LessonSession,
   type ChatMessage,
   type SubmitAnswerResponse,
@@ -289,7 +291,7 @@ export function Lesson() {
       setPracticeTutorMessage(null);
       setPracticeAttemptCount(null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to start lesson.");
+      setError(toUserSafeErrorMessage(e));
     } finally {
       setPending(null);
       setLoading(false);
@@ -320,7 +322,7 @@ export function Lesson() {
         // ignore
       }
     } catch (e: unknown) {
-      const status = (e as any)?.response?.status;
+      const status = getHttpStatus(e);
       if (status === 404) {
         if (lastSessionKey === currentSessionKey) {
           setLastSessionKey("");
@@ -330,9 +332,10 @@ export function Lesson() {
             // ignore
           }
         }
-        setError("No saved session found for this profile/lesson. Start a lesson first.");
+        setError("No Session started yet found. Please start a lesson first.");
+        return;
       } else {
-        setError(e instanceof Error ? e.message : "Failed to resume session.");
+        setError(toUserSafeErrorMessage(e));
       }
     } finally {
       setPending(null);
@@ -388,7 +391,7 @@ export function Lesson() {
       setPracticeTutorMessage(null);
       setPracticeAttemptCount(null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to restart lesson.");
+      setError(toUserSafeErrorMessage(e));
     } finally {
       setPending(null);
       setLoading(false);
@@ -469,7 +472,7 @@ export function Lesson() {
 
       setProgress(res.progress ?? null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to submit answer.");
+      setError(toUserSafeErrorMessage(e));
     } finally {
       setPending(null);
       setLoading(false);
@@ -502,7 +505,7 @@ export function Lesson() {
         setPracticeAnswer("");
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to submit practice.");
+      setError(toUserSafeErrorMessage(e));
     } finally {
       setPending(null);
       setLoading(false);

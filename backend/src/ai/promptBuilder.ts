@@ -63,9 +63,6 @@ Then include exactly one line:
 "Hint: ${hintText}"`
     : ""
 }
-
-${explanationText ? `\nEXPLANATION (use this verbatim-ish, keep it calm):\n${explanationText}\n` : ""}
-
 Then ask exactly this question:
 "${questionText}"
 `.trim();
@@ -105,11 +102,13 @@ Then ask exactly this question:
 "${questionText}"
 
 FORCED_ADVANCE:
-- Use the forced advance message.
-- Reveal the correct answer exactly.
-- If an explanation is provided below, use it as the explanation (do not invent a different one).
-- If no explanation is provided, give a short, calm explanation in one sentence.
-
+Say exactly:
+"${forcedAdvanceMessage}"
+Then say exactly:
+"The correct answer is: ${revealAnswer}"
+Then say: "Next question:"
+Then ask exactly this question:
+"${questionText}"
 
 END_LESSON:
 Say: "Great job! 🎉 You’ve completed this lesson."

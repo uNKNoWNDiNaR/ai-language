@@ -2,7 +2,19 @@
 
 import axios from "axios";
 
+type ErrorPayload = {
+  error?: unknown;
+  code?: unknown;
+  requestId?: unknown;
+};
+
+export function getHttpStatus(e: unknown): number | undefined {
+  if (!axios.isAxiosError(e)) return undefined;
+  return e.response?.status;
+}
+
 export type SupportedLanguage = "en" | "de" | "es" | "fr";
+
 export type TutorRole = "user" | "assistant";
 
 export type ChatMessage = {
@@ -86,6 +98,10 @@ const http = axios.create({
   headers: AUTH_TOKEN ? {Authorization: `Bearer ${AUTH_TOKEN}`} : undefined,
 })
 
+function asErrorPayload(v: unknown): ErrorPayload | null {
+  if(v && typeof v === "object") return v as ErrorPayload;
+  return null;
+}
 export async function startLesson(params: {
   userId: string;
   language: SupportedLanguage;
@@ -120,3 +136,45 @@ export async function submitPractice(params: {
   return data;
 }
 
+export function toUserSafeErrorMessage(e: unknown): string {
+  // If not an axios error then fallback
+  if(!axios.isAxiosError(e)) {
+    return "Something went wrong please try again";
+  }
+  
+  const status = e?.response?.status;
+  const payload = asErrorPayload(e.response?.data);
+
+  const requestId = 
+    typeof payload?.requestId === "string" ? payload.requestId : undefined;
+
+  const serverMsg = 
+    typeof payload?.error === "string" ? payload.error : undefined;
+
+  // Network / timeout (no response)
+  if (!e.response) {
+    const isTimeout = e.code === "ECONNABORTED";
+    const msg = isTimeout
+      ? "The server took too long to respond. Please try again."
+      : "Couldn’t reach the server. Check your connection and try again.";
+    return requestId ? `${msg} (Request ID: ${requestId})` : msg;
+  }
+
+  if (status === 401) {
+    const msg = "This server requires an auth token. Please check your configuration and try again.";
+    return requestId ? `${msg} (Request ID: ${requestId})` : msg;
+  }
+
+  if (status === 429) {
+    const msg = "You’re sending requests too quickly. Take a short pause, then try again.";
+    return requestId ? `${msg} (Request ID: ${requestId})` : msg;
+  }
+
+  if (typeof status === "number" && status >= 500) {
+    const msg = "Something went wrong on the server. Please try again.";
+    return requestId ? `${msg} (Request ID: ${requestId})` : msg;
+  }
+
+  const msg = serverMsg ?? "Request failed. Please try again.";
+  return requestId ? `${msg} (Request ID: ${requestId})` : msg;
+}

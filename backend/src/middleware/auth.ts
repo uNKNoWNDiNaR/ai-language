@@ -1,6 +1,7 @@
 //backend/src/middleware/auth.ts
 
 import type { NextFunction, Request, Response } from "express";
+import { sendError } from "../http/sendError";
 
 function extractBearerToken(rawAuth: string | undefined): string | null {
     if(!rawAuth) return null;
@@ -16,19 +17,16 @@ function extractBearerToken(rawAuth: string | undefined): string | null {
  */
 
 export function authMiddleware(req: Request, res:Response, next: NextFunction) {
-      // Allow CORS preflight requests through (browser sends OPTIONS before POST)
     if (req.method === "OPTIONS") return next();
     const expected = process.env.AUTH_TOKEN?.trim();
-
-    // Dev/ local/ CI safe default: no token configured - no auth required.
     if(!expected) return next();
 
     const bearer = extractBearerToken(req.get("authorization"))
     const xToken = (req.get("x-auth-token") ?? "").trim();
-    const provided = bearer ?? (xToken.length>0 ? xToken : null);
+    const provided = bearer ?? (xToken.length > 0 ? xToken : null);
 
     if(!provided || provided !== expected) {
-        return res.status(401).json({error: "Unauthorized"});
+        return sendError(res, 401, "Unauthorized", "UNAUTHORIZED");
     } 
 
     return next();

@@ -126,6 +126,11 @@ async function getConceptMistakeCount(userId, language, conceptTag) {
     const found = conceptEntries.find((e) => e.key === key);
     return found?.count ?? 0;
 }
+function isHumanConceptLabel(key) {
+    // Keep only simple human tags like "greetings", "word_order", etc
+    //and avoid tags like "lesson-basic-1-q1" and so on.
+    return /^[a-z][a-z_]{2,}$/.test(key);
+}
 async function getLearnerProfileSummary(args) {
     const maxReasons = typeof args.maxReasons === "number" ? args.maxReasons : 3;
     const maxChars = typeof args.maxChars === "number" ? args.maxChars : 260;
@@ -138,28 +143,28 @@ async function getLearnerProfileSummary(args) {
     }).lean();
     if (!doc)
         return null;
-    const entries = toReasonEntries(doc.mistakeCountsByReason)
+    const reasonEntries = toReasonEntries(doc.mistakeCountsByReason)
         .filter((e) => e.count > 0 && e.key)
         .sort((a, b) => b.count - a.count)
         .slice(0, Math.max(0, maxReasons));
     const parts = [];
-    if (entries.length > 0) {
-        parts.push(`Focus areas: ${entries.map((e) => `${reasonLabel(e.key)} (${e.count})`).join(", ")}.`);
+    if (reasonEntries.length > 0) {
+        //NOTE: No counts
+        const labels = reasonEntries.map((e) => reasonLabel(e.key));
+        parts.push(`Focus areas: ${labels.join(", ")}.`);
     }
     const conceptEntries = toReasonEntries(doc.mistakeCountsByConcept)
         .filter((e) => e.count > 0 && e.key)
+        .map((e) => ({ key: safeConceptKey(String(e.key)), count: e.count }))
+        .filter((e) => e.key && isHumanConceptLabel(e.key))
         .sort((a, b) => b.count - a.count)
         .slice(0, 2);
     if (conceptEntries.length > 0) {
         const concepts = conceptEntries
-            .map((e) => String(e.key).replace(/_/g, " "))
+            .map((e) => e.key.replace(/_/g, " "))
             .join(", ");
         parts.push(`Focus topics: ${concepts}.`);
     }
-    const forced = Number(doc.forcedAdvanceCount) || 0;
-    const practice = Number(doc.practiceAttemptsTotal) || 0;
-    parts.push(`Forced advances: ${forced}.`);
-    parts.push(`Practice attempts: ${practice}.`);
     const out = parts.join(" ").trim();
     if (!out)
         return null;

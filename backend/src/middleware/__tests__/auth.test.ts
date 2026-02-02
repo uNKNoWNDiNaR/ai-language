@@ -58,7 +58,14 @@ describe("authMiddleware", () => {
     authMiddleware(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: "Unauthorized" });
+
+    expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ 
+            error: "Unauthorized",
+            code: "UNAUTHORIZED" 
+        })
+    );
+
     expect(next).not.toHaveBeenCalled();
   });
 
