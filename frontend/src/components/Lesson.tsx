@@ -1,7 +1,5 @@
 // frontend/src/components/Lesson.tsx
 
-
-
 import React, { useEffect, useRef, useMemo, useState } from "react";
 import {
   startLesson,
@@ -17,8 +15,10 @@ import {
 
 type Role = "user" | "assistant";
 
+const LAST_SESSION_KEY = "ai-language:lastSessionKey";
+
 function rowStyle(role: Role): React.CSSProperties {
-  const isUser = role === "user"; 
+  const isUser = role === "user";
   return {
     display: "flex",
     justifyContent: isUser ? "flex-end" : "flex-start",
@@ -29,8 +29,8 @@ function rowStyle(role: Role): React.CSSProperties {
 function bubbleStyle(role: Role, isLastInGroup: boolean): React.CSSProperties {
   const isUser = role === "user";
 
-  const bottomLeft = !isLastInGroup ? 18 : (isUser ? 18 : 6);
-  const bottomRight = !isLastInGroup ? 18 : (isUser ? 6 : 18);
+  const bottomLeft = !isLastInGroup ? 18 : isUser ? 18 : 6;
+  const bottomRight = !isLastInGroup ? 18 : isUser ? 6 : 18;
 
   return {
     maxWidth: "74%",
@@ -40,7 +40,7 @@ function bubbleStyle(role: Role, isLastInGroup: boolean): React.CSSProperties {
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     borderBottomLeftRadius: bottomLeft,
-    borderBottomRightRadius: bottomRight, 
+    borderBottomRightRadius: bottomRight,
     background: isUser ? "#007AFF" : "#E5E5EA",
     color: isUser ? "white" : "#111",
     boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
@@ -59,11 +59,16 @@ function bubbleMetaStyle(role: Role): React.CSSProperties {
 
 function prettyLanguage(lang: string | undefined): string {
   switch (lang) {
-    case "en": return "English";
-    case "de": return "German";
-    case "es": return "Spanish";
-    case "fr": return "French";
-    default: return lang ?? "—";
+    case "en":
+      return "English";
+    case "de":
+      return "German";
+    case "es":
+      return "Spanish";
+    case "fr":
+      return "French";
+    default:
+      return lang ?? "—";
   }
 }
 
@@ -79,14 +84,14 @@ function sanitizePracticeTutorMessage(raw: string | undefined): string {
   const t = (raw ?? "").trim();
   if (!t) return "";
 
-  // If it looks like backend debug output, strip "Result:" and "Reason:" labels.
-  // Example:
-  // Result: "almost"
-  // Reason: ...
   const hasDebugLabels = /^result\s*:/im.test(t) || /^reason\s*:/im.test(t);
   if (!hasDebugLabels) return t;
 
-  const lines = t.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = t
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
   const kept: string[] = [];
 
   for (const line of lines) {
@@ -104,8 +109,7 @@ function sanitizePracticeTutorMessage(raw: string | undefined): string {
   return kept.join("\n").trim();
 }
 
-
-export  function Lesson() {
+export function Lesson() {
   const [userId, setUserId] = useState("user-1");
   const [language, setLanguage] = useState<"en" | "de" | "es" | "fr">("en");
   const [lessonId, setLessonId] = useState("basic-1");
@@ -121,8 +125,16 @@ export  function Lesson() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<null | "start" | "resume" | "answer" | "practice">(null);
-  const [progress, setProgress] = useState< LessonProgressPayload | null>(null);
+  const [progress, setProgress] = useState<LessonProgressPayload | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+
+  const [lastSessionKey, setLastSessionKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem(LAST_SESSION_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
 
   const chatRef = useRef<HTMLDivElement | null>(null);
   const answerInputRef = useRef<HTMLInputElement | null>(null);
@@ -138,12 +150,12 @@ export  function Lesson() {
   }, [messages.length, hintText, practicePrompt, practiceTutorMessage, pending]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({behavior: "smooth", block: "end"});
-  }, [messages, hintText, practicePrompt, practiceTutorMessage])
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, hintText, practicePrompt, practiceTutorMessage]);
 
   const practiceActive = useMemo(() => {
     return Boolean(practiceId && practicePrompt);
-  }, [practiceId, practicePrompt])
+  }, [practiceId, practicePrompt]);
 
   const sessionActive = Boolean(session);
   const lockControls = sessionActive || loading;
@@ -153,6 +165,24 @@ export  function Lesson() {
   const lessonCompleted = useMemo(() => {
     return (progress?.status ?? "").toLowerCase() === "completed";
   }, [progress]);
+
+  const currentSessionKey = useMemo(() => {
+    const u = userId.trim();
+    const lid = lessonId.trim();
+    if (!u || !lid) return "";
+    return `${u}|${language}|${lid}`;
+  }, [userId, language, lessonId]);
+
+  const canResume = useMemo(() => {
+    return (
+      !loading &&
+      !practiceActive &&
+      !sessionActive &&
+      !lessonCompleted &&
+      Boolean(currentSessionKey) &&
+      lastSessionKey === currentSessionKey
+    );
+  }, [loading, practiceActive, sessionActive, lessonCompleted, currentSessionKey, lastSessionKey]);
 
   const canSubmitAnswer = useMemo(() => {
     return (
@@ -164,25 +194,24 @@ export  function Lesson() {
     );
   }, [session, answer, loading, practiceActive, lessonCompleted]);
 
-
   const canSubmitPractice = useMemo(() => {
     return Boolean(practiceId) && practiceAnswer.trim().length > 0 && !loading;
   }, [practiceId, practiceAnswer, loading]);
 
   useEffect(() => {
-    if(loading) return;
+    if (loading) return;
 
-    if(practiceActive) {
+    if (practiceActive) {
       practiceInputRef.current?.focus();
       return;
     }
 
-    if(session) {
+    if (session) {
       answerInputRef.current?.focus();
     }
-    }, [session, practiceActive, loading, pending])
+  }, [session, practiceActive, loading, pending]);
 
-    useEffect(() => {
+  useEffect(() => {
     if (!moreOpen) return;
 
     function onKeyDown(e: KeyboardEvent) {
@@ -215,8 +244,8 @@ export  function Lesson() {
     if (lessonCompleted) setMoreOpen(false);
   }, [lessonCompleted]);
 
-
   async function handleStart() {
+    setMoreOpen(false);
     setError(null);
 
     setSession(null);
@@ -231,7 +260,7 @@ export  function Lesson() {
     setPracticeAttemptCount(null);
 
     setLoading(true);
-    setPending("start")
+    setPending("start");
 
     try {
       const res = await startLesson({
@@ -246,7 +275,14 @@ export  function Lesson() {
       setHintText(null);
       setProgress(res.progress ?? null);
 
-      // clear any practice UI from older runs
+      const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
+      setLastSessionKey(key);
+      try {
+        localStorage.setItem(LAST_SESSION_KEY, key);
+      } catch {
+        // ignore
+      }
+
       setPracticeId(null);
       setPracticePrompt(null);
       setPracticeAnswer("");
@@ -255,34 +291,61 @@ export  function Lesson() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to start lesson.");
     } finally {
-      setPending(null)
+      setPending(null);
       setLoading(false);
     }
   }
 
   async function handleResume() {
+    setMoreOpen(false);
     setError(null);
+
+    if (!canResume) return;
+
     setLoading(true);
-    setPending("resume")
+    setPending("resume");
+
     try {
       const res = await getSession(userId.trim());
       setSession(res.session);
       setMessages(res.session.messages ?? []);
       setProgress(res.progress ?? null);
       setHintText(null);
+
+      const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
+      setLastSessionKey(key);
+      try {
+        localStorage.setItem(LAST_SESSION_KEY, key);
+      } catch {
+        // ignore
+      }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to resume session.");
+      const status = (e as any)?.response?.status;
+      if (status === 404) {
+        if (lastSessionKey === currentSessionKey) {
+          setLastSessionKey("");
+          try {
+            localStorage.removeItem(LAST_SESSION_KEY);
+          } catch {
+            // ignore
+          }
+        }
+        setError("No saved session found for this profile/lesson. Start a lesson first.");
+      } else {
+        setError(e instanceof Error ? e.message : "Failed to resume session.");
+      }
     } finally {
-      setPending(null)
+      setPending(null);
       setLoading(false);
     }
   }
 
   async function handleRestart() {
-    if(!window.confirm("Restart this lesson? Your current progres in this session will be reset.")){
+    setMoreOpen(false);
+    if (!window.confirm("Restart this lesson? Your current progres in this session will be reset.")) {
       return;
     }
-    
+
     setError(null);
     setSession(null);
     setMessages([]);
@@ -298,34 +361,42 @@ export  function Lesson() {
     setLoading(true);
     setPending("start");
 
-  try {
-    const res = await startLesson({
-      userId: userId.trim(),
-      language,
-      lessonId: lessonId.trim(),
-      restart: true,
-    });
-    
-    setSession(res.session);
-    setMessages(res.session.messages ?? []);
-    setProgress(res.progress ?? null)
-    setHintText(null);
+    try {
+      const res = await startLesson({
+        userId: userId.trim(),
+        language,
+        lessonId: lessonId.trim(),
+        restart: true,
+      });
 
-    // clear any practice UI from older runs
-    setPracticeId(null);
-    setPracticePrompt(null);
-    setPracticeAnswer("");
-    setPracticeTutorMessage(null);
-    setPracticeAttemptCount(null);
-  } catch (e: unknown) {
-    setError(e instanceof Error ? e.message : "Failed to restart lesson.");
-  } finally {
-    setPending(null);
-    setLoading(false);
-  }
+      setSession(res.session);
+      setMessages(res.session.messages ?? []);
+      setProgress(res.progress ?? null);
+      setHintText(null);
+
+      const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
+      setLastSessionKey(key);
+      try {
+        localStorage.setItem(LAST_SESSION_KEY, key);
+      } catch {
+        // ignore
+      }
+
+      setPracticeId(null);
+      setPracticePrompt(null);
+      setPracticeAnswer("");
+      setPracticeTutorMessage(null);
+      setPracticeAttemptCount(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to restart lesson.");
+    } finally {
+      setPending(null);
+      setLoading(false);
+    }
   }
 
   function handleExit() {
+    setMoreOpen(false);
     if (!window.confirm("Exit this lesson? You can resume later.")) return;
 
     setError(null);
@@ -346,14 +417,14 @@ export  function Lesson() {
   }
 
   async function handleSendAnswer() {
+    setMoreOpen(false);
     if (!session || practiceActive || lessonCompleted) return;
 
     setError(null);
     setLoading(true);
-    setPending("answer")
+    setPending("answer");
     setHintText(null);
 
-    // Optimistic add user message
     const userMsg: ChatMessage = { role: "user", content: answer };
     setMessages((prev) => [...prev, userMsg]);
 
@@ -369,23 +440,17 @@ export  function Lesson() {
       });
 
       setSession(res.session);
-
-      // Replace messages with authoritative session messages
       setMessages(res.session.messages ?? []);
       setProgress(res.progress ?? null);
 
-      // Hint block (optional)
       const evalResult = res.evaluation?.result;
       const incomingHint = (res.hint?.text ?? "").trim();
 
       const lastMsg = (res.session.messages ?? []).slice(-1)[0];
-      const tutorText = 
-        lastMsg && lastMsg.role === "assistant"
-        ? lastMsg.content
-        : (res.tutorMessage ?? "");
+      const tutorText =
+        lastMsg && lastMsg.role === "assistant" ? lastMsg.content : res.tutorMessage ?? "";
 
       const tutorLower = tutorText.toLowerCase();
-
 
       if (evalResult !== "correct" && incomingHint) {
         const hintLower = incomingHint.toLowerCase();
@@ -394,7 +459,6 @@ export  function Lesson() {
         setHintText(null);
       }
 
-      // Practice (optional) — scheduled on "almost"
       if (res.practice?.practiceId && res.practice?.prompt) {
         setPracticeId(res.practice.practiceId);
         setPracticePrompt(res.practice.prompt);
@@ -402,21 +466,23 @@ export  function Lesson() {
         setPracticeTutorMessage(null);
         setPracticeAttemptCount(null);
       }
-      setProgress(res.progress ?? null)
+
+      setProgress(res.progress ?? null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to submit answer.");
     } finally {
-      setPending(null)
+      setPending(null);
       setLoading(false);
     }
   }
 
   async function handleSendPractice() {
+    setMoreOpen(false);
     if (!practiceId || !session) return;
 
     setError(null);
     setLoading(true);
-    setPending("practice")
+    setPending("practice");
 
     try {
       const res: SubmitPracticeResponse = await submitPractice({
@@ -428,292 +494,288 @@ export  function Lesson() {
       setPracticeTutorMessage(sanitizePracticeTutorMessage(res.tutorMessage));
       setPracticeAttemptCount(res.attemptCount);
 
-      // If correct, backend consumes practice item. Clear UI on correct.
       if (res.result === "correct") {
         setPracticeId(null);
         setPracticePrompt(null);
         setPracticeAnswer("");
       } else {
-        // keep prompt + allow retry
         setPracticeAnswer("");
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to submit practice.");
     } finally {
-      setPending(null)
+      setPending(null);
       setLoading(false);
     }
   }
 
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: 16 }}>
-          <style>{`
-      @keyframes dotPulse {
-        0%, 80%, 100% { transform: translateY(0); opacity: .35; }
-        40% { transform: translateY(-2px); opacity: 1; }
-      }
-      .typingDot {
-        width: 6px;
-        height: 6px;
-        border-radius: 999px;
-        background: rgba(0,0,0,.35);
-        display: inline-block;
-        margin-right: 5px;
-        animation: dotPulse 1.2s infinite ease-in-out;
-      }
-      .typingDot:nth-child(2) { animation-delay: .15s; }
-      .typingDot:nth-child(3) { animation-delay: .30s; }
-    `}</style>
+      <style>{`
+        @keyframes dotPulse {
+          0%, 80%, 100% { transform: translateY(0); opacity: .35; }
+          40% { transform: translateY(-2px); opacity: 1; }
+        }
+        .typingDot {
+          width: 6px;
+          height: 6px;
+          border-radius: 999px;
+          background: rgba(0,0,0,.35);
+          display: inline-block;
+          margin-right: 5px;
+          animation: dotPulse 1.2s infinite ease-in-out;
+        }
+        .typingDot:nth-child(2) { animation-delay: .15s; }
+        .typingDot:nth-child(3) { animation-delay: .30s; }
+      `}</style>
 
-      {/* Controls */}
+      {/* Controls (only when NOT in a session) */}
       {!sessionActive && (
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr auto",
-          gap: 10,
-          alignItems: "end",
-          marginBottom: 12,
-        }}
-      >
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, opacity: 0.75 }}>Profile</span>
-          <input
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            disabled={lockControls}
-            style={{ 
-              padding: 10, 
-              borderRadius: 10, 
-              border: "1px solid #ddd",
-              background: lockControls ? "#f6f6f6" : "white",
-              cursor: lockControls ? "not-allowed" : "text",
-            }}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, opacity: 0.75 }}>Language</span>
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value as "en" | "de" | "es" | "fr")}
-            disabled={lockControls}
-            style={{ 
-              padding: 10, 
-              borderRadius: 10, 
-              border: "1px solid #ddd", 
-              backgroundColor: lockControls ? "#f6f6f6" : "white",
-              cursor: lockControls ? "not-allowed" : "pointer",
-            }}
-          >
-            <option value="en">English</option>
-            <option value="de">German</option>
-            <option value="es">Spanish</option>
-            <option value="fr">French</option>
-          </select>
-        </label>
-
-        <label style={{ display: "grid", gap: 6 }}>
-          <span style={{ fontSize: 12, opacity: 0.75 }}>Lesson</span>
-          <input
-            value={lessonId}
-            onChange={(e) => setLessonId(e.target.value)}
-            disabled={lockControls} 
-            style={{ 
-              padding: 10, 
-              borderRadius: 10, 
-              border: "1px solid #ddd",
-              background: lockControls ? "#f6f6f6" : "white",
-              cursor: lockControls ? "not-allowed" : "text",
-             }}
-          />
-        </label>
-
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={handleStart}
-            disabled={disableStartResume}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #ddd",
-              borderColor: disableStartResume ? "#ddd" : "#007AFF",
-              background: disableStartResume ? "#E5E5EA" : "#007AFF",
-              opacity: disableStartResume ? 0.7 : 1,
-              color: disableStartResume ? "#666" : "white",
-              cursor: disableStartResume ? "not-allowed" : "pointer",
-            }}
-          >
-            Start
-          </button>
-
-          <button
-            onClick={handleResume}
-            disabled={disableStartResume}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #ddd",
-              background: disableStartResume ? "#f6f6f6" : "white",
-              opacity: disableStartResume ? 0.7 : 1,
-              cursor: disableStartResume ? "not-allowed" : "pointer",
-            }}
-          >
-            Resume
-          </button>
-
-      {sessionActive && !lessonCompleted && (
-        <div style={{ position: "relative" }}>
-          <button
-            ref={moreButtonRef}
-            onClick={() => setMoreOpen((v) => !v)}
-            disabled={disableRestart}
-            aria-label="More"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #ddd",
-              background: disableRestart ? "#f6f6f6" : "white",
-              color: "#111",
-              cursor: disableRestart ? "not-allowed" : "pointer",
-              minWidth: 44,
-            }}
-          >
-            ⋯
-          </button>
-
-    {moreOpen && !disableRestart && (
-      <div
-        ref={moreMenuRef}
-        style={{
-          position: "absolute",
-          right: 0,
-          top: "calc(100% + 8px)",
-          background: "white",
-          border: "1px solid #e6e6e6",
-          borderRadius: 12,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-          overflow: "hidden",
-          minWidth: 200,
-          zIndex: 50,
-        }}
-      >
-        <button
-          onClick={() => {
-            setMoreOpen(false);
-            void handleRestart();
-          }}
-          disabled={disableRestart}
+        <div
           style={{
-            width: "100%",
-            textAlign: "left",
-            padding: "10px 12px",
-            background: "white",
-            border: "none",
-            cursor: disableRestart ? "not-allowed" : "pointer",
-            fontSize: 13,
-            color: disableRestart ? "#999" : "#ff3b30",
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr auto",
+            gap: 10,
+            alignItems: "end",
+            marginBottom: 12,
           }}
         >
-          Restart lesson
-        </button>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 12, opacity: 0.75 }}>Profile</span>
+            <input
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              disabled={lockControls}
+              style={{
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #ddd",
+                background: lockControls ? "#f6f6f6" : "white",
+                cursor: lockControls ? "not-allowed" : "text",
+              }}
+            />
+          </label>
 
-        <div style={{ height: 1, background: "#f0f0f0" }} />
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 12, opacity: 0.75 }}>Language</span>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as "en" | "de" | "es" | "fr")}
+              disabled={lockControls}
+              style={{
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #ddd",
+                backgroundColor: lockControls ? "#f6f6f6" : "white",
+                cursor: lockControls ? "not-allowed" : "pointer",
+              }}
+            >
+              <option value="en">English</option>
+              <option value="de">German</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+            </select>
+          </label>
 
-        <button
-          onClick={() => {
-            setMoreOpen(false);
-            handleExit();
-          }}
-          disabled={disableRestart}
-          style={{
-            width: "100%",
-            textAlign: "left",
-            padding: "10px 12px",
-            background: "white",
-            border: "none",
-            cursor: disableRestart ? "not-allowed" : "pointer",
-            fontSize: 13,
-            color: disableRestart ? "#999" : "#111",
-          }}
-        >
-          Exit lesson
-        </button>
-      </div>
-    )}
-  </div>
-  )}
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 12, opacity: 0.75 }}>Lesson</span>
+            <input
+              value={lessonId}
+              onChange={(e) => setLessonId(e.target.value)}
+              disabled={lockControls}
+              style={{
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #ddd",
+                background: lockControls ? "#f6f6f6" : "white",
+                cursor: lockControls ? "not-allowed" : "text",
+              }}
+            />
+          </label>
 
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={handleStart}
+              disabled={disableStartResume}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid #ddd",
+                borderColor: disableStartResume ? "#ddd" : "#007AFF",
+                background: disableStartResume ? "#E5E5EA" : "#007AFF",
+                opacity: disableStartResume ? 0.7 : 1,
+                color: disableStartResume ? "#666" : "white",
+                cursor: disableStartResume ? "not-allowed" : "pointer",
+              }}
+            >
+              Start
+            </button>
 
-    </div>
-  </div>
-)}
-
-      {session && (
-  <div
-    style={{
-      marginBottom: 10,
-      padding: "8px 10px",
-      borderRadius: 14,
-      border: "1px solid #e6e6e6",
-      background: "white",
-      display: "grid",
-      alignItems: "center",
-      gridTemplateColumns: "1fr auto",
-      gap: 10,
-      fontSize: 13,
-    }}
-  >
-    {/* Left: compact identity progress */}
-    <div style={{ display: "flex", gap: 8, minWidth: 0 , alignItems: "center", flexWrap: "wrap"}}>
-      <span style={{ fontWeight: 600 }}>{session.lessonId}</span>
-      <span style={{ opacity: 0.45 }}>•</span>
-      <span style={{ opacity: 0.85 }}>{prettyLanguage(session.language)}</span>
-
-      {progress && !loading && (
-        <>
-          <span style={{opacity: 0.45}}>•</span>
-          <span style={{ fontSize: 12, opacity: 0.75 }}>
-            Q {progress.currentQuestionIndex + 1}/{progress.totalQuestions}
-          </span>
-        </>
+            <button
+              onClick={handleResume}
+              disabled={!canResume}
+              title={!canResume ? "No saved session for this profile/language/lesson yet." : "Resume"}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid #ddd",
+                background: !canResume ? "#f6f6f6" : "white",
+                opacity: !canResume ? 0.7 : 1,
+                cursor: !canResume ? "not-allowed" : "pointer",
+              }}
+            >
+              Resume
+            </button>
+          </div>
+        </div>
       )}
-    </div>
 
-    {/* Right: status (ONLY once) */}
-    <div 
-      style={{ 
-        display: "flex", 
-        alignItems: "center", 
-        gap: 8,
-        padding: "6px 10px",
-        borderRadius: 999,
-        background: "#F2F2F7",
-        border: "1px solid #e6e6e6", 
-        whiteSpace: "nowrap",
-        fontSize: 12,
-        opacity: 0.92,
-      }}
-    >
-      <span
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: 999,
-          background:
-            (progress?.status ?? "").includes("needs")
-              ? "#FF9500"
-              : (progress?.status ?? "").includes("complete")
-                ? "#34C759"
-                : "#007AFF",
-          opacity: 0.9,
-        }}
-      />
-      <div>{prettyStatus(progress?.status ?? session.state)}</div>
-    </div>
-  </div>
-)}
+      {/* Session header */}
+      {session && (
+        <div
+          style={{
+            marginBottom: 10,
+            padding: "8px 10px",
+            borderRadius: 14,
+            border: "1px solid #e6e6e6",
+            background: "white",
+            display: "grid",
+            alignItems: "center",
+            gridTemplateColumns: "1fr auto",
+            gap: 10,
+            fontSize: 13,
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, minWidth: 0, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 600 }}>{session.lessonId}</span>
+            <span style={{ opacity: 0.45 }}>•</span>
+            <span style={{ opacity: 0.85 }}>{prettyLanguage(session.language)}</span>
 
+            {progress && !loading && (
+              <>
+                <span style={{ opacity: 0.45 }}>•</span>
+                <span style={{ fontSize: 12, opacity: 0.75 }}>
+                  Q {progress.currentQuestionIndex + 1}/{progress.totalQuestions}
+                </span>
+              </>
+            )}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "#F2F2F7",
+                border: "1px solid #e6e6e6",
+                whiteSpace: "nowrap",
+                fontSize: 12,
+                opacity: 0.92,
+              }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 999,
+                  background:
+                    (progress?.status ?? "").includes("needs")
+                      ? "#FF9500"
+                      : (progress?.status ?? "").includes("complete")
+                        ? "#34C759"
+                        : "#007AFF",
+                  opacity: 0.9,
+                }}
+              />
+              <div>{prettyStatus(progress?.status ?? session.state)}</div>
+            </div>
+
+            {/* ⋯ menu (now visible during session) */}
+            <div style={{ position: "relative" }}>
+              <button
+                ref={moreButtonRef}
+                onClick={() => setMoreOpen((v) => !v)}
+                disabled={disableRestart || lessonCompleted}
+                aria-label="More"
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 12,
+                  border: "1px solid #ddd",
+                  background: disableRestart || lessonCompleted ? "#f6f6f6" : "white",
+                  color: "#111",
+                  cursor: disableRestart || lessonCompleted ? "not-allowed" : "pointer",
+                  minWidth: 40,
+                }}
+              >
+                ⋯
+              </button>
+
+              {moreOpen && !disableRestart && !lessonCompleted && (
+                <div
+                  ref={moreMenuRef}
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "calc(100% + 8px)",
+                    background: "white",
+                    border: "1px solid #e6e6e6",
+                    borderRadius: 12,
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                    overflow: "hidden",
+                    minWidth: 200,
+                    zIndex: 50,
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      setMoreOpen(false);
+                      void handleRestart();
+                    }}
+                    disabled={disableRestart}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      background: "white",
+                      border: "none",
+                      cursor: disableRestart ? "not-allowed" : "pointer",
+                      fontSize: 13,
+                      color: disableRestart ? "#999" : "#ff3b30",
+                    }}
+                  >
+                    Restart lesson
+                  </button>
+
+                  <div style={{ height: 1, background: "#f0f0f0" }} />
+
+                  <button
+                    onClick={() => {
+                      setMoreOpen(false);
+                      handleExit();
+                    }}
+                    disabled={disableRestart}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      background: "white",
+                      border: "none",
+                      cursor: disableRestart ? "not-allowed" : "pointer",
+                      fontSize: 13,
+                      color: disableRestart ? "#999" : "#111",
+                    }}
+                  >
+                    Exit lesson
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div
@@ -731,7 +793,7 @@ export  function Lesson() {
 
       {/* Chat */}
       <div
-      ref={chatRef}
+        ref={chatRef}
         style={{
           border: "1px solid #ddd",
           borderRadius: 16,
@@ -744,41 +806,34 @@ export  function Lesson() {
           background: "#F2F2F7",
         }}
       >
-        {!session && (
-          <div style={{ opacity: 0.7 }}>
-            Start a lesson to begin.
-          </div>
-        )}
+        {!session && <div style={{ opacity: 0.7 }}>Start a lesson to begin.</div>}
 
         {messages.map((m, i) => {
-        const prevRole = i > 0 ? messages[i - 1]?.role : null;
-        const nextRole = i < messages.length - 1 ? messages[i + 1]?.role : null;
-        
-        const isFirstInGroup = prevRole !== m.role;
-        const isLastInGroup = nextRole !== m.role;
-        
-        return (
-          <div 
-          key={`${m.role}-${i}`} 
-          style={{
-            ...rowStyle(m.role),
-            marginTop: isFirstInGroup ? 10 : 2,
-            }}
-          >
-            <div style={bubbleStyle(m.role, isLastInGroup)}>
-              {isFirstInGroup && (
-              <div style={bubbleMetaStyle(m.role)}>
-                {m.role === "assistant" ? "Tutor" : "You"}
+          const prevRole = i > 0 ? messages[i - 1]?.role : null;
+          const nextRole = i < messages.length - 1 ? messages[i + 1]?.role : null;
+
+          const isFirstInGroup = prevRole !== m.role;
+          const isLastInGroup = nextRole !== m.role;
+
+          return (
+            <div
+              key={`${m.role}-${i}`}
+              style={{
+                ...rowStyle(m.role),
+                marginTop: isFirstInGroup ? 10 : 2,
+              }}
+            >
+              <div style={bubbleStyle(m.role, isLastInGroup)}>
+                {isFirstInGroup && (
+                  <div style={bubbleMetaStyle(m.role)}>{m.role === "assistant" ? "Tutor" : "You"}</div>
+                )}
+                <div>{m.content}</div>
               </div>
-              )}
-              <div>{m.content}</div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
 
-
-        {Boolean(session) && (pending === "answer") && (
+        {Boolean(session) && pending === "answer" && (
           <div style={rowStyle("assistant")}>
             <div style={bubbleStyle("assistant", true)}>
               <div style={{ display: "flex", alignItems: "center", padding: "2px 2px" }}>
@@ -813,21 +868,19 @@ export  function Lesson() {
               borderRadius: 16,
               border: "1px solid #e6e6e6",
               background: "white",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.06)" ,
+              boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6}}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <div style={{ fontSize: 12, opacity: 0.75 }}>Practice</div>
-              <div style={{ fontSize: 12,opacity: 0.7}}>
-                Complete this to continue
-              </div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>Complete this to continue</div>
             </div>
             <div style={{ whiteSpace: "pre-wrap", marginBottom: 10 }}>{practicePrompt}</div>
 
             {pending === "practice" && (
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Tutor</div>
-                <div style={{display: "flex", alignItems: "center", padding: "2px 2px"}}>
+                <div style={{ display: "flex", alignItems: "center", padding: "2px 2px" }}>
                   <span className="typingDot" />
                   <span className="typingDot" />
                   <span className="typingDot" />
@@ -876,6 +929,7 @@ export  function Lesson() {
             </div>
           </div>
         )}
+
         {lessonCompleted && !practiceActive && (
           <div
             style={{
@@ -888,10 +942,8 @@ export  function Lesson() {
               textAlign: "center",
             }}
           >
-            <div style={{fontWeight: 600, marginBottom: 2}}>Lesson Complete.</div>
-            <div style={{fontSize: 13, opacity: 0.78}}>
-              You can exit now, or restart anytime.
-            </div>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>Lesson Complete.</div>
+            <div style={{ fontSize: 13, opacity: 0.78 }}>You can exit now, or restart anytime.</div>
 
             <div style={{ marginTop: 10, display: "flex", justifyContent: "center" }}>
               <button
@@ -911,7 +963,8 @@ export  function Lesson() {
             </div>
           </div>
         )}
-        <div ref={chatEndRef}/>
+
+        <div ref={chatEndRef} />
       </div>
 
       {/* Answer input */}
@@ -921,13 +974,14 @@ export  function Lesson() {
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
           placeholder={
-            !session 
-              ? "Start a lesson first..." 
+            !session
+              ? "Start a lesson first..."
               : lessonCompleted
                 ? "Lesson completed - restart or exit."
                 : practiceActive
                   ? "Finish the practice above first..."
-                  : "Type your answer..."}
+                  : "Type your answer..."
+          }
           disabled={!session || loading || practiceActive || lessonCompleted}
           style={{
             flex: 1,
