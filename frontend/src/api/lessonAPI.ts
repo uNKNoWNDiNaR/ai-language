@@ -15,6 +15,15 @@ export function getHttpStatus(e: unknown): number | undefined {
 
 export type SupportedLanguage = "en" | "de" | "es" | "fr";
 
+export type TeachingPace = "slow" | "normal";
+export type ExplanationDepth = "short" | "normal" | "detailed";
+
+export type TeachingPrefs = {
+  pace: TeachingPace;
+  explanationDepth: ExplanationDepth;
+};
+
+
 export type TutorRole = "user" | "assistant";
 
 export type ChatMessage = {
@@ -87,6 +96,22 @@ export type GetSessionResponse = {
     progress?: LessonProgressPayload;
 };
 
+export type FeedbackRequest = {
+  userId: string;
+  anonSessionId: string;
+  feltRushed?:boolean;
+  helpedUnderstand?: number; // 1..5
+  confusedText?: string;
+
+  //Optional fallback context if session is gone
+  lessonId?: string;
+  language?: SupportedLanguage;
+  conceptTag?: string;
+};
+
+export type FeedbackResponse = {ok: true}
+
+
 export const API_BASE: string =
   import.meta.env.VITE_API_BASE ?? "http://localhost:3000";
 
@@ -107,6 +132,7 @@ export async function startLesson(params: {
   language: SupportedLanguage;
   lessonId: string;
   restart?: boolean;
+  teachingPrefs?: TeachingPrefs;
 }): Promise<StartLessonResponse> {
   const { data } = await http.post<StartLessonResponse>("/lesson/start", params);
   return data;
@@ -117,6 +143,7 @@ export async function submitAnswer(params: {
   answer: string;
   language?: SupportedLanguage;
   lessonId?: string;
+  teachingPrefs?: TeachingPrefs; 
 }): Promise<SubmitAnswerResponse> {
   const { data } = await http.post<SubmitAnswerResponse>("/lesson/submit", params);
   return data;
@@ -133,6 +160,11 @@ export async function submitPractice(params: {
   answer: string;
 }): Promise<SubmitPracticeResponse> {
   const { data } = await http.post<SubmitPracticeResponse>("/practice/submit", params);
+  return data;
+}
+
+export async function submitFeedback(params:FeedbackRequest): Promise<FeedbackResponse> {
+  const { data } = await http.post<FeedbackResponse>("/feedback", params);
   return data;
 }
 

@@ -26,6 +26,40 @@ function safeConceptKey(raw: string | undefined): string {
   return t.replace(/[.$]/g, "_").replace(/\s+/g, "_").slice(0, 48);
 }
 
+function isHumanConceptLabel(key: string): boolean {
+  // Keep only simple human tags like "greetings", "articles", "word_order"
+  return /^[a-z][a-z0-9_]{2,47}$/.test(key);
+}
+
+export type TeachingPace = "slow" | "normal";
+export type TeachingExplanationDepth = "short" | "normal" | "detailed";
+
+export type TeachingProfilePrefs = {
+  pace: TeachingPace;
+  explanationDepth: TeachingExplanationDepth;
+};
+
+function toPace(v: unknown): TeachingPace | undefined {
+  return v === "slow" || v === "normal" ? v : undefined;
+}
+
+function toExplanationDepth(v: unknown): TeachingExplanationDepth | undefined {
+  return v === "short" || v === "normal" || v === "detailed" ? v : undefined;
+}
+
+function mistakeTagFromReasonCode(reasonCode: unknown): string | null {
+  const c = typeof reasonCode === "string" ? reasonCode.trim().toUpperCase() : "";
+  if (!c) return null;
+
+  if (c === "ARTICLE") return "articles";
+  if (c === "WORD_ORDER") return "word_order";
+  if (c === "TYPO") return "typos";
+  if (c === "WRONG_LANGUAGE") return "wrong_language";
+  if (c === "MISSING_SLOT") return "missing_slot";
+  if (c === "OTHER") return "general";
+  return "general";
+}
+
 type RecordLessonAttemptArgs = {
   userId: string;
   language: string;
@@ -44,67 +78,94 @@ type RecordPracticeAttemptArgs = {
 };
 
 export async function recordLessonAttempt(args: RecordLessonAttemptArgs): Promise<void> {
-    if (!isMongoReady()) return;
+  if (!isMongoReady()) return;
 
-    const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
-    const conceptKey = safeConceptKey(args.conceptTag);  
-    const inc: Record<string, number> = {
-      attemptsTotal: 1,
-    };
+  const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
+  const conceptKey = safeConceptKey(args.conceptTag);
 
-    if (args.forcedAdvance) {
-      inc.forcedAdvanceCount = 1;
+  const inc: Record<string, number> = { attemptsTotal: 1 };
+  if (args.forcedAdvance) inc.forcedAdvanceCount = 1;
+
+  if (reasonKey) inc[`mistakeCountsByReason.${reasonKey}`] = 1;
+  if (conceptKey && isHumanConceptLabel(conceptKey)) inc[`mistakeCountsByConcept.${conceptKey}`] = 1;
+
+  type PushOps = {
+    topMistakeTags?: { $each: string[]; $slice: number };
+    recentConfusions?: { $each: Array<{ conceptTag: string; timestamp: Date }>; $slice: number };
+  };
+
+  const push: PushOps = {};
+
+  if (args.result !== "correct") {
+    const mistakeTag = mistakeTagFromReasonCode(args.reasonCode);
+    if (mistakeTag) {
+      push.topMistakeTags = { $each: [mistakeTag], $slice: -12 };
     }
 
-    if (args.result !== "correct" && conceptKey) {
-      inc[`mistakeCountsByConcept.${conceptKey}`] = 1;
+    if (conceptKey && isHumanConceptLabel(conceptKey)) {
+      push.recentConfusions = {
+        $each: [{ conceptTag: conceptKey, timestamp: new Date() }],
+        $slice: -12,
+      };
     }
+  }
 
-    if (reasonKey) {
-      inc[`mistakeCountsByReason.${reasonKey}`] = 1;
-    }
-
-    await LearnerProfileModel.updateOne(
-      { userId: args.userId, language: args.language },
-      {
-        $setOnInsert: { userId: args.userId, language: args.language },
-        $set: { lastActiveAt: new Date() },
-        $inc: inc,
-      },
-      { upsert: true },
-    );
+  await LearnerProfileModel.updateOne(
+    { userId: args.userId, language: args.language },
+    {
+      $setOnInsert: { userId: args.userId, language: args.language },
+      $set: { lastActiveAt: new Date() },
+      $inc: inc,
+      ...(Object.keys(push).length ? { $push: push } : {}),
+    },
+    { upsert: true }
+  );
 }
+
 
 export async function recordPracticeAttempt(args: RecordPracticeAttemptArgs): Promise<void> {
-    if (!isMongoReady()) return;
+  if (!isMongoReady()) return;
 
-    const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
+  const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
+  const conceptKey = safeConceptKey(args.conceptTag);
 
-    const inc: Record<string, number> = {
-      attemptsTotal: 1,
-      practiceAttemptsTotal: 1,
-    };
+  const inc: Record<string, number> = { practiceAttemptsTotal: 1 };
+  if (reasonKey) inc[`mistakeCountsByReason.${reasonKey}`] = 1;
+  if (conceptKey && isHumanConceptLabel(conceptKey)) inc[`mistakeCountsByConcept.${conceptKey}`] = 1;
 
-    if (reasonKey) {
-      inc[`mistakeCountsByReason.${reasonKey}`] = 1;
+  type PushOps = {
+    topMistakeTags?: { $each: string[]; $slice: number };
+    recentConfusions?: { $each: Array<{ conceptTag: string; timestamp: Date }>; $slice: number };
+  };
+
+  const push: PushOps = {};
+
+  if (args.result !== "correct") {
+    const mistakeTag = mistakeTagFromReasonCode(args.reasonCode);
+    if (mistakeTag) {
+      push.topMistakeTags = { $each: [mistakeTag], $slice: -12 };
     }
 
-    const conceptKey = safeConceptKey(args.conceptTag);
-    if (args.result !== "correct" && conceptKey) {
-      inc[`mistakeCountsByConcept.${conceptKey}`] = 1;
+    if (conceptKey && isHumanConceptLabel(conceptKey)) {
+      push.recentConfusions = {
+        $each: [{ conceptTag: conceptKey, timestamp: new Date() }],
+        $slice: -12,
+      };
     }
+  }
 
-
-    await LearnerProfileModel.updateOne(
-      { userId: args.userId, language: args.language },
-      {
-        $setOnInsert: { userId: args.userId, language: args.language },
-        $set: { lastActiveAt: new Date() },
-        $inc: inc,
-      },
-      { upsert: true },
-    );
+  await LearnerProfileModel.updateOne(
+    { userId: args.userId, language: args.language },
+    {
+      $setOnInsert: { userId: args.userId, language: args.language },
+      $set: { lastActiveAt: new Date() },
+      $inc: inc,
+      ...(Object.keys(push).length ? { $push: push } : {}),
+    },
+    { upsert: true }
+  );
 }
+
 
 type GetLearnerProfileSummaryArgs = {
   userId: string;
@@ -167,12 +228,6 @@ export async function getConceptMistakeCount(
   const found = conceptEntries.find((e) => e.key === key);
 
   return found?.count ?? 0;
-}
-
-function isHumanConceptLabel(key: string): boolean {
-    // Keep only simple human tags like "greetings", "word_order", etc
-    //and avoid tags like "lesson-basic-1-q1" and so on.
-    return /^[a-z][a-z_]{2,}$/.test(key);
 }
 
 export async function getLearnerProfileSummary(
@@ -256,3 +311,53 @@ export async function getLearnerTopFocusReason(
 
   return top || null;
 }
+
+export async function getRecentConfusionConceptTag(
+  userId: string,
+  language: SupportedLanguage
+): Promise<string | null> {
+  // Only read when connected (avoid buffering in tests/CI)
+  if (mongoose.connection.readyState !== 1) return null;
+
+  const doc = (await LearnerProfileModel.findOne(
+    { userId, language },
+    { recentConfusions: 1 }
+  ).lean()) as Record<string, unknown> | null;
+
+  const arr = Array.isArray(doc?.recentConfusions) ? (doc?.recentConfusions as unknown[]) : [];
+  if (arr.length === 0) return null;
+
+  const last = arr[arr.length - 1] as Record<string, unknown> | undefined;
+  const tag = typeof last?.conceptTag === "string" ? safeConceptKey(last.conceptTag) : "";
+  return tag && isHumanConceptLabel(tag) ? tag : null;
+}
+
+export async function getTeachingProfilePrefs(
+  userId: string,
+  language: SupportedLanguage
+): Promise<TeachingProfilePrefs | null> {
+  // Only read when connected (avoid buffering in tests/CI)
+  if (mongoose.connection.readyState !== 1) return null;
+
+  const doc = (await LearnerProfileModel.findOne(
+    { userId, language },
+    { pace: 1, explanationDepth: 1, forcedAdvanceCount: 1 }
+  ).lean()) as Record<string, unknown> | null;
+
+  if (!doc) return null;
+
+  const forcedAdvanceCount =
+    typeof doc.forcedAdvanceCount === "number" && Number.isFinite(doc.forcedAdvanceCount)
+      ? Math.max(0, Math.trunc(doc.forcedAdvanceCount))
+      : 0;
+
+  // If fields weren’t present on older docs, infer softly from behavior.
+  const inferredPace: TeachingPace = forcedAdvanceCount >= 2 ? "slow" : "normal";
+  const inferredDepth: TeachingExplanationDepth = forcedAdvanceCount >= 2 ? "detailed" : "normal";
+
+  const pace = toPace(doc.pace) ?? inferredPace;
+  const explanationDepth = toExplanationDepth(doc.explanationDepth) ?? inferredDepth;
+
+  return { pace, explanationDepth };
+}
+

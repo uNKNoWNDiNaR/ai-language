@@ -10,6 +10,8 @@ exports.getWeakestConceptTag = getWeakestConceptTag;
 exports.getConceptMistakeCount = getConceptMistakeCount;
 exports.getLearnerProfileSummary = getLearnerProfileSummary;
 exports.getLearnerTopFocusReason = getLearnerTopFocusReason;
+exports.getRecentConfusionConceptTag = getRecentConfusionConceptTag;
+exports.getTeachingProfilePrefs = getTeachingProfilePrefs;
 const mongoose_1 = __importDefault(require("mongoose"));
 const learnerProfileState_1 = require("../state/learnerProfileState");
 function isMongoReady() {
@@ -32,48 +34,94 @@ function safeConceptKey(raw) {
         return "";
     return t.replace(/[.$]/g, "_").replace(/\s+/g, "_").slice(0, 48);
 }
+function isHumanConceptLabel(key) {
+    // Keep only simple human tags like "greetings", "articles", "word_order"
+    return /^[a-z][a-z0-9_]{2,47}$/.test(key);
+}
+function toPace(v) {
+    return v === "slow" || v === "normal" ? v : undefined;
+}
+function toExplanationDepth(v) {
+    return v === "short" || v === "normal" || v === "detailed" ? v : undefined;
+}
+function mistakeTagFromReasonCode(reasonCode) {
+    const c = typeof reasonCode === "string" ? reasonCode.trim().toUpperCase() : "";
+    if (!c)
+        return null;
+    if (c === "ARTICLE")
+        return "articles";
+    if (c === "WORD_ORDER")
+        return "word_order";
+    if (c === "TYPO")
+        return "typos";
+    if (c === "WRONG_LANGUAGE")
+        return "wrong_language";
+    if (c === "MISSING_SLOT")
+        return "missing_slot";
+    if (c === "OTHER")
+        return "general";
+    return "general";
+}
 async function recordLessonAttempt(args) {
     if (!isMongoReady())
         return;
     const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
     const conceptKey = safeConceptKey(args.conceptTag);
-    const inc = {
-        attemptsTotal: 1,
-    };
-    if (args.forcedAdvance) {
+    const inc = { attemptsTotal: 1 };
+    if (args.forcedAdvance)
         inc.forcedAdvanceCount = 1;
-    }
-    if (args.result !== "correct" && conceptKey) {
-        inc[`mistakeCountsByConcept.${conceptKey}`] = 1;
-    }
-    if (reasonKey) {
+    if (reasonKey)
         inc[`mistakeCountsByReason.${reasonKey}`] = 1;
+    if (conceptKey && isHumanConceptLabel(conceptKey))
+        inc[`mistakeCountsByConcept.${conceptKey}`] = 1;
+    const push = {};
+    if (args.result !== "correct") {
+        const mistakeTag = mistakeTagFromReasonCode(args.reasonCode);
+        if (mistakeTag) {
+            push.topMistakeTags = { $each: [mistakeTag], $slice: -12 };
+        }
+        if (conceptKey && isHumanConceptLabel(conceptKey)) {
+            push.recentConfusions = {
+                $each: [{ conceptTag: conceptKey, timestamp: new Date() }],
+                $slice: -12,
+            };
+        }
     }
     await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, {
         $setOnInsert: { userId: args.userId, language: args.language },
         $set: { lastActiveAt: new Date() },
         $inc: inc,
+        ...(Object.keys(push).length ? { $push: push } : {}),
     }, { upsert: true });
 }
 async function recordPracticeAttempt(args) {
     if (!isMongoReady())
         return;
     const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
-    const inc = {
-        attemptsTotal: 1,
-        practiceAttemptsTotal: 1,
-    };
-    if (reasonKey) {
-        inc[`mistakeCountsByReason.${reasonKey}`] = 1;
-    }
     const conceptKey = safeConceptKey(args.conceptTag);
-    if (args.result !== "correct" && conceptKey) {
+    const inc = { practiceAttemptsTotal: 1 };
+    if (reasonKey)
+        inc[`mistakeCountsByReason.${reasonKey}`] = 1;
+    if (conceptKey && isHumanConceptLabel(conceptKey))
         inc[`mistakeCountsByConcept.${conceptKey}`] = 1;
+    const push = {};
+    if (args.result !== "correct") {
+        const mistakeTag = mistakeTagFromReasonCode(args.reasonCode);
+        if (mistakeTag) {
+            push.topMistakeTags = { $each: [mistakeTag], $slice: -12 };
+        }
+        if (conceptKey && isHumanConceptLabel(conceptKey)) {
+            push.recentConfusions = {
+                $each: [{ conceptTag: conceptKey, timestamp: new Date() }],
+                $slice: -12,
+            };
+        }
     }
     await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, {
         $setOnInsert: { userId: args.userId, language: args.language },
         $set: { lastActiveAt: new Date() },
         $inc: inc,
+        ...(Object.keys(push).length ? { $push: push } : {}),
     }, { upsert: true });
 }
 function reasonLabel(code) {
@@ -125,11 +173,6 @@ async function getConceptMistakeCount(userId, language, conceptTag) {
     const conceptEntries = toReasonEntries(doc.mistakeCountsByConcept);
     const found = conceptEntries.find((e) => e.key === key);
     return found?.count ?? 0;
-}
-function isHumanConceptLabel(key) {
-    // Keep only simple human tags like "greetings", "word_order", etc
-    //and avoid tags like "lesson-basic-1-q1" and so on.
-    return /^[a-z][a-z_]{2,}$/.test(key);
 }
 async function getLearnerProfileSummary(args) {
     const maxReasons = typeof args.maxReasons === "number" ? args.maxReasons : 3;
@@ -191,4 +234,33 @@ async function getLearnerTopFocusReason(args) {
         return String(entries[1].key).trim().toUpperCase() || null;
     }
     return top || null;
+}
+async function getRecentConfusionConceptTag(userId, language) {
+    // Only read when connected (avoid buffering in tests/CI)
+    if (mongoose_1.default.connection.readyState !== 1)
+        return null;
+    const doc = (await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { recentConfusions: 1 }).lean());
+    const arr = Array.isArray(doc?.recentConfusions) ? doc?.recentConfusions : [];
+    if (arr.length === 0)
+        return null;
+    const last = arr[arr.length - 1];
+    const tag = typeof last?.conceptTag === "string" ? safeConceptKey(last.conceptTag) : "";
+    return tag && isHumanConceptLabel(tag) ? tag : null;
+}
+async function getTeachingProfilePrefs(userId, language) {
+    // Only read when connected (avoid buffering in tests/CI)
+    if (mongoose_1.default.connection.readyState !== 1)
+        return null;
+    const doc = (await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { pace: 1, explanationDepth: 1, forcedAdvanceCount: 1 }).lean());
+    if (!doc)
+        return null;
+    const forcedAdvanceCount = typeof doc.forcedAdvanceCount === "number" && Number.isFinite(doc.forcedAdvanceCount)
+        ? Math.max(0, Math.trunc(doc.forcedAdvanceCount))
+        : 0;
+    // If fields weren’t present on older docs, infer softly from behavior.
+    const inferredPace = forcedAdvanceCount >= 2 ? "slow" : "normal";
+    const inferredDepth = forcedAdvanceCount >= 2 ? "detailed" : "normal";
+    const pace = toPace(doc.pace) ?? inferredPace;
+    const explanationDepth = toExplanationDepth(doc.explanationDepth) ?? inferredDepth;
+    return { pace, explanationDepth };
 }

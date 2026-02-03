@@ -34,7 +34,7 @@ type RetryMessageArgs = {
 };
 
 export function getForcedAdvanceMessage(): string {
-  return "That one was tricky - here's the correct answer, then we'll continue."
+  return "That one was tricky - I'll show the correct answer below, then we'll continue."
 }
 
 export function getDeterministicRetryMessage(args: RetryMessageArgs): string {
@@ -61,14 +61,48 @@ export function getDeterministicRetryMessage(args: RetryMessageArgs): string {
     case "WRONG_LANGUAGE":
       return "Answer in the selected language.";
     case "MISSING_SLOT":
-      return "Almost - You'r missing the name part.";
+      return "Almost - You're missing the name part.";
     default:
       return attemptCount >= 3 ? "Not quite — try again using the expected structure." : "Not quite — try again.";
   }
 }
 
 export function getHintLeadIn(attemptCount: number): string {
-  if(attemptCount <= 2) return "Here's a small hint to help you.";
   if(attemptCount === 3) return "This hint should make it clearer.";
+  if(attemptCount <= 2) return "Here's a small hint to help you.";
   return "Here's the answer.";
+}
+
+export type ExplanationDepth = "short" | "normal" | "detailed";
+
+type RetryExplanationArgs = {
+  reasonCode: unknown;
+  attemptCount: number;
+  depth: ExplanationDepth;
+};
+
+// Deterministic micro-explanations (privacy-safe, token-bounded).
+export function getDeterministicRetryExplanation(args: RetryExplanationArgs): string {
+  const { reasonCode, attemptCount, depth } = args;
+
+  if (depth === "short") return "";
+  if (depth === "normal" && attemptCount < 3) return "";
+  if (depth === "detailed" && attemptCount < 2) return "";
+
+  const c = typeof reasonCode === "string" ? reasonCode.trim().toUpperCase() : "";
+
+  switch (c) {
+    case "ARTICLE":
+      return "Pay attention to the article that belongs with the noun (like the/a).";
+    case "WORD_ORDER":
+      return "Try keeping the same word order as the example or expected structure.";
+    case "WRONG_LANGUAGE":
+      return "Answer in the selected lesson language.";
+    case "MISSING_SLOT":
+      return "Make sure you include the missing part the question expects.";
+    case "TYPO":
+      return "Small spelling differences can make the answer wrong — check carefully.";
+    default:
+      return "Try matching the expected structure closely.";
+  }
 }

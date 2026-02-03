@@ -7,10 +7,9 @@ import express from "express";
 import lessonRoutes from "./routes/lesson";
 import progressRoutes from "./routes/progress";
 import cors from "cors";
-import practiceRoutes from "./routes/practice"
+import practiceRoutes from "./routes/practice";
+import feedbackRoutes from "./routes/feedback";
 import { authMiddleware } from "./middleware/auth";
-import { requestContextMiddleware } from "./middleware/requestContext";
-import { errorEnvelopeMiddleware } from "./middleware/errorEnvelope";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { sendError } from "./http/sendError";
 
@@ -41,6 +40,7 @@ app.use(authMiddleware);
 app.use("/lesson", lessonRoutes);
 app.use("/progress", progressRoutes);
 app.use("/practice", practiceRoutes);
+app.use("/feedback", feedbackRoutes)
 
 //404
 app.use((_req, res) => sendError(res, 404, "Not Found", "NOT_FOUND"));

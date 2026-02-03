@@ -35,8 +35,25 @@ const generatePractice = async (req, res) => {
         return res.status(404).json({ error: "Source question not found" });
     }
     if (!q) {
+        const requestedTag = typeof conceptTag === "string" && conceptTag.trim() ? conceptTag.trim() : "";
+        let recentTag = null;
+        try {
+            recentTag =
+                typeof learnerProfileStore_1.getRecentConfusionConceptTag === "function"
+                    ? await (0, learnerProfileStore_1.getRecentConfusionConceptTag)(userId, language)
+                    : null;
+        }
+        catch {
+            recentTag = null;
+        }
         const weakest = await (0, learnerProfileStore_1.getWeakestConceptTag)(userId, language);
-        if (weakest) {
+        if (requestedTag) {
+            q = lesson.questions.find((x) => x.conceptTag === requestedTag);
+        }
+        if (!q && recentTag) {
+            q = lesson.questions.find((x) => x.conceptTag === recentTag);
+        }
+        if (!q && weakest) {
             q = lesson.questions.find((x) => x.conceptTag === weakest);
         }
         if (!q)

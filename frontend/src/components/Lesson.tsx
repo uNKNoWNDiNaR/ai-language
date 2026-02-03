@@ -1,6 +1,7 @@
 // frontend/src/components/Lesson.tsx
 
 import React, { useEffect, useRef, useMemo, useState } from "react";
+import { FeedbackCard } from "./FeedbackCard";
 import {
   startLesson,
   submitAnswer,
@@ -13,11 +14,61 @@ import {
   type SubmitAnswerResponse,
   type SubmitPracticeResponse,
   type LessonProgressPayload,
+  type TeachingPace,
+  type ExplanationDepth,
+  type TeachingPrefs,
 } from "../api/lessonAPI";
 
 type Role = "user" | "assistant";
 
 const LAST_SESSION_KEY = "ai-language:lastSessionKey";
+
+const TEACHING_PREFS_PREFIX = "ai-language:teachingPrefs:";
+
+function makeTeachingPrefsKey(userId: string, language: string): string {
+  const u = userId.trim();
+  const l = language.trim();
+  if (!u || !l) return "";
+  return `${TEACHING_PREFS_PREFIX}${u}|${l}`;
+}
+
+function isTeachingPace(v: unknown): v is TeachingPace {
+  return v === "slow" || v === "normal";
+}
+
+function isExplanationDepth(v: unknown): v is ExplanationDepth {
+  return v === "short" || v === "normal" || v === "detailed";
+}
+
+function readTeachingPrefs(key: string): TeachingPrefs | null {
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const obj = parsed as { pace?: unknown; explanationDepth?: unknown };
+
+    const pace: TeachingPace = isTeachingPace(obj.pace) ? obj.pace : "normal";
+    const explanationDepth: ExplanationDepth = isExplanationDepth(obj.explanationDepth)
+      ? obj.explanationDepth
+      : "normal";
+
+    return { pace, explanationDepth };
+  } catch {
+    return null;
+  }
+}
+
+function writeTeachingPrefs(key: string, prefs: TeachingPrefs) {
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(prefs));
+  } catch {
+    // ignore
+  }
+}
 
 function rowStyle(role: Role): React.CSSProperties {
   const isUser = role === "user";
@@ -82,6 +133,16 @@ function prettyStatus(s: string | undefined): string {
   return s ? s.replace(/_/g, " ") : "—";
 }
 
+function splitNextQuestion(text: string): { before: string; next: string } | null {
+  const raw = (text ?? "");
+  const idx = raw.toLowerCase().indexOf("next question:");
+  if (idx === -1) return null;
+  const before = raw.slice(0, idx).trim();
+  const next = raw.slice(idx).trim();
+  if (!before || !next) return null;
+  return { before, next };
+}
+
 function sanitizePracticeTutorMessage(raw: string | undefined): string {
   const t = (raw ?? "").trim();
   if (!t) return "";
@@ -129,6 +190,11 @@ export function Lesson() {
   const [pending, setPending] = useState<null | "start" | "resume" | "answer" | "practice">(null);
   const [progress, setProgress] = useState<LessonProgressPayload | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [teachingPace, setTeachingPace] = useState<TeachingPace>("normal");
+  const [explanationDepth, setExplanationDepth] = useState<ExplanationDepth>("normal");
+  const [hintAnchorIndex, setHintAnchorIndex] = useState<number | null>(null);
+
+
 
   const [lastSessionKey, setLastSessionKey] = useState<string>(() => {
     try {
@@ -174,6 +240,26 @@ export function Lesson() {
     if (!u || !lid) return "";
     return `${u}|${language}|${lid}`;
   }, [userId, language, lessonId]);
+
+    const teachingPrefsKey = useMemo(() => {
+    return makeTeachingPrefsKey(userId, language);
+  }, [userId, language]);
+
+  useEffect(() => {
+    const loaded = readTeachingPrefs(teachingPrefsKey);
+    if (loaded) {
+      setTeachingPace(loaded.pace);
+      setExplanationDepth(loaded.explanationDepth);
+      return;
+    }
+    setTeachingPace("normal");
+    setExplanationDepth("normal");
+  }, [teachingPrefsKey]);
+
+  useEffect(() => {
+    writeTeachingPrefs(teachingPrefsKey, { pace: teachingPace, explanationDepth });
+  }, [teachingPrefsKey, teachingPace, explanationDepth]);
+
 
   const canResume = useMemo(() => {
     return (
@@ -270,6 +356,7 @@ export function Lesson() {
         language,
         lessonId: lessonId.trim(),
         restart: false,
+        teachingPrefs: {pace: teachingPace, explanationDepth},
       });
 
       setSession(res.session);
@@ -370,6 +457,7 @@ export function Lesson() {
         language,
         lessonId: lessonId.trim(),
         restart: true,
+        teachingPrefs: {pace: teachingPace, explanationDepth},
       });
 
       setSession(res.session);
@@ -440,31 +528,68 @@ export function Lesson() {
         answer: toSend,
         language: session.language,
         lessonId: session.lessonId,
+        teachingPrefs: {pace: teachingPace, explanationDepth}
       });
 
-      setSession(res.session);
-      setMessages(res.session.messages ?? []);
-      setProgress(res.progress ?? null);
+    setSession(res.session);
+    setProgress(res.progress ?? null);
+        
+    const incomingHint = (res.hint?.text ?? "").trim();
+    const isForcedAdvance = res.hint?.level === 3;
+        
+    let nextMessages = [...(res.session.messages ?? [])];
+    setHintAnchorIndex(null);
+        
+    // On forced advance: split "Next question" into a separate bubble,
+    // and anchor the hint card between the two bubbles.
+    if (isForcedAdvance && incomingHint) {
+      const last = nextMessages[nextMessages.length - 1];
+      if (last && last.role === "assistant") {
+        const parts = splitNextQuestion(last.content);
+        if (parts) {
+          nextMessages = nextMessages.slice(0, -1);
+          nextMessages.push({ ...last, content: parts.before });
+          const anchor = nextMessages.length - 1;
+          nextMessages.push({ ...last, content: parts.next });
+          setHintAnchorIndex(anchor);
+        }
+      }
+    }
+    
+    setMessages(nextMessages);
+
 
       const evalResult = res.evaluation?.result;
-      const incomingHint = (res.hint?.text ?? "").trim();
 
       const lastMsg = (res.session.messages ?? []).slice(-1)[0];
       const tutorText =
         lastMsg && lastMsg.role === "assistant" ? lastMsg.content : res.tutorMessage ?? "";
-
       const tutorLower = tutorText.toLowerCase();
 
-      if (evalResult !== "correct" && incomingHint) {
-        const hintLower = incomingHint.toLowerCase();
-        setHintText(tutorLower.includes(hintLower) ? null : incomingHint);
+      if (incomingHint) {
+        // Forced advance: always show the reveal hint (we are preventing tutor bubble leakage now)
+        if (isForcedAdvance) {
+          setHintText(incomingHint);
+        } else if (evalResult !== "correct") {
+          const hintLower = incomingHint.toLowerCase();
+          setHintText(tutorLower.includes(hintLower) ? null : incomingHint);
+        } else {
+          setHintText(null);
+        }
       } else {
         setHintText(null);
       }
 
-      if (res.practice?.practiceId && res.practice?.prompt) {
+      if (res.hint?.level !== 3 && res.practice?.practiceId && res.practice?.prompt) {
         setPracticeId(res.practice.practiceId);
         setPracticePrompt(res.practice.prompt);
+        setPracticeAnswer("");
+        setPracticeTutorMessage(null);
+        setPracticeAttemptCount(null);
+      } else if (res.hint?.level === 3) {
+        //ensure practice doesnt appear after reveal
+        setPracticeId(null);
+        setPracticePrompt(null);
         setPracticeAnswer("");
         setPracticeTutorMessage(null);
         setPracticeAttemptCount(null);
@@ -630,6 +755,69 @@ export function Lesson() {
               Resume
             </button>
           </div>
+          <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 10,
+            alignItems: "end",
+            marginBottom: 12,
+          }}
+        >
+        <div 
+          style={{
+            display: "flex",
+            gap:12,
+            alignItems: "end",
+            padding: "10px, 12px",
+            borderRadius: 14,
+            border: "1PX solid #e6e6e6",
+            background: "#F2F2F7",
+            width: "fit-content",
+          }}
+        >
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Pace</span>
+            <select
+              value={teachingPace}
+              onChange={(e) => setTeachingPace(e.target.value as TeachingPace)}
+              disabled={lockControls}
+              style={{
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #ddd",
+                backgroundColor: lockControls ? "#f6f6f6" : "white",
+                cursor: lockControls ? "not-allowed" : "pointer",
+                minWidth: 140
+              }}
+            >
+              <option value="normal">Normal</option>
+              <option value="slow">Slow</option>
+            </select>
+          </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={{ fontSize: 12, opacity: 0.75 }}>Explanations</span>
+            <select
+              value={explanationDepth}
+              onChange={(e) => setExplanationDepth(e.target.value as ExplanationDepth)}
+              disabled={lockControls}
+              style={{
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #ddd",
+                backgroundColor: lockControls ? "#f6f6f6" : "white",
+                cursor: lockControls ? "not-allowed" : "pointer",
+                minWidth: 160
+              }}
+            >
+              <option value="short">Short</option>
+              <option value="normal">Normal</option>
+              <option value="detailed">Detailed</option>
+            </select>
+          </label>
+        </div>
+        </div>
         </div>
       )}
 
@@ -696,27 +884,51 @@ export function Lesson() {
               <div>{prettyStatus(progress?.status ?? session.state)}</div>
             </div>
 
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "#F2F2F7",
+                border: "1px solid #e6e6e6",
+                whiteSpace: "nowrap",
+                fontSize: 12,
+                opacity: 0.92,
+              }}
+            >
+              <div style={{ opacity: 0.75 }}>
+                Pace: <span style={{ fontWeight: 600 }}>{teachingPace}</span>
+              </div>
+              <span style={{ opacity: 0.35 }}>•</span>
+              <div style={{ opacity: 0.75 }}>
+                Depth: <span style={{ fontWeight: 600 }}>{explanationDepth}</span>
+              </div>
+            </div>
+
+
             {/* ⋯ menu (now visible during session) */}
             <div style={{ position: "relative" }}>
               <button
                 ref={moreButtonRef}
                 onClick={() => setMoreOpen((v) => !v)}
-                disabled={disableRestart || lessonCompleted}
+                disabled={disableRestart}
                 aria-label="More"
                 style={{
                   padding: "8px 10px",
                   borderRadius: 12,
                   border: "1px solid #ddd",
-                  background: disableRestart || lessonCompleted ? "#f6f6f6" : "white",
+                  background: disableRestart ? "#f6f6f6" : "white",
                   color: "#111",
-                  cursor: disableRestart || lessonCompleted ? "not-allowed" : "pointer",
+                  cursor: disableRestart ? "not-allowed" : "pointer",
                   minWidth: 40,
                 }}
               >
                 ⋯
               </button>
-
-              {moreOpen && !disableRestart && !lessonCompleted && (
+              
+              {moreOpen && !disableRestart && (
                 <div
                   ref={moreMenuRef}
                   style={{
@@ -751,9 +963,9 @@ export function Lesson() {
                   >
                     Restart lesson
                   </button>
-
+                  
                   <div style={{ height: 1, background: "#f0f0f0" }} />
-
+                  
                   <button
                     onClick={() => {
                       setMoreOpen(false);
@@ -776,6 +988,7 @@ export function Lesson() {
                 </div>
               )}
             </div>
+
           </div>
         </div>
       )}
@@ -801,7 +1014,7 @@ export function Lesson() {
           border: "1px solid #ddd",
           borderRadius: 16,
           padding: 12,
-          height: 420,
+          height: 600,
           overflow: "auto",
           display: "flex",
           flexDirection: "column",
@@ -819,13 +1032,8 @@ export function Lesson() {
           const isLastInGroup = nextRole !== m.role;
 
           return (
-            <div
-              key={`${m.role}-${i}`}
-              style={{
-                ...rowStyle(m.role),
-                marginTop: isFirstInGroup ? 10 : 2,
-              }}
-            >
+            <React.Fragment key={`${m.role}-${i}`}>
+            <div style={{ ...rowStyle(m.role),marginTop: isFirstInGroup ? 10 : 2,}}>
               <div style={bubbleStyle(m.role, isLastInGroup)}>
                 {isFirstInGroup && (
                   <div style={bubbleMetaStyle(m.role)}>{m.role === "assistant" ? "Tutor" : "You"}</div>
@@ -833,6 +1041,22 @@ export function Lesson() {
                 <div>{m.content}</div>
               </div>
             </div>
+
+            {hintText && hintAnchorIndex === i && (
+              <div 
+                style={{
+                  marginTop: 6,
+                  padding: 10,
+                  borderRadius: 12,
+                  border: "1px solid #eee",
+                  background: "#fafafa",
+                }}
+              >
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Hint</div>
+                <div style={{ whiteSpace: "pre-wrap"}}>{hintText}</div>
+              </div>
+            )}
+            </React.Fragment>
           );
         })}
 
@@ -848,7 +1072,7 @@ export function Lesson() {
           </div>
         )}
 
-        {hintText && (
+        {hintText && hintAnchorIndex === null && (
           <div
             style={{
               marginTop: 6,
@@ -859,7 +1083,12 @@ export function Lesson() {
             }}
           >
             <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Hint</div>
-            <div style={{ whiteSpace: "pre-wrap" }}>{hintText}</div>
+            <div style={{ whiteSpace: "pre-wrap" }}>
+              {hintText
+                .replace(/^Explanation:\s*/i, "")
+                .replace(/\nAnswer:\s*/i, "\n\nAnswer: ")}
+            </div>
+
           </div>
         )}
 
@@ -934,7 +1163,8 @@ export function Lesson() {
         )}
 
         {lessonCompleted && !practiceActive && (
-          <div
+          <>
+            <div
             style={{
               alignSelf: "center",
               maxWidth: 520,
@@ -944,7 +1174,7 @@ export function Lesson() {
               padding: "10px 12px",
               textAlign: "center",
             }}
-          >
+            >
             <div style={{ fontWeight: 600, marginBottom: 2 }}>Lesson Complete.</div>
             <div style={{ fontSize: 13, opacity: 0.78 }}>You can exit now, or restart anytime.</div>
 
@@ -964,8 +1194,17 @@ export function Lesson() {
                 Exit Lesson
               </button>
             </div>
-          </div>
-        )}
+              </div>
+
+              <FeedbackCard
+                userId={userId.trim()}
+                language={language}
+                lessonId={lessonId.trim()}
+                sessionKey={currentSessionKey}
+                disabled={loading}
+              />
+            </>
+          )}
 
         <div ref={chatEndRef} />
       </div>

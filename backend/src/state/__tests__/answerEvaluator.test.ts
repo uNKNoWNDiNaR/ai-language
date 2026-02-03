@@ -104,6 +104,11 @@ describe("evaluateAnswer - regression tests", () => {
     const r = evaluateAnswer(q as any, "were ready", "en");
     expect(r.result).toBe("correct");
   });
+  it("does not treat 'What is your name?' as a placeholder template", () => {
+    const q = makeQ({ answer: "What is your name?" });
+    const r = evaluateAnswer(q as any, "What is Hillary", "en");
+    expect(r.result).toBe("wrong");
+  });
 
 
 });

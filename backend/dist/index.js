@@ -12,6 +12,7 @@ const lesson_1 = __importDefault(require("./routes/lesson"));
 const progress_1 = __importDefault(require("./routes/progress"));
 const cors_1 = __importDefault(require("cors"));
 const practice_1 = __importDefault(require("./routes/practice"));
+const feedback_1 = __importDefault(require("./routes/feedback"));
 const auth_1 = require("./middleware/auth");
 const rateLimit_1 = require("./middleware/rateLimit");
 const sendError_1 = require("./http/sendError");
@@ -32,6 +33,7 @@ app.use(auth_1.authMiddleware);
 app.use("/lesson", lesson_1.default);
 app.use("/progress", progress_1.default);
 app.use("/practice", practice_1.default);
+app.use("/feedback", feedback_1.default);
 //404
 app.use((_req, res) => (0, sendError_1.sendError)(res, 404, "Not Found", "NOT_FOUND"));
 //error handler

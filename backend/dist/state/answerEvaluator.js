@@ -52,14 +52,15 @@ function matchesAnyExact(question, userNorm) {
     return false;
 }
 function matchPlaceholderTemplate(expectedRaw, userNorm) {
-    const hasPlaceholder = /\[[^\]]+\]/.test(expectedRaw) || /\{[^]}+\}/.test(expectedRaw) || /<[^>]+>/.test(expectedRaw) || /your name/i.test(expectedRaw);
+    const hasPlaceholder = /\[[^\]]+\]/.test(expectedRaw) ||
+        /\{[^}]+\}/.test(expectedRaw) ||
+        /<[^>]+>/.test(expectedRaw);
     if (!hasPlaceholder)
         return null;
     const expectedPrefixRaw = expectedRaw
         .replace(/\[[^\]]+\]/g, "")
         .replace(/\{[^}]+\}/g, "")
         .replace(/<[^>]+>/g, "")
-        .replace(/\byour name\b/gi, "")
         .trim();
     const prefix = normalize(expectedPrefixRaw);
     if (!prefix)

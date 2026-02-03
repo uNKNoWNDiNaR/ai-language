@@ -90,21 +90,25 @@ function chooseHintForAttempt(question, attemptCount) {
     const hintsArr = Array.isArray(question.hints) ? question.hints : [];
     const legacyHint = typeof question.hint === "string" ? question.hint : "";
     // Attempt 2 -> light hint
-    // Attempt 3 -> stronger hint
     if (attemptCount === 2) {
         const text = (hintsArr[0] || legacyHint || "").trim();
         if (!text)
             return undefined;
         return { level: 1, text };
     }
+    // Attempt 3 -> stronger hint
     if (attemptCount === 3) {
         const text = (hintsArr[1] || hintsArr[0] || legacyHint || "").trim();
         if (!text)
             return undefined;
         return { level: 2, text };
     }
-    // Attempt 4+ -> reveal answer + short explanation
-    const reveal = `Answer: ${question.answer}. Explanation: this is the expected structure for this question.`;
+    // Attempt 4+ -> reveal explanation + answer (Explanation first)
+    const rawExplanation = typeof question.explanation === "string" ? question.explanation.trim() : "";
+    const explanation = rawExplanation || "This is the expected structure for this question.";
+    const rawAnswer = typeof question.answer === "string" ? question.answer.trim() : String(question.answer ?? "").trim();
+    const answer = rawAnswer || "—";
+    const reveal = `Explanation: ${explanation}\nAnswer: ${answer}`;
     return { level: 3, text: reveal };
 }
 function buildProgressPayload(session, lesson, statusOverride) {
@@ -340,7 +344,6 @@ const submitAnswer = async (req, res) => {
                 ...(markNeedsReview ? updateMistakes : {}),
             },
         }, { upsert: true });
-        const promptQuestion = session.state !== "COMPLETE" ? lesson.questions[session.currentQuestionIndex] : null;
         // ---- Learner profile tracking (BITE 4.1, best-effort; no behavior change) ----
         try {
             await (0, learnerProfileStore_1.recordLessonAttempt)({
@@ -349,7 +352,7 @@ const submitAnswer = async (req, res) => {
                 result: evaluation.result,
                 reasonCode: evaluation.reasonCode,
                 forcedAdvance: markNeedsReview,
-                conceptTag: promptQuestion?.conceptTag,
+                conceptTag: currentQuestion?.conceptTag,
             });
         }
         catch {
@@ -369,6 +372,21 @@ const submitAnswer = async (req, res) => {
             : "";
         const forcedAdvanceMessage = intent === "FORCED_ADVANCE" ? (0, staticTutorMessages_1.getForcedAdvanceMessage)() : "";
         const hintLeadIn = intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? (0, staticTutorMessages_1.getHintLeadIn)(attemptCount) : "";
+        // Teaching profile v2 (Phase 7.3) — best-effort (never blocks lesson)
+        let teachingPace = "normal";
+        let explanationDepth = "normal";
+        try {
+            const prefs = typeof learnerProfileStore_1.getTeachingProfilePrefs === "function"
+                ? await (0, learnerProfileStore_1.getTeachingProfilePrefs)(session.userId, session.language)
+                : null;
+            if (prefs) {
+                teachingPace = prefs.pace;
+                explanationDepth = prefs.explanationDepth;
+            }
+        }
+        catch {
+            // ignore
+        }
         let learnerProfileSummary = null;
         let topFocusReason = null;
         try {
@@ -381,22 +399,72 @@ const submitAnswer = async (req, res) => {
             learnerProfileSummary = null;
             topFocusReason = null;
         }
-        const focusNudge = (0, staticTutorMessages_1.getFocusNudge)(topFocusReason);
-        const hintLeadInWithFocus = focusNudge && intent === "ENCOURAGE_RETRY" && hintTextForPrompt
-            ? `${focusNudge} ${hintLeadIn}`.trim()
+        // ----- 7.3: Best-effort teaching profile shaping (must NEVER throw) -----
+        let focusNudge = "";
+        try {
+            if (typeof topFocusReason === "string" && topFocusReason.trim()) {
+                focusNudge = (0, staticTutorMessages_1.getFocusNudge)(topFocusReason);
+            }
+        }
+        catch {
+            focusNudge = "";
+        }
+        const pacePrefix = teachingPace === "slow" ? "Take your time." : "";
+        const hintLeadInWithFocus = intent === "ENCOURAGE_RETRY" && hintTextForPrompt
+            ? [pacePrefix, focusNudge, hintLeadIn]
+                .filter((s) => Boolean(s && s.trim()))
+                .join(" ")
+                .trim()
             : hintLeadIn;
-        const forcedAdvanceMessageWithFocus = focusNudge && intent === "FORCED_ADVANCE"
-            ? `${focusNudge} ${forcedAdvanceMessage}`.trim()
-            : forcedAdvanceMessage;
-        const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
-            retryMessage,
-            hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-            hintLeadIn: hintLeadInWithFocus,
-            forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
-            revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
-            learnerProfileSummary,
-            explanationText: intent === "FORCED_ADVANCE" ? (promptQuestion?.explanation ?? "") : "",
-        });
+        const forcedAdvanceMessageWithFocus = intent === "FORCED_ADVANCE" ? forcedAdvanceMessage : forcedAdvanceMessage;
+        let retryExplanationText = "";
+        try {
+            retryExplanationText =
+                intent === "ENCOURAGE_RETRY"
+                    ? (0, staticTutorMessages_1.getDeterministicRetryExplanation)({
+                        reasonCode: evaluation.reasonCode,
+                        attemptCount,
+                        depth: explanationDepth,
+                    })
+                    : "";
+        }
+        catch {
+            retryExplanationText = "";
+        }
+        const forcedAdvanceExplanationText = intent === "FORCED_ADVANCE" && explanationDepth !== "short"
+            ? typeof currentQuestion?.explanation === "string"
+                ? currentQuestion.explanation
+                : ""
+            : "";
+        const explanationTextForPrompt = intent === "ENCOURAGE_RETRY"
+            ? retryExplanationText
+            : intent === "FORCED_ADVANCE"
+                ? forcedAdvanceExplanationText
+                : "";
+        let tutorPrompt;
+        try {
+            tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
+                retryMessage,
+                hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+                hintLeadIn: hintLeadInWithFocus,
+                forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
+                revealAnswer: "",
+                learnerProfileSummary: learnerProfileSummary ?? undefined,
+                explanationText: "",
+            });
+        }
+        catch {
+            // Fallback to a minimal, known-safe prompt shape
+            tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
+                retryMessage,
+                hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+                hintLeadIn,
+                forcedAdvanceMessage,
+                revealAnswer: "",
+                learnerProfileSummary: learnerProfileSummary ?? undefined,
+                explanationText: intent === "FORCED_ADVANCE" ? (currentQuestion?.explanation ?? "") : "",
+            });
+        }
         let tutorMessage;
         try {
             tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: session.language });
@@ -412,8 +480,8 @@ const submitAnswer = async (req, res) => {
             questionText,
             retryMessage,
             hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-            hintLeadIn,
-            forcedAdvanceMessage,
+            hintLeadIn: hintLeadInWithFocus,
+            forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
             revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
         })) {
             tutorMessage = (0, tutorOutputGuard_1.buildTutorFallback)({
@@ -423,8 +491,8 @@ const submitAnswer = async (req, res) => {
                 questionText,
                 retryMessage,
                 hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-                hintLeadIn,
-                forcedAdvanceMessage,
+                hintLeadIn: hintLeadInWithFocus,
+                forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
                 revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
             });
         }
@@ -444,10 +512,13 @@ const submitAnswer = async (req, res) => {
                 allowForcedAdvancePractice = false;
             }
         }
-        if (session.state !== "COMPLETE" &&
-            (evaluation.result === "almost" || allowForcedAdvancePractice) &&
-            (0, featureFlags_1.isPracticeGenEnabled)() &&
-            !practiceCooldownActive) {
+        const isForcedAdvance = intent === "FORCED_ADVANCE";
+        const shouldGeneratePractice = (0, featureFlags_1.isPracticeGenEnabled)() &&
+            !practiceCooldownActive &&
+            (evaluation.result === "almost" ||
+                (allowForcedAdvancePractice && isForcedAdvance)) &&
+            (session.state !== "COMPLETE" || (isForcedAdvance && allowForcedAdvancePractice));
+        if (shouldGeneratePractice) {
             try {
                 const aiClient = { generatePracticeJSON: openaiClient_2.generatePracticeJSON };
                 const conceptTag = practiceConceptTag;

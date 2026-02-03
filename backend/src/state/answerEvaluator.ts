@@ -73,17 +73,18 @@ function matchesAnyExact(question: LessonQuestion, userNorm: string): boolean {
 
 
 function matchPlaceholderTemplate(expectedRaw: string, userNorm: string): "correct" | "almost" | null{
-  const hasPlaceholder = 
-    /\[[^\]]+\]/.test(expectedRaw) || /\{[^]}+\}/.test(expectedRaw) || /<[^>]+>/.test(expectedRaw) || /your name/i.test(expectedRaw);
+  const hasPlaceholder =
+    /\[[^\]]+\]/.test(expectedRaw) ||
+    /\{[^}]+\}/.test(expectedRaw) ||
+    /<[^>]+>/.test(expectedRaw);
 
-    if(!hasPlaceholder) return null;
+  if (!hasPlaceholder) return null;
 
-    const expectedPrefixRaw = expectedRaw
-      .replace(/\[[^\]]+\]/g, "")
-      .replace(/\{[^}]+\}/g, "")
-      .replace(/<[^>]+>/g, "")
-      .replace(/\byour name\b/gi, "")
-      .trim();
+  const expectedPrefixRaw = expectedRaw
+    .replace(/\[[^\]]+\]/g, "")
+    .replace(/\{[^}]+\}/g, "")
+    .replace(/<[^>]+>/g, "")
+    .trim();
   
   const prefix = normalize(expectedPrefixRaw);
   if(!prefix) return null;

@@ -6,7 +6,7 @@ import type { PracticeMetaType, SupportedLanguage } from "../types";
 import { generatePracticeItem } from "../services/practiceGenerator";
 import { generatePracticeJSON } from "../ai/openaiClient";
 import { getSession, updateSession } from "../storage/sessionStore";
-import { getWeakestConceptTag } from "../storage/learnerProfileStore";
+import { getWeakestConceptTag, getRecentConfusionConceptTag } from "../storage/learnerProfileStore";
 
 function isSupportedLanguage(v: unknown): v is SupportedLanguage {
   return v === "en" || v === "de" || v === "es" || v === "fr";
@@ -46,12 +46,36 @@ export const generatePractice = async (req: Request, res: Response) => {
   }
 
   if (!q) {
+  const requestedTag =
+    typeof conceptTag === "string" && conceptTag.trim() ? conceptTag.trim() : "";
+
+  let recentTag: string | null = null;
+  try {
+    recentTag =
+      typeof getRecentConfusionConceptTag === "function"
+        ? await getRecentConfusionConceptTag(userId, language)
+        : null;
+  } catch {
+    recentTag = null;
+  }
+
   const weakest = await getWeakestConceptTag(userId, language);
-  if (weakest) {
+
+  if (requestedTag) {
+    q = lesson.questions.find((x) => x.conceptTag === requestedTag);
+  }
+
+  if (!q && recentTag) {
+    q = lesson.questions.find((x) => x.conceptTag === recentTag);
+  }
+
+  if (!q && weakest) {
     q = lesson.questions.find((x) => x.conceptTag === weakest);
   }
+
   if (!q) q = lesson.questions[0];
-  }
+}
+
 
   if (!q) {
   return res.status(404).json({ error: "Source question not found" });

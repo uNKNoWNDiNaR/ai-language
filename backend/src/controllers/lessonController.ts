@@ -9,14 +9,31 @@ import type { TutorIntent } from "../ai/tutorIntent";
 import type { Lesson } from "../state/lessonLoader";
 import { loadLesson } from "../state/lessonLoader";
 import { evaluateAnswer } from "../state/answerEvaluator";
-import { getDeterministicRetryMessage, getForcedAdvanceMessage, getHintLeadIn,getFocusNudge } from "../ai/staticTutorMessages";
+
+import {
+  getDeterministicRetryMessage,
+  getForcedAdvanceMessage,
+  getHintLeadIn,
+  getFocusNudge,
+  getDeterministicRetryExplanation,
+  type ExplanationDepth,
+} from "../ai/staticTutorMessages";
+
 import { LessonProgressModel } from "../state/progressState";
 import { generatePracticeItem } from "../services/practiceGenerator";
 import { generatePracticeJSON } from "../ai/openaiClient";
 import { PracticeMetaType } from "../types";
 import type { SupportedLanguage } from "../types";
 import { isTutorMessageAcceptable, buildTutorFallback } from "../ai/tutorOutputGuard";
-import { recordLessonAttempt, getLearnerProfileSummary, getLearnerTopFocusReason, getConceptMistakeCount } from "../storage/learnerProfileStore";
+
+import {
+  recordLessonAttempt,
+  getLearnerProfileSummary,
+  getLearnerTopFocusReason,
+  getConceptMistakeCount,
+  getTeachingProfilePrefs,
+} from "../storage/learnerProfileStore";
+
 import { isPracticeGenEnabled } from "../config/featureFlags";
 
 const FORCED_ADVANCE_PRACTICE_THRESHOLD = 2;
@@ -90,6 +107,7 @@ function getTutorIntent(state: LessonState, isCorrect?: boolean, markNeedsReview
   return "ASK_QUESTION";
 }
 
+
 type HintResponse = { level: number; text: string };
 
 function chooseHintForAttempt(question: any, attemptCount: number): HintResponse | undefined {
@@ -103,23 +121,30 @@ function chooseHintForAttempt(question: any, attemptCount: number): HintResponse
   const legacyHint: string = typeof question.hint === "string" ? question.hint : "";
 
   // Attempt 2 -> light hint
-  // Attempt 3 -> stronger hint
   if (attemptCount === 2) {
     const text = (hintsArr[0] || legacyHint || "").trim();
     if (!text) return undefined;
     return { level: 1, text };
   }
 
+  // Attempt 3 -> stronger hint
   if (attemptCount === 3) {
     const text = (hintsArr[1] || hintsArr[0] || legacyHint || "").trim();
     if (!text) return undefined;
     return { level: 2, text };
   }
 
-  // Attempt 4+ -> reveal answer + short explanation
-  const reveal = `Answer: ${question.answer}. Explanation: this is the expected structure for this question.`;
+  // Attempt 4+ -> reveal explanation + answer (Explanation first)
+  const rawExplanation = typeof question.explanation === "string" ? question.explanation.trim() : "";
+  const explanation = rawExplanation || "This is the expected structure for this question.";
+
+  const rawAnswer = typeof question.answer === "string" ? question.answer.trim() : String(question.answer ?? "").trim();
+  const answer = rawAnswer || "—";
+
+  const reveal = `Explanation: ${explanation}\nAnswer: ${answer}`;
   return { level: 3, text: reveal };
 }
+
 
 type ProgressPayload = {
   currentQuestionIndex: number;
@@ -406,8 +431,6 @@ export const submitAnswer = async (req: Request, res: Response) => {
       { upsert: true }
     );
 
-    const promptQuestion =
-      session.state !== "COMPLETE" ? lesson.questions[session.currentQuestionIndex] : null;
 
         // ---- Learner profile tracking (BITE 4.1, best-effort; no behavior change) ----
     try {
@@ -417,7 +440,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
         result: evaluation.result,
         reasonCode: evaluation.reasonCode,
         forcedAdvance: markNeedsReview,
-        conceptTag: promptQuestion?.conceptTag,
+        conceptTag: currentQuestion?.conceptTag,
       });
     } catch {
       // best-effort: never break lesson flow
@@ -445,7 +468,26 @@ export const submitAnswer = async (req: Request, res: Response) => {
 
     const forcedAdvanceMessage = intent === "FORCED_ADVANCE" ? getForcedAdvanceMessage() : "";
 
-    const hintLeadIn = intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? getHintLeadIn(attemptCount) : "";
+    const hintLeadIn =
+      intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? getHintLeadIn(attemptCount) : "";
+
+    // Teaching profile v2 (Phase 7.3) — best-effort (never blocks lesson)
+    let teachingPace: "slow" | "normal" = "normal";
+    let explanationDepth: ExplanationDepth = "normal";
+
+    try {
+      const prefs =
+        typeof getTeachingProfilePrefs === "function"
+          ? await getTeachingProfilePrefs(session.userId, session.language as SupportedLanguage)
+          : null;
+
+      if (prefs) {
+        teachingPace = prefs.pace;
+        explanationDepth = prefs.explanationDepth;
+      }
+    } catch {
+      // ignore
+    }
 
     let learnerProfileSummary: string | null = null;
     let topFocusReason: string | null = null;
@@ -460,28 +502,82 @@ export const submitAnswer = async (req: Request, res: Response) => {
       topFocusReason = null;
     }
 
-    const focusNudge = getFocusNudge(topFocusReason);
+        // ----- 7.3: Best-effort teaching profile shaping (must NEVER throw) -----
+    let focusNudge = "";
+    try {
+      if (typeof topFocusReason === "string" && topFocusReason.trim()) {
+        focusNudge = getFocusNudge(topFocusReason);
+      }
+    } catch {
+      focusNudge = "";
+    }
+
+    const pacePrefix = teachingPace === "slow" ? "Take your time." : "";
 
     const hintLeadInWithFocus =
-      focusNudge && intent === "ENCOURAGE_RETRY" && hintTextForPrompt
-        ? `${focusNudge} ${hintLeadIn}`.trim()
+      intent === "ENCOURAGE_RETRY" && hintTextForPrompt
+        ? [pacePrefix, focusNudge, hintLeadIn]
+            .filter((s): s is string => Boolean(s && s.trim()))
+            .join(" ")
+            .trim()
         : hintLeadIn;
 
     const forcedAdvanceMessageWithFocus =
-      focusNudge && intent === "FORCED_ADVANCE"
-        ? `${focusNudge} ${forcedAdvanceMessage}`.trim()
-        : forcedAdvanceMessage;
+      intent === "FORCED_ADVANCE" ? forcedAdvanceMessage : forcedAdvanceMessage;
 
-    const tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
-      retryMessage,
-      hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-      hintLeadIn: hintLeadInWithFocus,
-      forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
-      revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
-      learnerProfileSummary,
-      explanationText: intent === "FORCED_ADVANCE" ? (promptQuestion?.explanation ?? "") : "",
 
-    });
+    let retryExplanationText = "";
+    try {
+      retryExplanationText =
+        intent === "ENCOURAGE_RETRY"
+          ? getDeterministicRetryExplanation({
+              reasonCode: evaluation.reasonCode,
+              attemptCount,
+              depth: explanationDepth,
+            })
+          : "";
+    } catch {
+      retryExplanationText = "";
+    }
+
+    const forcedAdvanceExplanationText =
+      intent === "FORCED_ADVANCE" && explanationDepth !== "short"
+        ? typeof currentQuestion?.explanation === "string"
+          ? currentQuestion.explanation
+          : ""
+        : "";
+
+    const explanationTextForPrompt =
+      intent === "ENCOURAGE_RETRY"
+        ? retryExplanationText
+        : intent === "FORCED_ADVANCE"
+          ? forcedAdvanceExplanationText
+          : "";
+
+    let tutorPrompt: string;
+    try {
+      tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
+        retryMessage,
+        hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+        hintLeadIn: hintLeadInWithFocus,
+        forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
+        revealAnswer: "",
+        learnerProfileSummary: learnerProfileSummary ?? undefined,
+        explanationText: "",
+      });
+    } catch {
+      // Fallback to a minimal, known-safe prompt shape
+      tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
+        retryMessage,
+        hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
+        hintLeadIn,
+        forcedAdvanceMessage,
+        revealAnswer: "",
+        learnerProfileSummary: learnerProfileSummary ?? undefined,
+        explanationText: intent === "FORCED_ADVANCE" ? (currentQuestion?.explanation ?? "") : "",
+      });
+    }
+
 
     let tutorMessage: string;
     try {
@@ -491,7 +587,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
     }
 
     // ✅ Drift guard (this is what your failing test expects)
-    if (
+          if (
       !isTutorMessageAcceptable({
         intent,
         language: session.language,
@@ -499,8 +595,8 @@ export const submitAnswer = async (req: Request, res: Response) => {
         questionText,
         retryMessage,
         hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-        hintLeadIn,
-        forcedAdvanceMessage,
+        hintLeadIn: hintLeadInWithFocus,
+        forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
         revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
       })
     ) {
@@ -511,11 +607,13 @@ export const submitAnswer = async (req: Request, res: Response) => {
         questionText,
         retryMessage,
         hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-        hintLeadIn,
-        forcedAdvanceMessage,
+        hintLeadIn: hintLeadInWithFocus,
+        forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
         revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
       });
     }
+
+
 
     session.messages.push({ role: "assistant", content: tutorMessage });
     await session.save();
@@ -543,19 +641,23 @@ export const submitAnswer = async (req: Request, res: Response) => {
     }
 
 
-    if (
-      session.state !== "COMPLETE" && 
-      (evaluation.result === "almost" || allowForcedAdvancePractice) &&
+    const isForcedAdvance = intent === "FORCED_ADVANCE";
+
+    const shouldGeneratePractice =
       isPracticeGenEnabled() &&
-      !practiceCooldownActive
-    ) {
+      !practiceCooldownActive &&
+        (evaluation.result === "almost" || 
+        (allowForcedAdvancePractice && isForcedAdvance)) &&
+      (session.state !== "COMPLETE" || (isForcedAdvance && allowForcedAdvancePractice));
+
+    if (shouldGeneratePractice) {
       try {
         const aiClient = { generatePracticeJSON };
-
+      
         const conceptTag = practiceConceptTag;
-
+      
         const practiceType: PracticeMetaType = "variation";
-
+      
         const { item: practiceItem } = await generatePracticeItem(
           {
             language: session.language,
@@ -567,34 +669,35 @@ export const submitAnswer = async (req: Request, res: Response) => {
           },
           aiClient
         );
-
+      
         const pb: any = (session as any).practiceById ?? {};
         const pa: any = (session as any).practiceAttempts ?? {};
-
+      
         if (typeof pb.set === "function") pb.set(practiceItem.practiceId, practiceItem);
         else pb[practiceItem.practiceId] = practiceItem;
-
+      
         if (typeof pa.set === "function") {
           if (pa.get(practiceItem.practiceId) === undefined) pa.set(practiceItem.practiceId, 0);
         } else {
           if (pa[practiceItem.practiceId] === undefined) pa[practiceItem.practiceId] = 0;
         }
-
+      
         (session as any).practiceById = pb;
         (session as any).practiceAttempts = pa;
-
+      
         const cd: any = (session as any).practiceCooldownByQuestionId ?? new Map();
         if (typeof cd.set === "function") cd.set(qid, 1);
         else cd[qid] = 1;
         (session as any).practiceCooldownByQuestionId = cd;
-
+      
         await session.save();
-
+      
         practice = { practiceId: practiceItem.practiceId, prompt: practiceItem.prompt };
       } catch {
         practice = undefined;
       }
     }
+
 
     const progress = buildProgressPayload(session, lesson, baseStatus as any);
 
