@@ -1,6 +1,6 @@
 // frontend/src/components/FeedbackCard.tsx
 
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { submitFeedback, type SupportedLanguage } from "../api/lessonAPI";
 
 type Props = {
