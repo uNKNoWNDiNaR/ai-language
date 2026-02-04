@@ -10,20 +10,12 @@ const answerEvaluator_1 = require("../state/answerEvaluator");
 const staticTutorMessages_1 = require("../ai/staticTutorMessages");
 const progressState_1 = require("../state/progressState");
 const practiceGenerator_1 = require("../services/practiceGenerator");
-const openaiClient_2 = require("../ai/openaiClient");
 const tutorOutputGuard_1 = require("../ai/tutorOutputGuard");
 const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 const featureFlags_1 = require("../config/featureFlags");
+const lessonHelpers_1 = require("./lessonHelpers");
+const mapLike_1 = require("../utils/mapLike");
 const FORCED_ADVANCE_PRACTICE_THRESHOLD = 2;
-function isSupportedLanguage(v) {
-    return v === "en" || v === "de" || v === "es" || v === "fr";
-}
-function normalizeLanguage(v) {
-    if (typeof v !== "string")
-        return null;
-    const t = v.trim().toLowerCase();
-    return isSupportedLanguage(t) ? t : null;
-}
 async function ensureTutorPromptOnResume(session) {
     const last = session.messages?.[session.messages.length - 1];
     if (last && last.role === "assistant")
@@ -49,7 +41,6 @@ async function ensureTutorPromptOnResume(session) {
     catch {
         tutorMessage = "I'm having trouble responding right now. Please try again later.";
     }
-    // Drift guard
     if (!(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
         intent,
         language: session.language,
@@ -69,66 +60,11 @@ async function ensureTutorPromptOnResume(session) {
     return tutorMessage;
 }
 //----------------------
-// Helper: map state ->tutor intent
-//----------------------
-function getTutorIntent(state, isCorrect, markNeedsReview) {
-    if (state === "COMPLETE")
-        return "END_LESSON";
-    if (state === "ADVANCE")
-        return markNeedsReview ? "FORCED_ADVANCE" : "ADVANCE_LESSON";
-    if (isCorrect === false)
-        return "ENCOURAGE_RETRY";
-    return "ASK_QUESTION";
-}
-function chooseHintForAttempt(question, attemptCount) {
-    // Attempt 1 -> no hint
-    if (attemptCount <= 1)
-        return undefined;
-    // Support BOTH formats:
-    // - hint?: string (legacy)
-    // - hints?: string[] (new)
-    const hintsArr = Array.isArray(question.hints) ? question.hints : [];
-    const legacyHint = typeof question.hint === "string" ? question.hint : "";
-    // Attempt 2 -> light hint
-    if (attemptCount === 2) {
-        const text = (hintsArr[0] || legacyHint || "").trim();
-        if (!text)
-            return undefined;
-        return { level: 1, text };
-    }
-    // Attempt 3 -> stronger hint
-    if (attemptCount === 3) {
-        const text = (hintsArr[1] || hintsArr[0] || legacyHint || "").trim();
-        if (!text)
-            return undefined;
-        return { level: 2, text };
-    }
-    // Attempt 4+ -> reveal explanation + answer (Explanation first)
-    const rawExplanation = typeof question.explanation === "string" ? question.explanation.trim() : "";
-    const explanation = rawExplanation || "This is the expected structure for this question.";
-    const rawAnswer = typeof question.answer === "string" ? question.answer.trim() : String(question.answer ?? "").trim();
-    const answer = rawAnswer || "—";
-    const reveal = `Explanation: ${explanation}\nAnswer: ${answer}`;
-    return { level: 3, text: reveal };
-}
-function buildProgressPayload(session, lesson, statusOverride) {
-    const total = Array.isArray(lesson.questions) ? lesson.questions.length : 0;
-    const idx = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
-    const safeTotal = total > 0 ? total : 1;
-    const clampedIdx = Math.max(0, Math.min(safeTotal - 1, idx));
-    const status = statusOverride ?? (session.state === "COMPLETE" ? "completed" : "in_progress");
-    return {
-        currentQuestionIndex: clampedIdx,
-        totalQuestions: safeTotal,
-        status,
-    };
-}
-//----------------------
 // Start lesson
 //----------------------
 const startLesson = async (req, res) => {
     const { userId, language, lessonId, restart } = req.body;
-    const lang = normalizeLanguage(language);
+    const lang = (0, lessonHelpers_1.normalizeLanguage)(language);
     if (!userId)
         return res.status(400).json({ error: "UserId is required" });
     if (!lang || !lessonId)
@@ -142,19 +78,9 @@ const startLesson = async (req, res) => {
                     await progressState_1.LessonProgressModel.deleteOne({ userId });
                     session = null;
                 }
-                else if (session.state === "COMPLETE") {
-                    const resumeLesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
-                    const progress = resumeLesson ? buildProgressPayload(session, resumeLesson) : undefined;
-                    const tutorMessage = await ensureTutorPromptOnResume(session);
-                    return res.status(200).json({
-                        session,
-                        ...(tutorMessage ? { tutorMessage } : {}),
-                        ...(progress ? { progress } : {}),
-                    });
-                }
                 else {
                     const resumeLesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
-                    const progress = resumeLesson ? buildProgressPayload(session, resumeLesson) : undefined;
+                    const progress = resumeLesson ? (0, lessonHelpers_1.buildProgressPayload)(session, resumeLesson) : undefined;
                     const tutorMessage = await ensureTutorPromptOnResume(session);
                     return res.status(200).json({
                         session,
@@ -174,7 +100,7 @@ const startLesson = async (req, res) => {
             lessonId,
             state: "USER_INPUT",
             attempts: 0,
-            maxAttempts: 4, // Phase 2.2 requires attempt 4+ behavior
+            maxAttempts: 4,
             currentQuestionIndex: 0,
             messages: [],
             language: lang,
@@ -189,7 +115,6 @@ const startLesson = async (req, res) => {
         catch {
             tutorMessage = "I'm having trouble responding right now. Please try again later.";
         }
-        // Drift guard
         if (!(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
             intent,
             language: lang,
@@ -205,7 +130,6 @@ const startLesson = async (req, res) => {
         }
         const intitialMessage = { role: "assistant", content: tutorMessage };
         session = await sessionState_1.LessonSessionModel.create({ ...newSession, messages: [intitialMessage] });
-        // Progress: first interaction => in_progress
         await progressState_1.LessonProgressModel.updateOne({ userId, language: lang, lessonId }, {
             $setOnInsert: { status: "in_progress" },
             $set: {
@@ -213,11 +137,11 @@ const startLesson = async (req, res) => {
                 lastActiveAt: new Date(),
             },
         }, { upsert: true });
-        const progress = buildProgressPayload(session, lesson);
+        const progress = (0, lessonHelpers_1.buildProgressPayload)(session, lesson);
         return res.status(201).json({ session, tutorMessage, progress });
     }
     catch (err) {
-        console.error("Start  lesson error", err);
+        console.error("Start lesson error", err);
         return res.status(500).json({ error: "Server error" });
     }
 };
@@ -234,8 +158,7 @@ const submitAnswer = async (req, res) => {
         const session = await sessionState_1.LessonSessionModel.findOne({ userId });
         if (!session)
             return res.status(404).json({ error: "No active session found" });
-        // Keep legacy behavior: session fields only set if missing
-        if (!session.language && isSupportedLanguage(String(language || "").trim().toLowerCase())) {
+        if (!session.language && (0, lessonHelpers_1.isSupportedLanguage)(String(language || "").trim().toLowerCase())) {
             session.language = String(language).trim().toLowerCase();
         }
         if (!session.lessonId && typeof lessonId === "string")
@@ -249,10 +172,8 @@ const submitAnswer = async (req, res) => {
         const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
         if (!lesson)
             return res.status(404).json({ error: "Lesson not found" });
-        // ✅ Phase 4: If lesson is already complete, do NOT accept further answers.
-        // Return current session + progress without mutating messages or attempts.
         if (session.state === "COMPLETE") {
-            const progress = buildProgressPayload(session, lesson, "completed");
+            const progress = (0, lessonHelpers_1.buildProgressPayload)(session, lesson, "completed");
             return res.status(200).json({ progress, session });
         }
         session.messages.push({ role: "user", content: answer });
@@ -264,10 +185,9 @@ const submitAnswer = async (req, res) => {
                 code: "SESSION_OUT_OF_SYNC",
             });
         }
-        // Phase 2.2: per-question attempt count
         const qid = String(currentQuestion.id);
-        const practiceCooldown = session.practiceCooldownByQuestionId ?? new Map();
-        const practiceCooldownActive = (practiceCooldown.get?.(qid) ?? practiceCooldown[qid] ?? 0) >= 1;
+        const practiceCooldownByQuestionId = session.practiceCooldownByQuestionId;
+        const practiceCooldownActive = (0, mapLike_1.mapLikeGetNumber)(practiceCooldownByQuestionId, qid, 0) >= 1;
         const attemptMap = session.attemptCountByQuestionId || new Map();
         const lastAnswerMap = session.lastAnswerByQuestionId || new Map();
         const prevAttemptCount = attemptMap.get(qid) || 0;
@@ -279,15 +199,12 @@ const submitAnswer = async (req, res) => {
         lastAnswerMap.set(qid, nowAnswer);
         session.attemptCountByQuestionId = attemptMap;
         session.lastAnswerByQuestionId = lastAnswerMap;
-        // Evaluation (Phase 2.2)
         const evaluation = (0, answerEvaluator_1.evaluateAnswer)(currentQuestion, answer, session.language);
         const isCorrect = evaluation.result === "correct";
-        // Hint selection (Phase 2.2)
-        const hintObj = chooseHintForAttempt(currentQuestion, attemptCount);
-        const hintForResponse = hintObj && hintObj.level < 3 ? hintObj : hintObj; // include reveal hint too
+        const hintObj = (0, lessonHelpers_1.chooseHintForAttempt)(currentQuestion, attemptCount);
+        const hintForResponse = hintObj;
         const hintTextForPrompt = hintObj ? hintObj.text : "";
         let markNeedsReview = false;
-        // Lesson progression rules
         if (isCorrect) {
             attemptMap.set(qid, 0);
             if (currentIndex + 1 >= lesson.questions.length) {
@@ -297,13 +214,8 @@ const submitAnswer = async (req, res) => {
                 session.currentQuestionIndex = currentIndex + 1;
                 session.state = "ADVANCE";
             }
-            // reset cooldown for this question after correct
-            const cd = session.practiceCooldownByQuestionId ?? new Map();
-            if (typeof cd.set === "function")
-                cd.set(qid, 0);
-            else
-                cd[qid] = 0;
-            session.practiceCooldownByQuestionId = cd;
+            const cd0 = session.practiceCooldownByQuestionId ?? new Map();
+            session.practiceCooldownByQuestionId = (0, mapLike_1.mapLikeSet)(cd0, qid, 0);
         }
         else {
             if (attemptCount >= 4) {
@@ -315,19 +227,13 @@ const submitAnswer = async (req, res) => {
                     session.currentQuestionIndex = currentIndex + 1;
                     session.state = "ADVANCE";
                 }
-                // reset cooldown for this question after forced advance
-                const cd = session.practiceCooldownByQuestionId ?? new Map();
-                if (typeof cd.set === "function")
-                    cd.set(qid, 0);
-                else
-                    cd[qid] = 0;
-                session.practiceCooldownByQuestionId = cd;
+                const cd0 = session.practiceCooldownByQuestionId ?? new Map();
+                session.practiceCooldownByQuestionId = (0, mapLike_1.mapLikeSet)(cd0, qid, 0);
             }
             else {
                 session.state = "USER_INPUT";
             }
         }
-        // ---- Progress persistence (Phase 2.2) ----
         const baseStatus = session.state === "COMPLETE" ? (markNeedsReview ? "needs_review" : "completed") : "in_progress";
         const updateMistakes = {};
         if (markNeedsReview) {
@@ -344,7 +250,6 @@ const submitAnswer = async (req, res) => {
                 ...(markNeedsReview ? updateMistakes : {}),
             },
         }, { upsert: true });
-        // ---- Learner profile tracking (BITE 4.1, best-effort; no behavior change) ----
         try {
             await (0, learnerProfileStore_1.recordLessonAttempt)({
                 userId: session.userId,
@@ -356,10 +261,9 @@ const submitAnswer = async (req, res) => {
             });
         }
         catch {
-            // best-effort: never break lesson flow
+            // ignore
         }
-        // ---- Deterministic retry message (Phase 2.2) ----
-        const intent = getTutorIntent(session.state, isCorrect, markNeedsReview);
+        const intent = (0, lessonHelpers_1.getTutorIntent)(session.state, isCorrect, markNeedsReview);
         const safeIndex = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
         const questionText = session.state !== "COMPLETE" && lesson.questions[safeIndex] ? lesson.questions[safeIndex].question : "";
         const revealAnswer = intent === "FORCED_ADVANCE" ? String(currentQuestion.answer || "").trim() : "";
@@ -372,7 +276,6 @@ const submitAnswer = async (req, res) => {
             : "";
         const forcedAdvanceMessage = intent === "FORCED_ADVANCE" ? (0, staticTutorMessages_1.getForcedAdvanceMessage)() : "";
         const hintLeadIn = intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? (0, staticTutorMessages_1.getHintLeadIn)(attemptCount) : "";
-        // Teaching profile v2 (Phase 7.3) — best-effort (never blocks lesson)
         let teachingPace = "normal";
         let explanationDepth = "normal";
         try {
@@ -399,7 +302,6 @@ const submitAnswer = async (req, res) => {
             learnerProfileSummary = null;
             topFocusReason = null;
         }
-        // ----- 7.3: Best-effort teaching profile shaping (must NEVER throw) -----
         let focusNudge = "";
         try {
             if (typeof topFocusReason === "string" && topFocusReason.trim()) {
@@ -454,7 +356,6 @@ const submitAnswer = async (req, res) => {
             });
         }
         catch {
-            // Fallback to a minimal, known-safe prompt shape
             tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
                 retryMessage,
                 hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
@@ -472,7 +373,6 @@ const submitAnswer = async (req, res) => {
         catch {
             tutorMessage = "I'm having trouble responding right now. please try again.";
         }
-        // ✅ Drift guard (this is what your failing test expects)
         if (!(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
             intent,
             language: session.language,
@@ -502,8 +402,10 @@ const submitAnswer = async (req, res) => {
         const practiceConceptTag = typeof currentQuestion.conceptTag === "string" && currentQuestion.conceptTag.trim().length > 0
             ? currentQuestion.conceptTag.trim()
             : `lesson-${session.lessonId}-q${currentQuestion.id}`;
+        const isForcedAdvance = intent === "FORCED_ADVANCE";
+        // Forced-advance practice is gated by concept mistake count threshold
         let allowForcedAdvancePractice = false;
-        if (intent === "FORCED_ADVANCE") {
+        if (isForcedAdvance) {
             try {
                 const conceptCount = await (0, learnerProfileStore_1.getConceptMistakeCount)(session.userId, session.language, practiceConceptTag);
                 allowForcedAdvancePractice = conceptCount >= FORCED_ADVANCE_PRACTICE_THRESHOLD;
@@ -512,46 +414,37 @@ const submitAnswer = async (req, res) => {
                 allowForcedAdvancePractice = false;
             }
         }
-        const isForcedAdvance = intent === "FORCED_ADVANCE";
+        // Core schedule rule:
+        // - allow on "almost" (once per question via cooldown)
+        // - allow on forced-advance ONLY if threshold met (once per question via cooldown)
         const shouldGeneratePractice = (0, featureFlags_1.isPracticeGenEnabled)() &&
             !practiceCooldownActive &&
-            (evaluation.result === "almost" ||
-                (allowForcedAdvancePractice && isForcedAdvance)) &&
-            (session.state !== "COMPLETE" || (isForcedAdvance && allowForcedAdvancePractice));
+            (evaluation.result === "almost" || (isForcedAdvance && allowForcedAdvancePractice));
         if (shouldGeneratePractice) {
             try {
-                const aiClient = { generatePracticeJSON: openaiClient_2.generatePracticeJSON };
-                const conceptTag = practiceConceptTag;
+                const aiClient = { generatePracticeJSON: openaiClient_1.generatePracticeJSON };
                 const practiceType = "variation";
                 const { item: practiceItem } = await (0, practiceGenerator_1.generatePracticeItem)({
                     language: session.language,
                     lessonId: session.lessonId,
                     sourceQuestionText: currentQuestion.question,
                     expectedAnswerRaw: currentQuestion.answer,
-                    conceptTag,
+                    conceptTag: practiceConceptTag,
                     type: practiceType,
                 }, aiClient);
-                const pb = session.practiceById ?? {};
-                const pa = session.practiceAttempts ?? {};
-                if (typeof pb.set === "function")
-                    pb.set(practiceItem.practiceId, practiceItem);
-                else
-                    pb[practiceItem.practiceId] = practiceItem;
-                if (typeof pa.set === "function") {
-                    if (pa.get(practiceItem.practiceId) === undefined)
-                        pa.set(practiceItem.practiceId, 0);
-                }
-                else {
-                    if (pa[practiceItem.practiceId] === undefined)
-                        pa[practiceItem.practiceId] = 0;
+                // Persist practice item
+                let pb = session.practiceById;
+                pb = (0, mapLike_1.mapLikeSet)(pb, practiceItem.practiceId, practiceItem);
+                // Persist attempts counter (init only once)
+                let pa = session.practiceAttempts;
+                if (!(0, mapLike_1.mapLikeHas)(pa, practiceItem.practiceId)) {
+                    pa = (0, mapLike_1.mapLikeSet)(pa, practiceItem.practiceId, 0);
                 }
                 session.practiceById = pb;
                 session.practiceAttempts = pa;
-                const cd = session.practiceCooldownByQuestionId ?? new Map();
-                if (typeof cd.set === "function")
-                    cd.set(qid, 1);
-                else
-                    cd[qid] = 1;
+                // Cooldown this question so we don’t generate repeated practices
+                let cd = session.practiceCooldownByQuestionId;
+                cd = (0, mapLike_1.mapLikeSet)(cd, qid, 1);
                 session.practiceCooldownByQuestionId = cd;
                 await session.save();
                 practice = { practiceId: practiceItem.practiceId, prompt: practiceItem.prompt };
@@ -560,7 +453,7 @@ const submitAnswer = async (req, res) => {
                 practice = undefined;
             }
         }
-        const progress = buildProgressPayload(session, lesson, baseStatus);
+        const progress = (0, lessonHelpers_1.buildProgressPayload)(session, lesson, baseStatus);
         return res.status(200).json({
             progress,
             session,
@@ -592,7 +485,7 @@ const getSessionHandler = async (req, res) => {
             return res.status(404).json({ error: "No active sessions found" });
         const tutorMessage = await ensureTutorPromptOnResume(session);
         const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
-        const progress = lesson ? buildProgressPayload(session, lesson) : undefined;
+        const progress = lesson ? (0, lessonHelpers_1.buildProgressPayload)(session, lesson) : undefined;
         return res.status(200).json({
             session,
             messages: session.messages,

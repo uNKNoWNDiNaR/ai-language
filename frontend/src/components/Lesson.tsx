@@ -659,166 +659,162 @@ export function Lesson() {
 
       {/* Controls (only when NOT in a session) */}
       {!sessionActive && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr auto",
-            gap: 10,
-            alignItems: "end",
-            marginBottom: 12,
-          }}
-        >
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 12, opacity: 0.75 }}>Profile</span>
-            <input
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              disabled={lockControls}
-              style={{
-                padding: 10,
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                background: lockControls ? "#f6f6f6" : "white",
-                cursor: lockControls ? "not-allowed" : "text",
-              }}
-            />
-          </label>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 12, opacity: 0.75 }}>Language</span>
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value as "en" | "de" | "es" | "fr")}
-              disabled={lockControls}
-              style={{
-                padding: 10,
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                backgroundColor: lockControls ? "#f6f6f6" : "white",
-                cursor: lockControls ? "not-allowed" : "pointer",
-              }}
-            >
-              <option value="en">English</option>
-              <option value="de">German</option>
-              <option value="es">Spanish</option>
-              <option value="fr">French</option>
-            </select>
-          </label>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 12, opacity: 0.75 }}>Lesson</span>
-            <input
-              value={lessonId}
-              onChange={(e) => setLessonId(e.target.value)}
-              disabled={lockControls}
-              style={{
-                padding: 10,
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                background: lockControls ? "#f6f6f6" : "white",
-                cursor: lockControls ? "not-allowed" : "text",
-              }}
-            />
-          </label>
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={handleStart}
-              disabled={disableStartResume}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #ddd",
-                borderColor: disableStartResume ? "#ddd" : "#007AFF",
-                background: disableStartResume ? "#E5E5EA" : "#007AFF",
-                opacity: disableStartResume ? 0.7 : 1,
-                color: disableStartResume ? "#666" : "white",
-                cursor: disableStartResume ? "not-allowed" : "pointer",
-              }}
-            >
-              Start
-            </button>
-
-            <button
-              onClick={handleResume}
-              disabled={!canResume}
-              title={!canResume ? "No saved session for this profile/language/lesson yet." : "Resume"}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #ddd",
-                background: !canResume ? "#f6f6f6" : "white",
-                opacity: !canResume ? 0.7 : 1,
-                cursor: !canResume ? "not-allowed" : "pointer",
-              }}
-            >
-              Resume
-            </button>
-          </div>
+        <>
           <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-            alignItems: "end",
-            marginBottom: 12,
-          }}
-        >
-        <div 
-          style={{
-            display: "flex",
-            gap:12,
-            alignItems: "end",
-            padding: "10px, 12px",
-            borderRadius: 14,
-            border: "1PX solid #e6e6e6",
-            background: "#F2F2F7",
-            width: "fit-content",
-          }}
-        >
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Pace</span>
-            <select
-              value={teachingPace}
-              onChange={(e) => setTeachingPace(e.target.value as TeachingPace)}
-              disabled={lockControls}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr auto",
+              gap: 10,
+              alignItems: "end",
+              marginBottom: 12,
+            }}
+          >
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 12, opacity: 0.75 }}>Profile</span>
+              <input
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                disabled={lockControls}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #ddd",
+                  background: lockControls ? "#f6f6f6" : "white",
+                  cursor: lockControls ? "not-allowed" : "text",
+                }}
+              />
+            </label>
+              
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 12, opacity: 0.75 }}>Language</span>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as "en" | "de" | "es" | "fr")}
+                disabled={lockControls}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #ddd",
+                  backgroundColor: lockControls ? "#f6f6f6" : "white",
+                  cursor: lockControls ? "not-allowed" : "pointer",
+                }}
+              >
+                <option value="en">English</option>
+                <option value="de">German</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+              </select>
+            </label>
+              
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 12, opacity: 0.75 }}>Lesson</span>
+              <input
+                value={lessonId}
+                onChange={(e) => setLessonId(e.target.value)}
+                disabled={lockControls}
+                style={{
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid #ddd",
+                  background: lockControls ? "#f6f6f6" : "white",
+                  cursor: lockControls ? "not-allowed" : "text",
+                }}
+              />
+            </label>
+              
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={handleStart}
+                disabled={disableStartResume}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #ddd",
+                  borderColor: disableStartResume ? "#ddd" : "#007AFF",
+                  background: disableStartResume ? "#E5E5EA" : "#007AFF",
+                  opacity: disableStartResume ? 0.7 : 1,
+                  color: disableStartResume ? "#666" : "white",
+                  cursor: disableStartResume ? "not-allowed" : "pointer",
+                }}
+              >
+                Start
+              </button>
+              
+              <button
+                onClick={handleResume}
+                disabled={!canResume}
+                title={!canResume ? "No saved session for this profile/language/lesson yet." : "Resume"}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #ddd",
+                  background: !canResume ? "#f6f6f6" : "white",
+                  opacity: !canResume ? 0.7 : 1,
+                  cursor: !canResume ? "not-allowed" : "pointer",
+                }}
+              >
+                Resume
+              </button>
+            </div>
+          </div>
+              
+          {/* Teaching prefs row */}
+          <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
+            <div
               style={{
-                padding: 10,
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                backgroundColor: lockControls ? "#f6f6f6" : "white",
-                cursor: lockControls ? "not-allowed" : "pointer",
-                minWidth: 140
+                display: "flex",
+                gap: 12,
+                alignItems: "end",
+                padding: "10px 12px",
+                borderRadius: 14,
+                border: "1px solid #e6e6e6",
+                background: "#F2F2F7",
+                width: "fit-content",
               }}
             >
-              <option value="normal">Normal</option>
-              <option value="slow">Slow</option>
-            </select>
-          </label>
-
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: 12, opacity: 0.75 }}>Explanations</span>
-            <select
-              value={explanationDepth}
-              onChange={(e) => setExplanationDepth(e.target.value as ExplanationDepth)}
-              disabled={lockControls}
-              style={{
-                padding: 10,
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                backgroundColor: lockControls ? "#f6f6f6" : "white",
-                cursor: lockControls ? "not-allowed" : "pointer",
-                minWidth: 160
-              }}
-            >
-              <option value="short">Short</option>
-              <option value="normal">Normal</option>
-              <option value="detailed">Detailed</option>
-            </select>
-          </label>
-        </div>
-        </div>
-        </div>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span style={{ fontSize: 12, opacity: 0.7 }}>Pace</span>
+                <select
+                  value={teachingPace}
+                  onChange={(e) => setTeachingPace(e.target.value as TeachingPace)}
+                  disabled={lockControls}
+                  style={{
+                    padding: 10,
+                    borderRadius: 10,
+                    border: "1px solid #ddd",
+                    backgroundColor: lockControls ? "#f6f6f6" : "white",
+                    cursor: lockControls ? "not-allowed" : "pointer",
+                    minWidth: 140,
+                  }}
+                >
+                  <option value="normal">Normal</option>
+                  <option value="slow">Slow</option>
+                </select>
+              </label>
+                
+              <label style={{ display: "grid", gap: 6 }}>
+                <span style={{ fontSize: 12, opacity: 0.75 }}>Explanations</span>
+                <select
+                  value={explanationDepth}
+                  onChange={(e) => setExplanationDepth(e.target.value as ExplanationDepth)}
+                  disabled={lockControls}
+                  style={{
+                    padding: 10,
+                    borderRadius: 10,
+                    border: "1px solid #ddd",
+                    backgroundColor: lockControls ? "#f6f6f6" : "white",
+                    cursor: lockControls ? "not-allowed" : "pointer",
+                    minWidth: 160,
+                  }}
+                >
+                  <option value="short">Short</option>
+                  <option value="normal">Normal</option>
+                  <option value="detailed">Detailed</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Session header */}

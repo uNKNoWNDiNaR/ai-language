@@ -1,128 +1,133 @@
 // backend/src/ai/promptBuilder.ts
 
 import type { TutorIntent } from "./tutorIntent";
-import type { LessonSession } from "../state/lessonState";
-import type { SupportedLanguage } from "../types";
 
-type BuildTutorPromptOptions = {
+export type BuildTutorPromptCtx = {
   retryMessage?: string;
   hintText?: string;
   hintLeadIn?: string;
   forcedAdvanceMessage?: string;
   revealAnswer?: string;
-
-  // Learner profile (internal guidance only)
   learnerProfileSummary?: string;
-
-  // Optional explanation text (internal; UI renders separately)
   explanationText?: string;
 };
 
-function norm(v: unknown): string {
-  return String(v ?? "").trim();
-}
-
-function qQuoted(questionText: string): string {
-  return `"${questionText}"`;
-}
-
-function toLanguage(session: LessonSession): SupportedLanguage {
-  const l = String((session as any).language ?? "").trim().toLowerCase();
-  if (l === "en" || l === "de" || l === "es" || l === "fr") return l;
-  return "en";
+function safeStr(v: unknown): string {
+  return typeof v === "string" ? v : "";
 }
 
 export function buildTutorPrompt(
-  session: LessonSession,
+  session: any,
   intent: TutorIntent,
   questionText: string,
-  options?: BuildTutorPromptOptions,
+  ctx: BuildTutorPromptCtx = {}
 ): string {
-  const language = toLanguage(session);
-  const q = norm(questionText);
+  const lang = safeStr(session?.language) || "en";
 
-  const retryMessage = norm(options?.retryMessage) || "Not quite — try again.";
-  const forcedAdvanceMessage = norm(options?.forcedAdvanceMessage) || "That one was tricky — let's continue.";
+  const retryMessage = safeStr(ctx.retryMessage).trim();
+  const hintText = safeStr(ctx.hintText).trim();
+  const hintLeadIn = safeStr(ctx.hintLeadIn).trim();
+  const forcedAdvanceMessage = safeStr(ctx.forcedAdvanceMessage).trim();
+  const revealAnswer = safeStr(ctx.revealAnswer).trim();
+  const learnerProfileSummary = safeStr(ctx.learnerProfileSummary).trim();
+  const explanationText = safeStr(ctx.explanationText).trim();
 
-  const learnerProfileSummary = norm(options?.learnerProfileSummary);
+  const languageGuard = [
+    `LANGUAGE GUARD:`,
+    `- The lesson language is "${lang}".`,
+    `- Respond ONLY in the lesson language.`,
+    `- do NOT introduce other languages.`,
+    `- ONLY quote foreign words that appear in the question text.`,
+    `- do NOT turn the prompt into a translation task.`,
+    ``,
+    `Hard rules:`,
+    `- Only respond in the lesson language: ${lang}`,
+    `- Do NOT invent lesson content.`,
+    `- Do NOT add extra questions.`,
+    `- Keep responses short and calm.`,
+    `- IMPORTANT: The UI shows hints/corrections separately. Do NOT include hints, answers, or correction explanations in your message.`,
+  ].join("\n");
 
-  const lines: string[] = [];
+  const learnerProfileBlock = learnerProfileSummary
+    ? [
+        ``,
+        `LEARNER PROFILE:`,
+        `${learnerProfileSummary}`,
+        `Hard rules:`,
+        `- do NOT mention tracking or counts (no “I noticed you struggle with...” / no metrics).`,
+        `- Use this ONLY to shape tone and pacing.`,
+      ].join("\n")
+    : "";
 
-  const languageGuard = `LANGUAGE GUARD:
-- The lesson language is "${language}".
-- Respond ONLY in the lesson language.
-- Do NOT introduce other languages.
-- ONLY quote foreign words if they already appear in the question text itself.
-- Do NOT turn the prompt into a translation task.`;
+  const sessionBlock = [
+    ``,
+    `Session:`,
+    `- userId: ${safeStr(session?.userId)}`,
+    `- lessonId: ${safeStr(session?.lessonId)}`,
+    `- state: ${safeStr(session?.state)}`,
+    `- currentQuestionIndex: ${String(session?.currentQuestionIndex ?? 0)}`,
+  ].join("\n");
 
+  const intentBlock: string[] = [];
+  intentBlock.push(``);
+  intentBlock.push(`Intent: ${intent}`);
+  intentBlock.push(``);
 
-  // ✅ Tests expect this block + phrasing.
-  lines.push("LANGUAGE GUARD:");
-  lines.push(`- The lesson language is "${language}".`);
-  lines.push("- Respond ONLY in the lesson language.");
-  lines.push(languageGuard);
-  lines.push("");
+  // These “intent templates” are deterministic on purpose (tests rely on stability).
+  intentBlock.push(`When intent is ASK_QUESTION:`);
+  intentBlock.push(`Respond with EXACTLY:`);
+  intentBlock.push(`Let's begin.`);
+  intentBlock.push(questionText ? questionText : "");
 
-  lines.push("Hard rules:");
-  lines.push(`- Only respond in the lesson language: ${language}`);
-  lines.push("- Do NOT invent lesson content.");
-  lines.push("- Do NOT add extra questions.");
-  lines.push("- Keep responses short and calm.");
-  lines.push("- IMPORTANT: The UI shows hints/corrections separately. Do NOT include hints, answers, or correction explanations in your message.");
-  lines.push("");
+  intentBlock.push(``);
+  intentBlock.push(`When intent is ADVANCE_LESSON:`);
+  intentBlock.push(`Respond with EXACTLY:`);
+  intentBlock.push(`Nice work! Next question:`);
+  intentBlock.push(questionText ? `"${questionText}"` : "");
 
-  lines.push("Session:");
-  lines.push(`- userId: ${norm((session as any).userId)}`);
-  lines.push(`- lessonId: ${norm((session as any).lessonId)}`);
-  lines.push(`- state: ${norm((session as any).state)}`);
-  lines.push(`- currentQuestionIndex: ${String((session as any).currentQuestionIndex ?? 0)}`);
+  intentBlock.push(``);
+  intentBlock.push(`When intent is ENCOURAGE_RETRY:`);
+  intentBlock.push(`Respond with EXACTLY:`);
+  intentBlock.push(retryMessage ? retryMessage : `Not quite — try again.`);
+  if (hintLeadIn && hintText) {
+    intentBlock.push(`${hintLeadIn} ${hintText}`.trim());
+  }
+  intentBlock.push(questionText ? questionText : "");
 
-  // ✅ Tests expect LEARNER PROFILE + "do NOT mention tracking"
-  if (learnerProfileSummary) {
-    lines.push("");
-    lines.push("LEARNER PROFILE (internal):");
-    lines.push("- do NOT mention tracking, analytics, or stored history.");
-    lines.push(learnerProfileSummary);
+  intentBlock.push(``);
+  intentBlock.push(`When intent is FORCED_ADVANCE:`);
+  intentBlock.push(`You are moving on after too many attempts.`);
+  intentBlock.push(`Do NOT reveal the answer in your message (UI shows it separately).`);
+  if (forcedAdvanceMessage) {
+    intentBlock.push(`Respond with EXACTLY:`);
+    intentBlock.push(forcedAdvanceMessage);
+  } else {
+    intentBlock.push(`Respond with EXACTLY:`);
+    intentBlock.push(`That one was tricky — let's continue.`);
+  }
+  if (questionText) {
+    intentBlock.push(`Next question:`);
+    intentBlock.push(`"${questionText}"`);
+  } else {
+    intentBlock.push(`If questionText is empty, omit the Next question lines.`);
   }
 
-  lines.push("");
-  lines.push(`Intent: ${intent}`);
-  lines.push("");
+  intentBlock.push(``);
+  intentBlock.push(`When intent is END_LESSON:`);
+  intentBlock.push(`Respond with EXACTLY:`);
+  intentBlock.push(`Great job! 🎉 You've completed this lesson.`);
 
-  lines.push("When intent is ASK_QUESTION:");
-  lines.push("Respond with EXACTLY:");
-  lines.push("Let's begin.");
-  lines.push(q || "");
-  lines.push("");
+  // NOTE: explanationText / revealAnswer are intentionally NOT placed in the tutor message.
+  // UI handles them separately.
 
-  lines.push("When intent is ADVANCE_LESSON:");
-  lines.push("Respond with EXACTLY:");
-  lines.push("Nice work! Next question:");
-  lines.push(q ? qQuoted(q) : "");
-  lines.push("");
-
-  lines.push("When intent is ENCOURAGE_RETRY:");
-  lines.push("Respond with EXACTLY:");
-  lines.push(retryMessage);
-  lines.push(q || "");
-  lines.push("");
-
-  lines.push("When intent is FORCED_ADVANCE:");
-  lines.push("You are moving on after too many attempts.");
-  lines.push("Do NOT reveal the answer in your message (UI shows it separately).");
-  lines.push("Respond with EXACTLY:");
-  lines.push(forcedAdvanceMessage);
-  if (q) {
-    lines.push("Next question:");
-    lines.push(qQuoted(q));
-  }
-  lines.push('If questionText is empty, omit the Next question lines.');
-  lines.push("");
-
-  lines.push("When intent is END_LESSON:");
-  lines.push("Respond with EXACTLY:");
-  lines.push("Great job! 🎉 You've completed this lesson.");
-
-  // Avoid trailing spaces; keep deterministic newlines.
-  return lines.map((l) => l.replace(/[ \t]+$/g, "")).join("\n");
+  return [
+    `You are a calm, patient language tutor.`,
+    ``,
+    languageGuard,
+    learnerProfileBlock,
+    sessionBlock,
+    intentBlock.join("\n"),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

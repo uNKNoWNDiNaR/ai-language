@@ -7,6 +7,7 @@ import { generatePracticeItem } from "../services/practiceGenerator";
 import { generatePracticeJSON } from "../ai/openaiClient";
 import { getSession, updateSession } from "../storage/sessionStore";
 import { getWeakestConceptTag, getRecentConfusionConceptTag } from "../storage/learnerProfileStore";
+import { mapLikeHas, mapLikeSet } from "../utils/mapLike";
 
 function isSupportedLanguage(v: unknown): v is SupportedLanguage {
   return v === "en" || v === "de" || v === "es" || v === "fr";
@@ -112,18 +113,16 @@ export const generatePractice = async (req: Request, res: Response) => {
     return res.status(404).json({ error: "Session not found. Start a lesson first." });
   }
 
-  // ---- Map-based persistence (primary path) ----
-  const pb: any = (session as any).practiceById ?? new Map();
-  if (typeof pb.set === "function") pb.set(practiceItem.practiceId, practiceItem);
-  else pb[practiceItem.practiceId] = practiceItem;
-  (session as any).practiceById = pb;
+  // ---- Practice persistence (Map or object, depending on runtime) ----
+  let pb: any = (session as any).practiceById ?? new Map();
+  let pa: any = (session as any).practiceAttempts ?? new Map();
 
-  const pa: any = (session as any).practiceAttempts ?? new Map();
-  if (typeof pa.get === "function") {
-    if (pa.get(practiceItem.practiceId) === undefined) pa.set(practiceItem.practiceId, 0);
-  } else {
-    if (pa[practiceItem.practiceId] === undefined) pa[practiceItem.practiceId] = 0;
+  pb = mapLikeSet(pb, practiceItem.practiceId, practiceItem);
+  if (!mapLikeHas(pa, practiceItem.practiceId)) {
+    pa = mapLikeSet(pa, practiceItem.practiceId, 0);
   }
+
+  (session as any).practiceById = pb;
   (session as any).practiceAttempts = pa;
 
   await updateSession(session as any);

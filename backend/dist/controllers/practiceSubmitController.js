@@ -6,6 +6,7 @@ const sessionStore_1 = require("../storage/sessionStore");
 const answerEvaluator_1 = require("../state/answerEvaluator");
 const practiceTutorEplainer_1 = require("../ai/practiceTutorEplainer");
 const learnerProfileStore_1 = require("../storage/learnerProfileStore");
+const mapLike_1 = require("../utils/mapLike");
 function parseQuestionIdFromConceptTag(tag) {
     if (typeof tag !== "string")
         return null;
@@ -80,20 +81,15 @@ const submitPractice = async (req, res) => {
     if (!session) {
         return res.status(404).json({ error: "Session not found" });
     }
-    const practiceById = session.practiceById ?? {};
-    const item = typeof practiceById.get === "function" ? practiceById.get(practiceId) : practiceById[practiceId];
+    const practiceById = session.practiceById ?? new Map();
+    const item = (0, mapLike_1.mapLikeGet)(practiceById, practiceId);
     if (!item) {
         return res.status(404).json({ error: "Practice item not found" });
     }
-    const practiceAttempts = session.practiceAttempts ?? {};
-    const prev = typeof practiceAttempts.get === "function"
-        ? (practiceAttempts.get(practiceId) ?? 0)
-        : (typeof practiceAttempts[practiceId] === "number" ? practiceAttempts[practiceId] : 0);
+    let practiceAttempts = session.practiceAttempts ?? new Map();
+    const prev = (0, mapLike_1.mapLikeGetNumber)(practiceAttempts, practiceId, 0);
     const attemptCount = prev + 1;
-    if (typeof practiceAttempts.set === "function")
-        practiceAttempts.set(practiceId, attemptCount);
-    else
-        practiceAttempts[practiceId] = attemptCount;
+    practiceAttempts = (0, mapLike_1.mapLikeSet)(practiceAttempts, practiceId, attemptCount);
     session.practiceAttempts = practiceAttempts;
     // Adapt PracticeItem -> LessonQuestion for your existing evaluator
     const q = {
