@@ -985,16 +985,25 @@ export function Lesson() {
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value as "en" | "de" | "es" | "fr")}
-                disabled={true}
+                disabled={lockControls}
                 style={{
                   padding: 10,
                   borderRadius: 10,
                   border: "1px solid var(--border)",
-                  backgroundColor: "var(--surface-muted)",
-                  cursor: "not-allowed",
+                  backgroundColor: lockControls ? "var(--surface-muted)" : "white",
+                  cursor: lockControls ? "not-allowed" : "pointer",
                 }}
               >
                 <option value="en">English</option>
+                <option value="de" disabled>
+                  German (coming soon)
+                </option>
+                <option value="es" disabled>
+                  Spanish (coming soon)
+                </option>
+                <option value="fr" disabled>
+                  French (coming soon)
+                </option>
               </select>
             </label>
               
