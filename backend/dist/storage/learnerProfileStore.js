@@ -4,7 +4,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.updateTeachingProfilePrefs = updateTeachingProfilePrefs;
 exports.recordLessonAttempt = recordLessonAttempt;
+exports.recordReviewPracticeOutcome = recordReviewPracticeOutcome;
 exports.recordPracticeAttempt = recordPracticeAttempt;
 exports.getWeakestConceptTag = getWeakestConceptTag;
 exports.getConceptMistakeCount = getConceptMistakeCount;
@@ -44,6 +46,23 @@ function toPace(v) {
 function toExplanationDepth(v) {
     return v === "short" || v === "normal" || v === "detailed" ? v : undefined;
 }
+async function updateTeachingProfilePrefs(args) {
+    if (!isMongoReady())
+        return;
+    const pace = toPace(args.pace);
+    const explanationDepth = toExplanationDepth(args.explanationDepth);
+    if (!pace && !explanationDepth)
+        return;
+    const set = { lastActiveAt: new Date() };
+    if (pace)
+        set.pace = pace;
+    if (explanationDepth)
+        set.explanationDepth = explanationDepth;
+    await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, {
+        $setOnInsert: { userId: args.userId, language: args.language },
+        $set: set,
+    }, { upsert: true });
+}
 function mistakeTagFromReasonCode(reasonCode) {
     const c = typeof reasonCode === "string" ? reasonCode.trim().toUpperCase() : "";
     if (!c)
@@ -62,6 +81,128 @@ function mistakeTagFromReasonCode(reasonCode) {
         return "general";
     return "general";
 }
+// Phase 7.4: Review items are keyed as object paths (reviewItems.<key>...) in Mongo.
+// Keep the key path-safe (no dots, no leading $) and stable.
+function makeReviewKey(lessonId, questionId) {
+    const raw = `${lessonId}__q${String(questionId)}`;
+    // Replace anything that could break Mongo dot-notation paths.
+    const safe = raw.replace(/[^a-zA-Z0-9_\-]/g, "_");
+    return safe.startsWith("$") ? `_${safe}` : safe;
+}
+const MAX_REVIEW_ITEMS = 120;
+const MAX_REVIEW_MISTAKES = 20;
+function clampNumber(v, fallback, min, max) {
+    const n = typeof v === "number" ? v : Number(v);
+    if (!Number.isFinite(n))
+        return fallback;
+    return Math.max(min, Math.min(max, n));
+}
+function clampInt(v, fallback, min, max) {
+    const n = typeof v === "number" ? v : Number(v);
+    if (!Number.isFinite(n))
+        return fallback;
+    return Math.max(min, Math.min(max, Math.floor(n)));
+}
+function normalizeOutcome(value) {
+    const v = typeof value === "string" ? value.trim().toLowerCase() : "";
+    if (v === "correct" || v === "almost" || v === "wrong" || v === "forced_advance")
+        return v;
+    return "wrong";
+}
+function outcomeConfidence(outcome) {
+    if (outcome === "almost")
+        return 0.55;
+    if (outcome === "wrong")
+        return 0.35;
+    if (outcome === "forced_advance")
+        return 0.2;
+    return 0.6;
+}
+function coerceDate(value) {
+    if (value instanceof Date)
+        return Number.isFinite(value.getTime()) ? value : null;
+    const d = new Date(value);
+    return Number.isFinite(d.getTime()) ? d : null;
+}
+function normalizeReviewItems(raw) {
+    let changed = false;
+    const entries = [];
+    const iterable = raw instanceof Map ? Array.from(raw.entries()) : typeof raw === "object" && raw ? Object.entries(raw) : [];
+    for (const [key, value] of iterable) {
+        if (typeof key !== "string" || !key) {
+            changed = true;
+            continue;
+        }
+        const lessonId = typeof value?.lessonId === "string" ? value.lessonId.trim() : "";
+        const questionId = typeof value?.questionId === "string" ? value.questionId.trim() : "";
+        if (!lessonId || !questionId) {
+            changed = true;
+            continue;
+        }
+        let conceptTag = typeof value?.conceptTag === "string" ? safeConceptKey(value.conceptTag) : "";
+        if (conceptTag && !isHumanConceptLabel(conceptTag)) {
+            conceptTag = "";
+            changed = true;
+        }
+        const lastSeenAt = coerceDate(value?.lastSeenAt);
+        if (!lastSeenAt) {
+            changed = true;
+            continue;
+        }
+        const rawOutcome = value?.lastOutcome ?? value?.lastResult;
+        const lastOutcome = normalizeOutcome(rawOutcome);
+        const mistakeRaw = typeof value?.mistakeCount === "number"
+            ? value.mistakeCount
+            : value?.wrongCount ?? 0;
+        const mistakeCount = clampInt(mistakeRaw, 0, 0, MAX_REVIEW_MISTAKES);
+        if (mistakeCount !== mistakeRaw)
+            changed = true;
+        const confidenceRaw = value?.confidence;
+        const confidence = clampNumber(confidenceRaw, outcomeConfidence(lastOutcome), 0, 1);
+        if (typeof confidenceRaw !== "number" || confidence !== confidenceRaw)
+            changed = true;
+        const record = {
+            lessonId,
+            questionId,
+            conceptTag,
+            lastSeenAt,
+            lastOutcome,
+            mistakeCount,
+            confidence,
+        };
+        const lastReviewedAt = coerceDate(value?.lastReviewedAt);
+        if (lastReviewedAt)
+            record.lastReviewedAt = lastReviewedAt;
+        if (typeof value?.lastResult === "string")
+            record.lastResult = value.lastResult;
+        if (typeof value?.wrongCount === "number")
+            record.wrongCount = value.wrongCount;
+        if (typeof value?.forcedAdvanceCount === "number")
+            record.forcedAdvanceCount = value.forcedAdvanceCount;
+        entries.push([key, record, lastSeenAt.getTime()]);
+    }
+    entries.sort((a, b) => b[2] - a[2]);
+    if (entries.length > MAX_REVIEW_ITEMS) {
+        entries.length = MAX_REVIEW_ITEMS;
+        changed = true;
+    }
+    const out = {};
+    for (const [key, record] of entries) {
+        out[key] = record;
+    }
+    return { items: out, changed };
+}
+async function normalizeReviewItemsForProfile(userId, language) {
+    if (!isMongoReady())
+        return;
+    const doc = await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { reviewItems: 1 }).lean();
+    if (!doc?.reviewItems)
+        return;
+    const { items, changed } = normalizeReviewItems(doc.reviewItems);
+    if (!changed)
+        return;
+    await learnerProfileState_1.LearnerProfileModel.updateOne({ userId, language }, { $set: { reviewItems: items } });
+}
 async function recordLessonAttempt(args) {
     if (!isMongoReady())
         return;
@@ -74,7 +215,9 @@ async function recordLessonAttempt(args) {
         inc[`mistakeCountsByReason.${reasonKey}`] = 1;
     if (conceptKey && isHumanConceptLabel(conceptKey))
         inc[`mistakeCountsByConcept.${conceptKey}`] = 1;
+    const now = new Date();
     const push = {};
+    const set = { lastActiveAt: now };
     if (args.result !== "correct") {
         const mistakeTag = mistakeTagFromReasonCode(args.reasonCode);
         if (mistakeTag) {
@@ -82,17 +225,108 @@ async function recordLessonAttempt(args) {
         }
         if (conceptKey && isHumanConceptLabel(conceptKey)) {
             push.recentConfusions = {
-                $each: [{ conceptTag: conceptKey, timestamp: new Date() }],
+                $each: [{ conceptTag: conceptKey, timestamp: now }],
                 $slice: -12,
             };
+        }
+        const shouldRecordReview = args.forcedAdvance || args.result === "almost" || Boolean(args.repeatedWrong);
+        // Phase 7.4: track a bounded, privacy-safe review candidate for calm spaced repetition.
+        // Only capture when we have enough identifiers to safely find the question again later.
+        if (shouldRecordReview &&
+            typeof args.lessonId === "string" &&
+            args.lessonId.trim() &&
+            args.questionId != null) {
+            const qid = String(args.questionId ?? "").trim();
+            const lessonId = args.lessonId.trim();
+            if (qid) {
+                const reviewKey = makeReviewKey(lessonId, qid);
+                const lastOutcome = args.forcedAdvance
+                    ? "forced_advance"
+                    : normalizeOutcome(args.result);
+                set[`reviewItems.${reviewKey}.lessonId`] = lessonId;
+                set[`reviewItems.${reviewKey}.questionId`] = qid;
+                set[`reviewItems.${reviewKey}.conceptTag`] =
+                    conceptKey && isHumanConceptLabel(conceptKey) ? conceptKey : "";
+                set[`reviewItems.${reviewKey}.lastSeenAt`] = now;
+                set[`reviewItems.${reviewKey}.lastOutcome`] = lastOutcome;
+                set[`reviewItems.${reviewKey}.lastResult`] = args.result;
+                // Track intensity by wrong/almost occurrences. We never pressure with streaks.
+                inc[`reviewItems.${reviewKey}.mistakeCount`] = 1;
+                inc[`reviewItems.${reviewKey}.wrongCount`] = 1;
+                if (args.forcedAdvance) {
+                    inc[`reviewItems.${reviewKey}.forcedAdvanceCount`] = 1;
+                }
+            }
         }
     }
     await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, {
         $setOnInsert: { userId: args.userId, language: args.language },
-        $set: { lastActiveAt: new Date() },
+        $set: set,
         $inc: inc,
         ...(Object.keys(push).length ? { $push: push } : {}),
     }, { upsert: true });
+    if (args.result !== "correct") {
+        const shouldRecordReview = args.forcedAdvance || args.result === "almost" || Boolean(args.repeatedWrong);
+        if (shouldRecordReview) {
+            try {
+                await normalizeReviewItemsForProfile(args.userId, args.language);
+            }
+            catch {
+                // best-effort: don't block lesson flow
+            }
+        }
+    }
+}
+async function recordReviewPracticeOutcome(args) {
+    if (!isMongoReady())
+        return;
+    const lessonId = typeof args.lessonId === "string" ? args.lessonId.trim() : "";
+    const qid = typeof args.questionId === "string" ? args.questionId.trim() : "";
+    if (!lessonId || !qid)
+        return;
+    const reviewKey = makeReviewKey(lessonId, qid);
+    const now = new Date();
+    let currentConfidence = 0.5;
+    try {
+        const doc = await learnerProfileState_1.LearnerProfileModel.findOne({ userId: args.userId, language: args.language }, { reviewItems: 1 }).lean();
+        const existing = doc?.reviewItems?.[reviewKey];
+        if (existing && typeof existing.confidence === "number") {
+            currentConfidence = existing.confidence;
+        }
+    }
+    catch {
+        // ignore
+    }
+    const delta = args.result === "correct" ? 0.15 : args.result === "almost" ? -0.05 : -0.15;
+    const nextConfidence = clampNumber(currentConfidence + delta, 0.5, 0, 1);
+    const set = {
+        [`reviewItems.${reviewKey}.lessonId`]: lessonId,
+        [`reviewItems.${reviewKey}.questionId`]: qid,
+        [`reviewItems.${reviewKey}.lastReviewedAt`]: now,
+        [`reviewItems.${reviewKey}.lastSeenAt`]: now,
+        [`reviewItems.${reviewKey}.lastOutcome`]: normalizeOutcome(args.result),
+        [`reviewItems.${reviewKey}.lastResult`]: args.result,
+        [`reviewItems.${reviewKey}.confidence`]: nextConfidence,
+    };
+    const conceptKey = safeConceptKey(args.conceptTag);
+    if (conceptKey && isHumanConceptLabel(conceptKey)) {
+        set[`reviewItems.${reviewKey}.conceptTag`] = conceptKey;
+    }
+    const inc = {};
+    if (args.result !== "correct") {
+        inc[`reviewItems.${reviewKey}.mistakeCount`] = 1;
+    }
+    await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, {
+        $setOnInsert: { userId: args.userId, language: args.language },
+        $set: set,
+        ...(Object.keys(inc).length ? { $inc: inc } : {}),
+    }, { upsert: true });
+    try {
+        await normalizeReviewItemsForProfile(args.userId, args.language);
+    }
+    catch {
+        // ignore
+    }
 }
 async function recordPracticeAttempt(args) {
     if (!isMongoReady())

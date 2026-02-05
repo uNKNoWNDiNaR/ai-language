@@ -8,14 +8,16 @@ exports.mapLikeGetNumber = mapLikeGetNumber;
 function isMap(m) {
     return (!!m &&
         typeof m.get === "function" &&
-        typeof m.set === "function" &&
-        typeof m.has === "function");
+        typeof m.set === "function");
 }
 function mapLikeHas(m, key) {
     if (!m)
         return false;
-    if (isMap(m))
-        return m.has(key);
+    if (isMap(m)) {
+        if (typeof m.has === "function")
+            return m.has(key);
+        return typeof m.get === "function" ? m.get(key) !== undefined : false;
+    }
     return Object.prototype.hasOwnProperty.call(m, key);
 }
 function mapLikeGet(m, key) {

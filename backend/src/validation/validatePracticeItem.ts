@@ -6,7 +6,7 @@ import type { PracticeItem, PracticeMetaType, SupportedLanguage } from "../types
 type ValidationOk<T> = {ok: true; value: T}
 type validationErr = {ok: false; errors: string[]};
 
-const SUPPORTED_LANGUAGES: SupportedLanguage[] = ["en", "de", "es", "fr"];
+const SUPPORTED_LANGUAGES: SupportedLanguage[] = ["en"];
 const SUPPORTED_TYPES: PracticeMetaType[] = ["variation", "dialogue_turn", "cloze"];
 
 const MAX_EXAMPLES = 6;

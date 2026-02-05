@@ -8,6 +8,10 @@ export type PracticeMetaType = "variation" | "dialogue_turn" | "cloze"
 export type PracticeItemMeta = {
     type: PracticeMetaType;
     conceptTag: string;
+    reviewRef?: {
+        lessonId: string;
+        questionId: string;
+    };
 };
 
 export type PracticeItem = {
@@ -30,5 +34,4 @@ export type PracticeGenerateRequest = {
     type?: PracticeMetaType;
     conceptTag?: string;
 };
-
 

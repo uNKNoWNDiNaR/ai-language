@@ -3,6 +3,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getLessonProgress = exports.getUserProgress = void 0;
 const progressState_1 = require("../state/progressState");
+const sendError_1 = require("../http/sendError");
+const logger_1 = require("../utils/logger");
 // GET /progress/:userId?language=xx
 const getUserProgress = async (req, res) => {
     const { userId } = req.params;
@@ -15,8 +17,8 @@ const getUserProgress = async (req, res) => {
         return res.status(200).json({ progress });
     }
     catch (err) {
-        console.error("getUserProgress error", err);
-        return res.status(500).json({ error: "Failed to fetch progress" });
+        (0, logger_1.logServerError)("getUserProgress", err, res.locals?.requestId);
+        return (0, sendError_1.sendError)(res, 500, "Failed to fetch progress", "SERVER_ERROR");
     }
 };
 exports.getUserProgress = getUserProgress;
@@ -26,12 +28,12 @@ const getLessonProgress = async (req, res) => {
     try {
         const doc = await progressState_1.LessonProgressModel.findOne({ userId, lessonId });
         if (!doc)
-            return res.status(404).json({ error: "No progress found" });
+            return (0, sendError_1.sendError)(res, 404, "No progress found", "NOT_FOUND");
         return res.status(200).json({ progress: doc });
     }
     catch (err) {
-        console.error("getLessonProgress error", err);
-        return res.status(500).json({ error: "Failed to fetch lesson progress" });
+        (0, logger_1.logServerError)("getLessonProgress", err, res.locals?.requestId);
+        return (0, sendError_1.sendError)(res, 500, "Failed to fetch lesson progress", "SERVER_ERROR");
     }
 };
 exports.getLessonProgress = getLessonProgress;

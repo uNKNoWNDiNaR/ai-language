@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { getSession } from "../storage/sessionStore";
 import { loadLesson } from "../state/lessonLoader";
 import { LessonFeedbackModel } from "../state/feedbackState";
+import { sendError } from "../http/sendError";
 
 function sha256Short(input:string): string {
     return crypto.createHash("sha256").update(input).digest("hex").slice(0, 16);
@@ -44,7 +45,7 @@ export async function submitFeedback(req: Request, res: Response) {
 
   const userId = typeof body.userId === "string" ? body.userId.trim() : "";
   if (!userId) {
-    return res.status(400).json({ error: "userId is required", code: "INVALID_REQUEST" });
+    return sendError(res, 400, "userId is required", "INVALID_REQUEST");
   }
 
   const feltRushed = toBooleanOrUndefined(body.feltRushed);
@@ -57,9 +58,7 @@ export async function submitFeedback(req: Request, res: Response) {
     typeof confusedText === "string";
 
   if (!hasAnyField) {
-    return res
-      .status(400)
-      .json({ error: "Please fill at least one feedback field.", code: "EMPTY_FEEDBACK" });
+    return sendError(res, 400, "Please fill at least one feedback field.", "EMPTY_FEEDBACK");
   }
 
   const anonSessionId = toAnonSessionIdOrGenerated(body.anonSessionId);
@@ -76,10 +75,12 @@ export async function submitFeedback(req: Request, res: Response) {
   const language = (session?.language || languageFromBody).toString();
 
   if (!lessonId || !language) {
-    return res.status(400).json({
-      error: "lessonId and language are required when no active session exists",
-      code: "MISSING_CONTEXT",
-    });
+    return sendError(
+      res,
+      400,
+      "lessonId and language are required when no active session exists",
+      "MISSING_CONTEXT",
+    );
   }
 
   let conceptTag: string | undefined = conceptTagFromBody || undefined;

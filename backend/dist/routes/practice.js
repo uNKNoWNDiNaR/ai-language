@@ -4,7 +4,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const practiceController_1 = require("../controllers/practiceController");
 const practiceSubmitController_1 = require("../controllers/practiceSubmitController");
+const reviewController_1 = require("../controllers/reviewController");
 const router = (0, express_1.Router)();
 router.post("/generate", practiceController_1.generatePractice);
+router.post("/generateReview", practiceController_1.generateReview);
 router.post("/submit", practiceSubmitController_1.submitPractice);
+// Suggested review (read-only, calm, optional)
+router.get("/suggested", reviewController_1.suggestReview);
 exports.default = router;

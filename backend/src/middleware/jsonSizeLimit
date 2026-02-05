@@ -1,0 +1,13 @@
+// backend/src/middleware/jsonSizeLimit.ts
+
+import express from "express";
+
+const DEFAULT_LIMIT = "1mb";
+
+function readLimit(): string {
+  const raw = process.env.JSON_BODY_LIMIT;
+  const t = typeof raw === "string" ? raw.trim() : "";
+  return t || DEFAULT_LIMIT;
+}
+
+export const jsonSizeLimit = express.json({ limit: readLimit() });

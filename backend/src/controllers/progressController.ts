@@ -2,6 +2,8 @@
 
 import { Request, Response } from "express";
 import { LessonProgressModel } from "../state/progressState";
+import { sendError } from "../http/sendError";
+import { logServerError } from "../utils/logger";
 
 // GET /progress/:userId?language=xx
 export const getUserProgress = async (req: Request, res: Response) => {
@@ -15,8 +17,8 @@ export const getUserProgress = async (req: Request, res: Response) => {
     const progress = await LessonProgressModel.find(query).sort({ lastActiveAt: -1 });
     return res.status(200).json({ progress });
   } catch (err) {
-    console.error("getUserProgress error", err);
-    return res.status(500).json({ error: "Failed to fetch progress" });
+    logServerError("getUserProgress", err, res.locals?.requestId);
+    return sendError(res, 500, "Failed to fetch progress", "SERVER_ERROR");
   }
 };
 
@@ -26,11 +28,11 @@ export const getLessonProgress = async (req: Request, res: Response) => {
 
   try {
     const doc = await LessonProgressModel.findOne({ userId, lessonId });
-    if (!doc) return res.status(404).json({ error: "No progress found" });
+    if (!doc) return sendError(res, 404, "No progress found", "NOT_FOUND");
 
     return res.status(200).json({ progress: doc });
   } catch (err) {
-    console.error("getLessonProgress error", err);
-    return res.status(500).json({ error: "Failed to fetch lesson progress" });
+    logServerError("getLessonProgress", err, res.locals?.requestId);
+    return sendError(res, 500, "Failed to fetch lesson progress", "SERVER_ERROR");
   }
 };

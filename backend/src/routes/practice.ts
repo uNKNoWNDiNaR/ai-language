@@ -1,14 +1,18 @@
 //backend/src/routes/practice.ts
 
 import { Router } from "express";
-import { generatePractice } from "../controllers/practiceController";
+import { generatePractice, generateReview } from "../controllers/practiceController";
 import { submitPractice } from "../controllers/practiceSubmitController";
+import { suggestReview } from "../controllers/reviewController";
 
 const router = Router();
 
 router.post("/generate", generatePractice);
+router.post("/generateReview", generateReview);
 
 router.post("/submit", submitPractice);
 
-export default router;
+// Suggested review (read-only, calm, optional)
+router.get("/suggested", suggestReview);
 
+export default router;

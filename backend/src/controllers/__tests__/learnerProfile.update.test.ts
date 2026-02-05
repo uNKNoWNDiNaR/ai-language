@@ -85,6 +85,7 @@ const recordLessonAttemptMock = vi.hoisted(() =>
 vi.mock("../../storage/learnerProfileStore", () => {
   return {
     recordLessonAttempt: recordLessonAttemptMock,
+    recordReviewPracticeOutcome: vi.fn(async () => undefined),
     getLearnerProfileSummary: vi.fn(async () => null),
     getLearnerTopFocusReason: vi.fn(async () => null),
   };

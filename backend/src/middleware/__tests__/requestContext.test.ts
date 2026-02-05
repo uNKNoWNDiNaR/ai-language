@@ -1,7 +1,7 @@
 //backend/src/middleware/__tests__/requestContext.test.ts
 
 import { describe, it, expect, vi } from "vitest";
-import { requestContextMiddleware } from "../requestContext";
+import { requestContext } from "../requestContext";
 
 function makeReq(headers: Record<string, string | undefined>) {
   const normalized: Record<string, string> = {};
@@ -38,7 +38,7 @@ describe("requestContextMiddleware", () => {
     const next = vi.fn();
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    requestContextMiddleware(req, res, next);
+    requestContext(req, res, next);
 
     expect(res.locals.requestId).toBe("abc_123");
     expect(res.setHeader).toHaveBeenCalledWith("x-request-id", "abc_123");
@@ -54,7 +54,7 @@ describe("requestContextMiddleware", () => {
     const next = vi.fn();
 
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    requestContextMiddleware(req, res, next);
+    requestContext(req, res, next);
 
     expect(typeof res.locals.requestId).toBe("string");
     expect(res.locals.requestId.length).toBeGreaterThan(10);

@@ -7,7 +7,7 @@ exports.getTutorIntent = getTutorIntent;
 exports.chooseHintForAttempt = chooseHintForAttempt;
 exports.buildProgressPayload = buildProgressPayload;
 function isSupportedLanguage(v) {
-    return v === "en" || v === "de" || v === "es" || v === "fr";
+    return v === "en";
 }
 function normalizeLanguage(v) {
     if (typeof v !== "string")

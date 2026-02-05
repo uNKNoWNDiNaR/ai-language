@@ -7,6 +7,7 @@ const answerEvaluator_1 = require("../state/answerEvaluator");
 const practiceTutorEplainer_1 = require("../ai/practiceTutorEplainer");
 const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 const mapLike_1 = require("../utils/mapLike");
+const sendError_1 = require("../http/sendError");
 function parseQuestionIdFromConceptTag(tag) {
     if (typeof tag !== "string")
         return null;
@@ -69,22 +70,22 @@ function looksInternal(text) {
 const submitPractice = async (req, res) => {
     const { userId, practiceId, answer } = req.body ?? {};
     if (typeof userId !== "string" || userId.trim() === "") {
-        return res.status(400).json({ error: "userId is required" });
+        return (0, sendError_1.sendError)(res, 400, "userId is required", "INVALID_REQUEST");
     }
     if (typeof practiceId !== "string" || practiceId.trim() === "") {
-        return res.status(400).json({ error: "practiceId is required" });
+        return (0, sendError_1.sendError)(res, 400, "practiceId is required", "INVALID_REQUEST");
     }
     if (typeof answer !== "string" || answer.trim() === "") {
-        return res.status(400).json({ error: "answer is required" });
+        return (0, sendError_1.sendError)(res, 400, "answer is required", "INVALID_REQUEST");
     }
     const session = await (0, sessionStore_1.getSession)(userId);
     if (!session) {
-        return res.status(404).json({ error: "Session not found" });
+        return (0, sendError_1.sendError)(res, 404, "Session not found", "NOT_FOUND");
     }
     const practiceById = session.practiceById ?? new Map();
     const item = (0, mapLike_1.mapLikeGet)(practiceById, practiceId);
     if (!item) {
-        return res.status(404).json({ error: "Practice item not found" });
+        return (0, sendError_1.sendError)(res, 404, "Practice item not found", "NOT_FOUND");
     }
     let practiceAttempts = session.practiceAttempts ?? new Map();
     const prev = (0, mapLike_1.mapLikeGetNumber)(practiceAttempts, practiceId, 0);
@@ -144,6 +145,24 @@ const submitPractice = async (req, res) => {
     }
     catch {
         // best-effort: never break practice flow
+    }
+    const reviewRef = item?.meta?.reviewRef;
+    if (reviewRef?.lessonId && reviewRef?.questionId) {
+        try {
+            if (typeof learnerProfileStore_1.recordReviewPracticeOutcome === "function") {
+                await (0, learnerProfileStore_1.recordReviewPracticeOutcome)({
+                    userId: session.userId,
+                    language: session.language,
+                    lessonId: reviewRef.lessonId,
+                    questionId: reviewRef.questionId,
+                    result: evalRes.result,
+                    conceptTag: item?.meta?.conceptTag,
+                });
+            }
+        }
+        catch {
+            // best-effort: never break practice flow
+        }
     }
     if (evalRes.result === "correct") {
         // 1) Clear cooldown for the source question (so future "almost" can generate again)

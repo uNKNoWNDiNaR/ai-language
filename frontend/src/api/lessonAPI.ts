@@ -150,7 +150,7 @@ export async function submitAnswer(params: {
 }
 
 export async function getSession(userId: string): Promise<GetSessionResponse> {
-  const { data } = await http.get<GetSessionResponse>(`/lesson/session/${userId}`);
+  const { data } = await http.get<GetSessionResponse>(`/lesson/${encodeURIComponent(userId)}`);
   return data;
 }
 
@@ -160,6 +160,82 @@ export async function submitPractice(params: {
   answer: string;
 }): Promise<SubmitPracticeResponse> {
   const { data } = await http.post<SubmitPracticeResponse>("/practice/submit", params);
+  return data;
+}
+
+export type SuggestedReviewItem = {
+  lessonId: string;
+  questionId: string;
+  conceptTag?: string;
+  reason?: string;
+  lastSeenAt?: string;
+  mistakeCount?: number;
+  confidence?: number;
+  score?: number;
+};
+
+export type SuggestedReviewResponse = {
+  items: SuggestedReviewItem[];
+  message?: string;
+};
+
+export async function getSuggestedReview(params: {
+  userId: string;
+  language: SupportedLanguage;
+  maxItems?: number;
+  limit?: number;
+}): Promise<SuggestedReviewResponse> {
+  const maxItems = params.maxItems ?? params.limit;
+  const { data } = await http.get<SuggestedReviewResponse>("/practice/suggested", {
+    params: {
+      userId: params.userId,
+      language: params.language,
+      ...(typeof maxItems === "number" ? { maxItems } : {}),
+    },
+  });
+  return data;
+}
+
+export type GeneratePracticeResponse = {
+  practiceItem: {
+    practiceId: string;
+    prompt: string;
+  };
+  source?: {
+    questionId?: string;
+    conceptTag?: string;
+    reason?: string;
+  };
+};
+
+export async function generatePractice(params: {
+  userId: string;
+  language: SupportedLanguage;
+  lessonId: string;
+  questionId?: string;
+  conceptTag?: string;
+  type?: "variation";
+}): Promise<GeneratePracticeResponse> {
+  const { data } = await http.post<GeneratePracticeResponse>("/practice/generate", params);
+  return data;
+}
+
+export type GenerateReviewPracticeResponse = {
+  practice: Array<{
+    practiceId: string;
+    prompt: string;
+    lessonId: string;
+    questionId: string;
+    conceptTag: string;
+  }>;
+};
+
+export async function generateReviewPractice(params: {
+  userId: string;
+  language: SupportedLanguage;
+  items: Array<{ lessonId: string; questionId: string }>;
+}): Promise<GenerateReviewPracticeResponse> {
+  const { data } = await http.post<GenerateReviewPracticeResponse>("/practice/generateReview", params);
   return data;
 }
 

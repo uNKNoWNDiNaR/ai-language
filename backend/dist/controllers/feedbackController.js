@@ -9,6 +9,7 @@ const node_crypto_1 = __importDefault(require("node:crypto"));
 const sessionStore_1 = require("../storage/sessionStore");
 const lessonLoader_1 = require("../state/lessonLoader");
 const feedbackState_1 = require("../state/feedbackState");
+const sendError_1 = require("../http/sendError");
 function sha256Short(input) {
     return node_crypto_1.default.createHash("sha256").update(input).digest("hex").slice(0, 16);
 }
@@ -46,7 +47,7 @@ async function submitFeedback(req, res) {
     const body = (req.body ?? {});
     const userId = typeof body.userId === "string" ? body.userId.trim() : "";
     if (!userId) {
-        return res.status(400).json({ error: "userId is required", code: "INVALID_REQUEST" });
+        return (0, sendError_1.sendError)(res, 400, "userId is required", "INVALID_REQUEST");
     }
     const feltRushed = toBooleanOrUndefined(body.feltRushed);
     const helpedUnderstand = toHelpedUnderstandOrUndefined(body.helpedUnderstand);
@@ -55,9 +56,7 @@ async function submitFeedback(req, res) {
         typeof helpedUnderstand === "number" ||
         typeof confusedText === "string";
     if (!hasAnyField) {
-        return res
-            .status(400)
-            .json({ error: "Please fill at least one feedback field.", code: "EMPTY_FEEDBACK" });
+        return (0, sendError_1.sendError)(res, 400, "Please fill at least one feedback field.", "EMPTY_FEEDBACK");
     }
     const anonSessionId = toAnonSessionIdOrGenerated(body.anonSessionId);
     const userAnonId = sha256Short(userId);
@@ -69,10 +68,7 @@ async function submitFeedback(req, res) {
     const lessonId = session?.lessonId || lessonIdFromBody;
     const language = (session?.language || languageFromBody).toString();
     if (!lessonId || !language) {
-        return res.status(400).json({
-            error: "lessonId and language are required when no active session exists",
-            code: "MISSING_CONTEXT",
-        });
+        return (0, sendError_1.sendError)(res, 400, "lessonId and language are required when no active session exists", "MISSING_CONTEXT");
     }
     let conceptTag = conceptTagFromBody || undefined;
     // Derive conceptTag from the current question when possible.

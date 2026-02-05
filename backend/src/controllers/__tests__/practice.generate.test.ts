@@ -5,12 +5,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // ---- Hoisted mocks (must exist before importing controller) ----
 const getSessionMock = vi.hoisted(() => vi.fn());
 const updateSessionMock = vi.hoisted(() => vi.fn());
+const createSessionMock = vi.hoisted(() => vi.fn());
 const getWeakestConceptTagMock = vi.hoisted(() => vi.fn())
 
 vi.mock("../../storage/sessionStore", () => {
   return {
     getSession: getSessionMock,
     updateSession: updateSessionMock,
+    createSession: createSessionMock,
   };
 });
 
@@ -215,4 +217,3 @@ describe("POST /practice/generate (controller)", () => {
     expect(updateSessionMock).toHaveBeenCalled();
   });
 });
-

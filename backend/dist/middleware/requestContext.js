@@ -1,46 +1,45 @@
 "use strict";
-//backend/src/middleware/requestContext.ts
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+// backend/src/middleware/requestContext.ts
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.requestContext = void 0;
 exports.requestContextMiddleware = requestContextMiddleware;
-const node_crypto_1 = __importDefault(require("node:crypto"));
-function normalizeIncomingRequestId(v) {
+const crypto_1 = require("crypto");
+function isValidRequestId(v) {
     if (typeof v !== "string")
-        return null;
-    const t = v.trim();
-    if (!t || t.length > 64)
-        return null;
-    if (!/^[A-Za-z0-9_-]+$/.test(t))
-        return null;
-    return t;
+        return false;
+    const s = v.trim();
+    if (!s)
+        return false;
+    return /^[a-zA-Z0-9_-]{3,64}$/.test(s);
+}
+function readHeader(req, name) {
+    const r = req;
+    // Express provides req.get(name) and req.header(name)
+    if (typeof r.get === "function") {
+        const v = r.get(name);
+        if (typeof v === "string")
+            return v;
+    }
+    if (typeof r.header === "function") {
+        const v = r.header(name);
+        if (typeof v === "string")
+            return v;
+    }
+    // Unit-test mocks often only provide req.headers
+    const raw = req.headers?.[name] ?? req.headers?.[name.toLowerCase()];
+    if (typeof raw === "string")
+        return raw;
+    if (Array.isArray(raw) && typeof raw[0] === "string")
+        return raw[0];
+    return undefined;
 }
 function requestContextMiddleware(req, res, next) {
-    const incoming = normalizeIncomingRequestId(req.get("x-request-id"));
-    const requestId = incoming ?? node_crypto_1.default.randomUUID();
+    const incoming = readHeader(req, "x-request-id");
+    const requestId = isValidRequestId(incoming) ? incoming : (0, crypto_1.randomUUID)();
     res.locals.requestId = requestId;
-    try {
-        res.setHeader("x-request-id", requestId);
-    }
-    catch {
-        // ignore
-    }
-    const start = process.hrtime.bigint();
-    res.on("finish", () => {
-        const end = process.hrtime.bigint();
-        const latencyMs = Number(end - start) / 1000000;
-        // Prefer route template (avoids logging IDs)
-        const path = (req.baseUrl || "") + (req.route?.path ? String(req.route.path) : req.path);
-        console.log(JSON.stringify({
-            level: "info",
-            msg: "request",
-            requestId,
-            method: req.method,
-            path,
-            status: res.statusCode,
-            latencyMs: Math.round(latencyMs * 10) / 10,
-        }));
-    });
+    res.setHeader("x-request-id", requestId);
     next();
 }
+// Optional alias (safe)
+exports.requestContext = requestContextMiddleware;
+exports.default = requestContextMiddleware;

@@ -7,15 +7,17 @@ function isMap<V>(m: MapLike<V>): m is Map<string, V> {
   return (
     !!m &&
     typeof (m as any).get === "function" &&
-    typeof (m as any).set === "function" &&
-    typeof (m as any).has === "function"
+    typeof (m as any).set === "function"
   );
 }
 
 
 export function mapLikeHas<V>(m: MapLike<V>, key: string): boolean {
   if (!m) return false;
-  if (isMap(m)) return m.has(key);
+  if (isMap(m)) {
+    if (typeof (m as any).has === "function") return (m as any).has(key);
+    return typeof (m as any).get === "function" ? (m as any).get(key) !== undefined : false;
+  }
   return Object.prototype.hasOwnProperty.call(m, key);
 }
 

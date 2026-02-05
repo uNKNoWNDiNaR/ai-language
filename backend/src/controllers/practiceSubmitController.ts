@@ -6,8 +6,9 @@ import { evaluateAnswer } from "../state/answerEvaluator";
 import type { LessonQuestion } from "../state/lessonLoader";
 import type { PracticeItem } from "../types";
 import { explainPracticeResult } from "../ai/practiceTutorEplainer";
-import { recordPracticeAttempt } from "../storage/learnerProfileStore";
+import { recordPracticeAttempt, recordReviewPracticeOutcome } from "../storage/learnerProfileStore";
 import { mapLikeGet, mapLikeSet, mapLikeGetNumber } from "../utils/mapLike";
+import { sendError } from "../http/sendError";
 
 function parseQuestionIdFromConceptTag(tag: unknown): string | null {
   if (typeof tag !== "string") return null;
@@ -75,25 +76,25 @@ export const submitPractice = async (req: Request, res: Response) => {
   const { userId, practiceId, answer } = req.body ?? {};
 
   if (typeof userId !== "string" || userId.trim() === "") {
-    return res.status(400).json({ error: "userId is required" });
+    return sendError(res, 400, "userId is required", "INVALID_REQUEST");
   }
   if (typeof practiceId !== "string" || practiceId.trim() === "") {
-    return res.status(400).json({ error: "practiceId is required" });
+    return sendError(res, 400, "practiceId is required", "INVALID_REQUEST");
   }
   if (typeof answer !== "string" || answer.trim() === "") {
-    return res.status(400).json({ error: "answer is required" });
+    return sendError(res, 400, "answer is required", "INVALID_REQUEST");
   }
 
   const session = await getSession(userId);
   if (!session) {
-    return res.status(404).json({ error: "Session not found" });
+    return sendError(res, 404, "Session not found", "NOT_FOUND");
   }
 
   const practiceById: any = (session as any).practiceById ?? new Map();
   const item = mapLikeGet<PracticeItem>(practiceById, practiceId);
 
   if (!item) {
-    return res.status(404).json({ error: "Practice item not found" });
+    return sendError(res, 404, "Practice item not found", "NOT_FOUND");
   }
 
   let practiceAttempts: any = (session as any).practiceAttempts ?? new Map();
@@ -168,6 +169,26 @@ const tutorMessage = safeExplanation ? `${baseMessage} ${safeExplanation}`.trim(
     });
   } catch {
     // best-effort: never break practice flow
+  }
+
+  const reviewRef = (item as any)?.meta?.reviewRef as
+    | { lessonId?: string; questionId?: string }
+    | undefined;
+  if (reviewRef?.lessonId && reviewRef?.questionId) {
+    try {
+      if (typeof recordReviewPracticeOutcome === "function") {
+        await recordReviewPracticeOutcome({
+          userId: session.userId,
+          language: session.language,
+          lessonId: reviewRef.lessonId,
+          questionId: reviewRef.questionId,
+          result: evalRes.result,
+          conceptTag: item?.meta?.conceptTag,
+        });
+      }
+    } catch {
+      // best-effort: never break practice flow
+    }
   }
 
 

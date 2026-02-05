@@ -1,7 +1,7 @@
 //backend/src/middleware/__tests__/errorEnvelope.test.ts
 
 import { describe, it, expect, vi } from "vitest";
-import { errorEnvelopeMiddleware } from "../errorEnvelope";
+import { errorEnvelope } from "../errorEnvelope";
 
 describe("errorEnvelopeMiddleware", () => {
   it("adds requestId to error payloads", () => {
@@ -12,7 +12,7 @@ describe("errorEnvelopeMiddleware", () => {
     res.json = originalJson;
 
     const next = vi.fn();
-    errorEnvelopeMiddleware(req, res, next);
+    errorEnvelope(req, res, next);
 
     res.json({ error: "Unauthorized" });
 
@@ -27,7 +27,7 @@ describe("errorEnvelopeMiddleware", () => {
     const originalJson = vi.fn(() => res);
     res.json = originalJson;
 
-    errorEnvelopeMiddleware(req, res, () => {});
+    errorEnvelope(req, res, () => {});
     res.json({ ok: true });
 
     expect(originalJson).toHaveBeenCalledWith({ ok: true });

@@ -16,6 +16,9 @@ router.post("/start", startLesson);
 // POST /lesson/submit(submit an answer)
 router.post("/submit", submitAnswer);
 
+//GET /lesson/session/:userId (legacy resume route)
+router.get("/session/:userId", getSessionHandler);
+
 //GET /lesson/:userId (get Session)
 router.get("/:userId", getSessionHandler);
 

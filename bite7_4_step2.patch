@@ -1,0 +1,462 @@
+diff -ruN /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/controllers/__tests__/review.suggest.test.ts /mnt/data/ai-language-7_4/ai-language-master/backend/src/controllers/__tests__/review.suggest.test.ts
+--- /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/controllers/__tests__/review.suggest.test.ts	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/ai-language-7_4/ai-language-master/backend/src/controllers/__tests__/review.suggest.test.ts	2026-02-05 00:50:05.519437663 +0000
+@@ -0,0 +1,101 @@
++// backend/src/controllers/__tests__/review.suggest.test.ts
++
++import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
++
++const findOneMock = vi.hoisted(() => vi.fn());
++
++vi.mock("../../state/learnerProfileState", () => {
++  return {
++    LearnerProfileModel: {
++      findOne: findOneMock,
++    },
++  };
++});
++
++function makeRes() {
++  const res: any = {};
++  res.status = vi.fn(() => res);
++  res.json = vi.fn(() => res);
++  return res;
++}
++
++describe("reviewController suggestReview", () => {
++  beforeEach(() => {
++    findOneMock.mockReset();
++    vi.useFakeTimers();
++    vi.setSystemTime(new Date("2026-02-01T10:00:00Z"));
++  });
++
++  afterEach(() => {
++    vi.useRealTimers();
++  });
++
++  it("400s on invalid payload", async () => {
++    const { suggestReview } = await import("../reviewController");
++
++    const req: any = { body: { language: "en" } };
++    const res = makeRes();
++
++    await suggestReview(req, res);
++
++    expect(res.status).toHaveBeenCalledWith(400);
++    const payload = res.json.mock.calls[0][0];
++    expect(payload.error?.code).toBe("BAD_REQUEST");
++  });
++
++  it("returns empty suggestions when profile not found", async () => {
++    const { suggestReview } = await import("../reviewController");
++    findOneMock.mockResolvedValueOnce(null);
++
++    const req: any = { body: { userId: "u1", language: "en" } };
++    const res = makeRes();
++
++    await suggestReview(req, res);
++
++    expect(res.status).toHaveBeenCalledWith(200);
++    const payload = res.json.mock.calls[0][0];
++    expect(payload.items).toEqual([]);
++  });
++
++  it("returns top items ordered by score", async () => {
++    const { suggestReview } = await import("../reviewController");
++
++    // Two concepts with different mistake counts + last seen timestamps
++    const profile = {
++      mistakeCountsByConcept: new Map([
++        ["articles", 4],
++        ["word_order", 1],
++      ]),
++      recentConfusions: [
++        {
++          conceptTag: "word_order",
++          lessonId: "basic-1",
++          questionId: "2",
++          timestamp: new Date("2026-01-31T10:00:00Z"),
++        },
++        {
++          conceptTag: "articles",
++          lessonId: "basic-1",
++          questionId: "3",
++          timestamp: new Date("2026-01-15T10:00:00Z"),
++        },
++      ],
++    };
++
++    findOneMock.mockResolvedValueOnce(profile);
++
++    const req: any = { body: { userId: "u1", language: "en", maxItems: 2 } };
++    const res = makeRes();
++
++    await suggestReview(req, res);
++
++    expect(res.status).toHaveBeenCalledWith(200);
++    const payload = res.json.mock.calls[0][0];
++    expect(payload.items).toHaveLength(2);
++
++    // articles should win: higher mistake count, even if older.
++    expect(payload.items[0].conceptTag).toBe("articles");
++    expect(payload.items[0].lessonId).toBe("basic-1");
++    expect(payload.items[0].questionId).toBe("3");
++  });
++});
+diff -ruN /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/controllers/lessonController.ts /mnt/data/ai-language-7_4/ai-language-master/backend/src/controllers/lessonController.ts
+--- /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/controllers/lessonController.ts	2026-02-04 20:44:06.000000000 +0000
++++ /mnt/data/ai-language-7_4/ai-language-master/backend/src/controllers/lessonController.ts	2026-02-05 00:46:40.725883810 +0000
+@@ -334,6 +334,8 @@
+         reasonCode: evaluation.reasonCode,
+         forcedAdvance: markNeedsReview,
+         conceptTag: currentQuestion?.conceptTag,
++        lessonId: session.lessonId,
++        questionId: String(currentQuestion?.id ?? ""),
+       });
+     } catch {
+       // ignore
+diff -ruN /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/controllers/reviewController.ts /mnt/data/ai-language-7_4/ai-language-master/backend/src/controllers/reviewController.ts
+--- /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/controllers/reviewController.ts	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/ai-language-7_4/ai-language-master/backend/src/controllers/reviewController.ts	2026-02-05 00:47:15.746342269 +0000
+@@ -0,0 +1,45 @@
++// backend/src/controllers/reviewController.ts
++
++import type { Request, Response } from "express";
++import { sendError } from "../http/sendError";
++import { normalizeLanguage } from "./lessonHelpers";
++import { LearnerProfileModel } from "../state/learnerProfileState";
++import { suggestReviewItems } from "../services/reviewScheduler";
++
++type SuggestReviewBody = {
++  userId?: unknown;
++  language?: unknown;
++  maxItems?: unknown;
++};
++
++export async function suggestReview(req: Request, res: Response) {
++  const body = (req.body ?? {}) as SuggestReviewBody;
++
++  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
++  const lang = normalizeLanguage(body.language);
++
++  if (!userId) return sendError(res, 400, "UserId is required", "INVALID_REQUEST");
++  if (!lang) return sendError(res, 400, "Language is required", "INVALID_REQUEST");
++
++  const maxItemsRaw = typeof body.maxItems === "number" ? body.maxItems : Number(body.maxItems);
++  const maxItems = Number.isFinite(maxItemsRaw) ? Math.max(1, Math.min(10, Math.floor(maxItemsRaw))) : 2;
++
++  try {
++    const profile = await LearnerProfileModel.findOne({ userId, language: lang }).lean();
++
++    if (!profile) {
++      return res.status(200).json({ items: [], message: "" });
++    }
++
++    const items = suggestReviewItems(profile, { maxItems, now: new Date() });
++    const message =
++      items.length > 0
++        ? `Want to review ${items.length} item${items.length === 1 ? "" : "s"} you struggled with last time?`
++        : "";
++
++    return res.status(200).json({ items, message });
++  } catch (err) {
++    console.error("suggestReview error", err);
++    return sendError(res, 500, "Server error", "SERVER_ERROR");
++  }
++}
+diff -ruN /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/index.ts /mnt/data/ai-language-7_4/ai-language-master/backend/src/index.ts
+--- /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/index.ts	2026-02-04 20:44:06.000000000 +0000
++++ /mnt/data/ai-language-7_4/ai-language-master/backend/src/index.ts	2026-02-05 00:48:26.459231848 +0000
+@@ -9,6 +9,7 @@
+ import cors from "cors";
+ import practiceRoutes from "./routes/practice";
+ import feedbackRoutes from "./routes/feedback";
++import reviewRoutes from "./routes/review";
+ import { authMiddleware } from "./middleware/auth";
+ import { rateLimitMiddleware } from "./middleware/rateLimit";
+ import { sendError } from "./http/sendError";
+@@ -40,7 +41,8 @@
+ app.use("/lesson", lessonRoutes);
+ app.use("/progress", progressRoutes);
+ app.use("/practice", practiceRoutes);
+-app.use("/feedback", feedbackRoutes)
++app.use("/feedback", feedbackRoutes);
++app.use("/review", reviewRoutes);
+ 
+ //404
+ app.use((_req, res) => sendError(res, 404, "Not Found", "NOT_FOUND"));
+diff -ruN /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/routes/review.ts /mnt/data/ai-language-7_4/ai-language-master/backend/src/routes/review.ts
+--- /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/routes/review.ts	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/ai-language-7_4/ai-language-master/backend/src/routes/review.ts	2026-02-05 00:48:17.742787716 +0000
+@@ -0,0 +1,11 @@
++// backend/src/routes/review.ts
++
++import { Router } from "express";
++import { suggestReview } from "../controllers/reviewController";
++
++const router = Router();
++
++// Calm, optional review suggestions (no gamification)
++router.post("/suggest", suggestReview);
++
++export default router;
+diff -ruN /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/services/__tests__/reviewScheduler.test.ts /mnt/data/ai-language-7_4/ai-language-master/backend/src/services/__tests__/reviewScheduler.test.ts
+--- /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/services/__tests__/reviewScheduler.test.ts	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/ai-language-7_4/ai-language-master/backend/src/services/__tests__/reviewScheduler.test.ts	2026-02-05 00:44:48.061263628 +0000
+@@ -0,0 +1,76 @@
++// backend/src/services/__tests__/reviewScheduler.test.ts
++
++import { describe, expect, it } from "vitest";
++import { suggestReviewItems } from "../reviewScheduler";
++
++describe("suggestReviewItems", () => {
++  it("returns empty when there are no mistakes", () => {
++    const now = new Date("2026-02-01T10:00:00.000Z");
++    const items = suggestReviewItems({
++      mistakeCountsByConcept: new Map(),
++      recentConfusions: [],
++      now,
++    });
++    expect(items).toEqual([]);
++  });
++
++  it("sorts by mistakeCount first, then time since last confusion", () => {
++    const now = new Date("2026-02-01T10:00:00.000Z");
++
++    const mistakeCountsByConcept = new Map<string, number>([
++      ["articles", 2],
++      ["word_order", 2],
++      ["greetings", 1],
++    ]);
++
++    const recentConfusions = [
++      {
++        conceptTag: "articles",
++        timestamp: new Date("2026-01-31T10:00:00.000Z"),
++        lessonId: "basic-1",
++        questionId: "q2",
++      },
++      {
++        conceptTag: "word_order",
++        timestamp: new Date("2026-01-20T10:00:00.000Z"),
++        lessonId: "basic-2",
++        questionId: "q3",
++      },
++    ];
++
++    const items = suggestReviewItems({
++      mistakeCountsByConcept,
++      recentConfusions,
++      now,
++      maxItems: 3,
++    });
++
++    // Same mistakeCount (2) => older confusion should win (word_order is older)
++    expect(items.map((i) => i.conceptTag)).toEqual(["word_order", "articles", "greetings"]);
++    expect(items[0].lessonId).toBe("basic-2");
++    expect(items[0].questionId).toBe("q3");
++  });
++
++  it("defaults to maxItems=2 and clamps bounds", () => {
++    const now = new Date("2026-02-01T10:00:00.000Z");
++    const mistakeCountsByConcept = { a: 5, b: 4, c: 3 };
++    const items = suggestReviewItems({ mistakeCountsByConcept, recentConfusions: [], now });
++    expect(items).toHaveLength(2);
++
++    const items2 = suggestReviewItems({
++      mistakeCountsByConcept,
++      recentConfusions: [],
++      now,
++      maxItems: 999,
++    });
++    expect(items2).toHaveLength(3);
++
++    const items3 = suggestReviewItems({
++      mistakeCountsByConcept,
++      recentConfusions: [],
++      now,
++      maxItems: -10,
++    });
++    expect(items3).toHaveLength(0);
++  });
++});
+diff -ruN /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/services/reviewScheduler.ts /mnt/data/ai-language-7_4/ai-language-master/backend/src/services/reviewScheduler.ts
+--- /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/services/reviewScheduler.ts	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/ai-language-7_4/ai-language-master/backend/src/services/reviewScheduler.ts	2026-02-05 00:43:48.671152903 +0000
+@@ -0,0 +1,122 @@
++// backend/src/services/reviewScheduler.ts
++
++type RecentConfusion = {
++  conceptTag: string;
++  timestamp: Date;
++  lessonId?: string;
++  questionId?: string;
++};
++
++type MistakeCountsByConcept = Map<string, number> | Record<string, number> | null | undefined;
++
++export type SuggestedReviewItem = {
++  conceptTag: string;
++  score: number;
++  lastSeenAt: Date;
++  mistakeCount: number;
++  lessonId?: string;
++  questionId?: string;
++};
++
++function isMapLike(m: unknown): m is Map<string, number> {
++  return !!m && typeof (m as any).get === "function" && typeof (m as any).forEach === "function";
++}
++
++function toEntries(m: MistakeCountsByConcept): Array<[string, number]> {
++  if (!m) return [];
++  if (isMapLike(m)) {
++    const out: Array<[string, number]> = [];
++    (m as Map<string, number>).forEach((v, k) => out.push([String(k), Number(v)]));
++    return out;
++  }
++  if (typeof m === "object") {
++    return Object.entries(m as Record<string, number>).map(([k, v]) => [String(k), Number(v)]);
++  }
++  return [];
++}
++
++function clamp(n: number, min: number, max: number): number {
++  return Math.max(min, Math.min(max, n));
++}
++
++function daysSince(now: Date, then: Date): number {
++  const ms = now.getTime() - then.getTime();
++  if (!Number.isFinite(ms) || ms <= 0) return 0;
++  return Math.floor(ms / (1000 * 60 * 60 * 24));
++}
++
++/**
++ * Deterministic, non-gamified review suggestions.
++ *
++ * Signals (available today):
++ * - mistakeCount by concept
++ * - time since last confusion (from recentConfusions)
++ *
++ * We intentionally keep this simple + testable.
++ */
++export function suggestReviewItems(args: {
++  mistakeCountsByConcept: MistakeCountsByConcept;
++  recentConfusions: RecentConfusion[];
++  now?: Date;
++  maxItems?: number;
++}): SuggestedReviewItem[] {
++  const now = args.now ?? new Date();
++  const maxItems = clamp(typeof args.maxItems === "number" ? args.maxItems : 2, 0, 10);
++
++  const lastByConcept = new Map<string, RecentConfusion>();
++  for (const rc of Array.isArray(args.recentConfusions) ? args.recentConfusions : []) {
++    if (!rc || typeof rc.conceptTag !== "string") continue;
++    const tag = rc.conceptTag.trim();
++    if (!tag) continue;
++    const ts = rc.timestamp instanceof Date ? rc.timestamp : new Date(rc.timestamp as any);
++    if (!Number.isFinite(ts.getTime())) continue;
++
++    const prev = lastByConcept.get(tag);
++    if (!prev || ts.getTime() > prev.timestamp.getTime()) {
++      lastByConcept.set(tag, {
++        conceptTag: tag,
++        timestamp: ts,
++        lessonId: typeof rc.lessonId === "string" ? rc.lessonId : undefined,
++        questionId: typeof rc.questionId === "string" ? rc.questionId : undefined,
++      });
++    }
++  }
++
++  const candidates: SuggestedReviewItem[] = [];
++  for (const [conceptTagRaw, countRaw] of toEntries(args.mistakeCountsByConcept)) {
++    const conceptTag = String(conceptTagRaw || "").trim();
++    if (!conceptTag) continue;
++
++    const mistakeCount = Number.isFinite(countRaw) ? Math.max(0, Math.floor(countRaw)) : 0;
++    if (mistakeCount <= 0) continue;
++
++    const last = lastByConcept.get(conceptTag);
++    const lastSeenAt = last?.timestamp ?? new Date(now.getTime());
++
++    const ageDays = daysSince(now, lastSeenAt);
++    const ageBoost = clamp(ageDays, 0, 14);
++
++    // Score is deterministic: heavily weight mistakes, lightly weight time.
++    const score = mistakeCount * 100 + ageBoost;
++
++    candidates.push({
++      conceptTag,
++      score,
++      lastSeenAt,
++      mistakeCount,
++      lessonId: last?.lessonId,
++      questionId: last?.questionId,
++    });
++  }
++
++  candidates.sort((a, b) => {
++    if (b.score !== a.score) return b.score - a.score;
++    // tie-breaker: older first
++    const bt = b.lastSeenAt.getTime();
++    const at = a.lastSeenAt.getTime();
++    if (bt !== at) return at - bt;
++    return a.conceptTag.localeCompare(b.conceptTag);
++  });
++
++  return candidates.slice(0, maxItems);
++}
+diff -ruN /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/state/learnerProfileState.ts /mnt/data/ai-language-7_4/ai-language-master/backend/src/state/learnerProfileState.ts
+--- /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/state/learnerProfileState.ts	2026-02-04 20:44:06.000000000 +0000
++++ /mnt/data/ai-language-7_4/ai-language-master/backend/src/state/learnerProfileState.ts	2026-02-05 00:56:27.019362985 +0000
+@@ -20,6 +20,8 @@
+       type: [
+         {
+           conceptTag: { type: String, required: true },
++          lessonId: { type: String, required: false },
++          questionId: { type: String, required: false },
+           timestamp: { type: Date, required: true },
+         },
+       ],
+diff -ruN /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/storage/learnerProfileStore.ts /mnt/data/ai-language-7_4/ai-language-master/backend/src/storage/learnerProfileStore.ts
+--- /mnt/data/ai-language-7_4_orig/ai-language-master/backend/src/storage/learnerProfileStore.ts	2026-02-04 20:44:06.000000000 +0000
++++ /mnt/data/ai-language-7_4/ai-language-master/backend/src/storage/learnerProfileStore.ts	2026-02-05 00:45:53.223099059 +0000
+@@ -67,6 +67,8 @@
+   reasonCode?: ReasonCode;
+   forcedAdvance: boolean;
+   conceptTag?: string;
++  lessonId?: string;
++  questionId?: string;
+ };
+ 
+ type RecordPracticeAttemptArgs = {
+@@ -91,7 +93,10 @@
+ 
+   type PushOps = {
+     topMistakeTags?: { $each: string[]; $slice: number };
+-    recentConfusions?: { $each: Array<{ conceptTag: string; timestamp: Date }>; $slice: number };
++    recentConfusions?: {
++      $each: Array<{ conceptTag: string; timestamp: Date; lessonId?: string; questionId?: string }>;
++      $slice: number;
++    };
+   };
+ 
+   const push: PushOps = {};
+@@ -104,7 +109,16 @@
+ 
+     if (conceptKey && isHumanConceptLabel(conceptKey)) {
+       push.recentConfusions = {
+-        $each: [{ conceptTag: conceptKey, timestamp: new Date() }],
++        $each: [
++          {
++            conceptTag: conceptKey,
++            timestamp: new Date(),
++            ...(typeof args.lessonId === "string" && args.lessonId.trim() ? { lessonId: args.lessonId.trim() } : {}),
++            ...(typeof args.questionId === "string" && args.questionId.trim()
++              ? { questionId: args.questionId.trim() }
++              : {}),
++          },
++        ],
+         $slice: -12,
+       };
+     }

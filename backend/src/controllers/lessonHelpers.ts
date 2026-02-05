@@ -7,7 +7,7 @@ import { Lesson } from "../state/lessonLoader";
 
 
 export function isSupportedLanguage(v: unknown): v is SupportedLanguage {
-  return v === "en" || v === "de" || v === "es" || v === "fr";
+  return v === "en";
 }
 
 export function normalizeLanguage(v: unknown): SupportedLanguage | null {

@@ -2,7 +2,7 @@
 //backend/src/validation/validatePracticeItem.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validatePracticeItem = validatePracticeItem;
-const SUPPORTED_LANGUAGES = ["en", "de", "es", "fr"];
+const SUPPORTED_LANGUAGES = ["en"];
 const SUPPORTED_TYPES = ["variation", "dialogue_turn", "cloze"];
 const MAX_EXAMPLES = 6;
 const GRADING_CONTAMINATION_PATTERNS = [

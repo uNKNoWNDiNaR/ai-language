@@ -75,6 +75,7 @@ const getConceptMistakeCountMock = vi.hoisted(() => vi.fn(async () => 0));
 vi.mock("../../storage/learnerProfileStore", () => {
   return {
     recordLessonAttempt: recordLessonAttemptMock,
+    recordReviewPracticeOutcome: vi.fn(async () => undefined),
     getLearnerProfileSummary: getLearnerProfileSummaryMock,
     getLearnerTopFocusReason: getLearnerTopFocusReasonMock,
     getConceptMistakeCount: getConceptMistakeCountMock,

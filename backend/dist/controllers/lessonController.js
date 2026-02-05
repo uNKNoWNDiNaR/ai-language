@@ -15,6 +15,8 @@ const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 const featureFlags_1 = require("../config/featureFlags");
 const lessonHelpers_1 = require("./lessonHelpers");
 const mapLike_1 = require("../utils/mapLike");
+const sendError_1 = require("../http/sendError");
+const logger_1 = require("../utils/logger");
 const FORCED_ADVANCE_PRACTICE_THRESHOLD = 2;
 async function ensureTutorPromptOnResume(session) {
     const last = session.messages?.[session.messages.length - 1];
@@ -63,13 +65,28 @@ async function ensureTutorPromptOnResume(session) {
 // Start lesson
 //----------------------
 const startLesson = async (req, res) => {
-    const { userId, language, lessonId, restart } = req.body;
+    const { userId, language, lessonId, restart, teachingPrefs } = req.body;
     const lang = (0, lessonHelpers_1.normalizeLanguage)(language);
     if (!userId)
-        return res.status(400).json({ error: "UserId is required" });
-    if (!lang || !lessonId)
-        return res.status(400).json({ error: "Language and lessonId are required" });
+        return (0, sendError_1.sendError)(res, 400, "UserId is required", "INVALID_REQUEST");
+    if (!lang)
+        return (0, sendError_1.sendError)(res, 400, "language must be 'en' (English only for now)", "INVALID_REQUEST");
+    if (!lessonId)
+        return (0, sendError_1.sendError)(res, 400, "lessonId is required", "INVALID_REQUEST");
     try {
+        if (teachingPrefs && typeof learnerProfileStore_1.updateTeachingProfilePrefs === "function") {
+            try {
+                await (0, learnerProfileStore_1.updateTeachingProfilePrefs)({
+                    userId,
+                    language: lang,
+                    pace: teachingPrefs?.pace,
+                    explanationDepth: teachingPrefs?.explanationDepth,
+                });
+            }
+            catch {
+                // best-effort: never block lesson start
+            }
+        }
         let session = await sessionState_1.LessonSessionModel.findOne({ userId });
         if (session) {
             const sameLesson = session.lessonId === lessonId && session.language === lang;
@@ -94,7 +111,7 @@ const startLesson = async (req, res) => {
         }
         const lesson = (0, lessonLoader_1.loadLesson)(lang, lessonId);
         if (!lesson)
-            return res.status(404).json({ error: "Lesson not found" });
+            return (0, sendError_1.sendError)(res, 404, "Lesson not found", "NOT_FOUND");
         const newSession = {
             userId,
             lessonId,
@@ -141,8 +158,8 @@ const startLesson = async (req, res) => {
         return res.status(201).json({ session, tutorMessage, progress });
     }
     catch (err) {
-        console.error("Start lesson error", err);
-        return res.status(500).json({ error: "Server error" });
+        (0, logger_1.logServerError)("startLesson", err, res.locals?.requestId);
+        return (0, sendError_1.sendError)(res, 500, "Server error", "SERVER_ERROR");
     }
 };
 exports.startLesson = startLesson;
@@ -151,27 +168,37 @@ exports.startLesson = startLesson;
 //----------------------
 const submitAnswer = async (req, res) => {
     try {
-        const { userId, answer, language, lessonId } = req.body;
+        const { userId, answer, language, lessonId, teachingPrefs } = req.body;
         if (!userId || typeof answer !== "string") {
-            return res.status(400).json({ error: "Invalid Payload (userId and answer are required)" });
+            return (0, sendError_1.sendError)(res, 400, "Invalid Payload (userId and answer are required)", "INVALID_REQUEST");
         }
         const session = await sessionState_1.LessonSessionModel.findOne({ userId });
         if (!session)
-            return res.status(404).json({ error: "No active session found" });
+            return (0, sendError_1.sendError)(res, 404, "No active session found", "NOT_FOUND");
         if (!session.language && (0, lessonHelpers_1.isSupportedLanguage)(String(language || "").trim().toLowerCase())) {
             session.language = String(language).trim().toLowerCase();
         }
         if (!session.lessonId && typeof lessonId === "string")
             session.lessonId = lessonId;
         if (!session.language || !session.lessonId) {
-            return res.status(409).json({
-                error: "Session missing language/lessonId. Please restart the lesson",
-                code: "SESSION_INCMPLETE",
-            });
+            return (0, sendError_1.sendError)(res, 409, "Session missing language/lessonId. Please restart the lesson", "SESSION_INCMPLETE");
+        }
+        if (teachingPrefs && typeof learnerProfileStore_1.updateTeachingProfilePrefs === "function") {
+            try {
+                await (0, learnerProfileStore_1.updateTeachingProfilePrefs)({
+                    userId: session.userId,
+                    language: session.language,
+                    pace: teachingPrefs?.pace,
+                    explanationDepth: teachingPrefs?.explanationDepth,
+                });
+            }
+            catch {
+                // best-effort: do not block answering
+            }
         }
         const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
         if (!lesson)
-            return res.status(404).json({ error: "Lesson not found" });
+            return (0, sendError_1.sendError)(res, 404, "Lesson not found", "NOT_FOUND");
         if (session.state === "COMPLETE") {
             const progress = (0, lessonHelpers_1.buildProgressPayload)(session, lesson, "completed");
             return res.status(200).json({ progress, session });
@@ -180,10 +207,7 @@ const submitAnswer = async (req, res) => {
         const currentIndex = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
         const currentQuestion = lesson.questions[currentIndex];
         if (!currentQuestion) {
-            return res.status(409).json({
-                error: "Session out of sync with lesson content. Please restart the lesson",
-                code: "SESSION_OUT_OF_SYNC",
-            });
+            return (0, sendError_1.sendError)(res, 409, "Session out of sync with lesson content. Please restart the lesson", "SESSION_OUT_OF_SYNC");
         }
         const qid = String(currentQuestion.id);
         const practiceCooldownByQuestionId = session.practiceCooldownByQuestionId;
@@ -257,7 +281,10 @@ const submitAnswer = async (req, res) => {
                 result: evaluation.result,
                 reasonCode: evaluation.reasonCode,
                 forcedAdvance: markNeedsReview,
+                repeatedWrong: repeatedSameWrong,
                 conceptTag: currentQuestion?.conceptTag,
+                lessonId: session.lessonId,
+                questionId: String(currentQuestion?.id ?? ""),
             });
         }
         catch {
@@ -467,8 +494,8 @@ const submitAnswer = async (req, res) => {
         });
     }
     catch (err) {
-        console.error("Submit answer error:", err);
-        return res.status(500).json({ error: "Server error" });
+        (0, logger_1.logServerError)("submitAnswer", err, res.locals?.requestId);
+        return (0, sendError_1.sendError)(res, 500, "Server error", "SERVER_ERROR");
     }
 };
 exports.submitAnswer = submitAnswer;
@@ -478,11 +505,11 @@ exports.submitAnswer = submitAnswer;
 const getSessionHandler = async (req, res) => {
     const { userId } = req.params;
     if (!userId)
-        return res.status(400).json({ error: "UserId is required" });
+        return (0, sendError_1.sendError)(res, 400, "UserId is required", "INVALID_REQUEST");
     try {
         const session = await sessionState_1.LessonSessionModel.findOne({ userId });
         if (!session)
-            return res.status(404).json({ error: "No active sessions found" });
+            return (0, sendError_1.sendError)(res, 404, "No active sessions found", "NOT_FOUND");
         const tutorMessage = await ensureTutorPromptOnResume(session);
         const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
         const progress = lesson ? (0, lessonHelpers_1.buildProgressPayload)(session, lesson) : undefined;
@@ -494,8 +521,8 @@ const getSessionHandler = async (req, res) => {
         });
     }
     catch (err) {
-        console.error(err);
-        return res.status(500).json({ error: "Failed to fetch session" });
+        (0, logger_1.logServerError)("getSessionHandler", err, res.locals?.requestId);
+        return (0, sendError_1.sendError)(res, 500, "Failed to fetch session", "SERVER_ERROR");
     }
 };
 exports.getSessionHandler = getSessionHandler;
