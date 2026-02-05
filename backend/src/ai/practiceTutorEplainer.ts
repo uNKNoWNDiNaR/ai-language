@@ -4,10 +4,12 @@
 import { generateTutorResponse } from "./openaiClient";
 import type { TutorIntent } from "./tutorIntent";
 import type { EvalResult,ReasonCode } from "../state/answerEvaluator";
+import { normalizeLanguage as normalizeInstructionLanguage } from "../utils/instructionLanguage";
 
 
 type ExplainParams = {
     language: string;
+    instructionLanguage?: string;
     result: EvalResult;
     reasonCode?: ReasonCode;
     expectedAnswer: string;
@@ -44,6 +46,11 @@ function sanitizeExplanation(text: string): string | null {
 
 export async function explainPracticeResult(p: ExplainParams): Promise<string | null> {
     try{
+        const instructionLanguage =
+          normalizeInstructionLanguage(p.instructionLanguage) ??
+          normalizeInstructionLanguage(p.language) ??
+          "en";
+
         const systemPrompt = `
 You are a calm, patient, native-speaker language tutor.
 You NEVER decide if an answer is correct - that is already decided
@@ -60,7 +67,7 @@ Rules:
 - Do not include labels like "Result:", "Reason:", "Expected answer:", or "User answer:".
 - Never combine single encouraging sentenceslike Almost.Try again. Geat effort!. in one explnation.Only choose one relevant one 
 - If a hint is provided, use it as guidance for what to focus on.
-- Use the learner's language: ${p.language}.`
+- Use the learner's instruction language: ${instructionLanguage}.`
 .trim();
 
 
@@ -78,7 +85,8 @@ ${p.hint ? `Hint to focus on (for you): "${p.hint}"` : ""}`
 
         const reply = await generateTutorResponse(prompt, intent, {
             temperature: 0.3,
-            maxOutputTokens: 120
+            maxOutputTokens: 120,
+            language: instructionLanguage,
         });
         return typeof reply === "string" ? sanitizeExplanation(reply) : null;
     } catch {

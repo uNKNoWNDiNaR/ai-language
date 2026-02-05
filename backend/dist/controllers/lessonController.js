@@ -13,12 +13,13 @@ const practiceGenerator_1 = require("../services/practiceGenerator");
 const tutorOutputGuard_1 = require("../ai/tutorOutputGuard");
 const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 const featureFlags_1 = require("../config/featureFlags");
+const instructionLanguage_1 = require("../utils/instructionLanguage");
 const lessonHelpers_1 = require("./lessonHelpers");
 const mapLike_1 = require("../utils/mapLike");
 const sendError_1 = require("../http/sendError");
 const logger_1 = require("../utils/logger");
 const FORCED_ADVANCE_PRACTICE_THRESHOLD = 2;
-async function ensureTutorPromptOnResume(session) {
+async function ensureTutorPromptOnResume(session, instructionLanguage) {
     const last = session.messages?.[session.messages.length - 1];
     if (last && last.role === "assistant")
         return null;
@@ -35,7 +36,7 @@ async function ensureTutorPromptOnResume(session) {
         intent = "ADVANCE_LESSON";
     else
         intent = "ASK_QUESTION";
-    const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText);
+    const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, instructionLanguage ? { instructionLanguage } : undefined);
     let tutorMessage;
     try {
         tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: session.language });
@@ -74,6 +75,7 @@ const startLesson = async (req, res) => {
     if (!lessonId)
         return (0, sendError_1.sendError)(res, 400, "lessonId is required", "INVALID_REQUEST");
     try {
+        let instructionLanguage = null;
         if (teachingPrefs && typeof learnerProfileStore_1.updateTeachingProfilePrefs === "function") {
             try {
                 await (0, learnerProfileStore_1.updateTeachingProfilePrefs)({
@@ -87,6 +89,28 @@ const startLesson = async (req, res) => {
                 // best-effort: never block lesson start
             }
         }
+        if ((0, featureFlags_1.isInstructionLanguageEnabled)()) {
+            try {
+                const normalizedInstruction = (0, instructionLanguage_1.normalizeLanguage)(teachingPrefs?.instructionLanguage);
+                if (normalizedInstruction && typeof learnerProfileStore_1.setInstructionLanguage === "function") {
+                    await (0, learnerProfileStore_1.setInstructionLanguage)({
+                        userId,
+                        language: lang,
+                        instructionLanguage: normalizedInstruction,
+                    });
+                }
+            }
+            catch {
+                // best-effort
+            }
+            try {
+                instructionLanguage =
+                    typeof learnerProfileStore_1.getInstructionLanguage === "function" ? await (0, learnerProfileStore_1.getInstructionLanguage)(userId, lang) : null;
+            }
+            catch {
+                instructionLanguage = null;
+            }
+        }
         let session = await sessionState_1.LessonSessionModel.findOne({ userId });
         if (session) {
             const sameLesson = session.lessonId === lessonId && session.language === lang;
@@ -98,7 +122,7 @@ const startLesson = async (req, res) => {
                 else {
                     const resumeLesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
                     const progress = resumeLesson ? (0, lessonHelpers_1.buildProgressPayload)(session, resumeLesson) : undefined;
-                    const tutorMessage = await ensureTutorPromptOnResume(session);
+                    const tutorMessage = await ensureTutorPromptOnResume(session, instructionLanguage);
                     return res.status(200).json({
                         session,
                         ...(tutorMessage ? { tutorMessage } : {}),
@@ -124,7 +148,7 @@ const startLesson = async (req, res) => {
         };
         const firstQuestion = lesson.questions[0];
         const intent = "ASK_QUESTION";
-        const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(newSession, intent, firstQuestion.question);
+        const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(newSession, intent, firstQuestion.question, instructionLanguage ? { instructionLanguage } : undefined);
         let tutorMessage;
         try {
             tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: lang });
@@ -194,6 +218,31 @@ const submitAnswer = async (req, res) => {
             }
             catch {
                 // best-effort: do not block answering
+            }
+        }
+        let instructionLanguage = null;
+        if ((0, featureFlags_1.isInstructionLanguageEnabled)()) {
+            try {
+                const normalizedInstruction = (0, instructionLanguage_1.normalizeLanguage)(teachingPrefs?.instructionLanguage);
+                if (normalizedInstruction && typeof learnerProfileStore_1.setInstructionLanguage === "function") {
+                    await (0, learnerProfileStore_1.setInstructionLanguage)({
+                        userId: session.userId,
+                        language: session.language,
+                        instructionLanguage: normalizedInstruction,
+                    });
+                }
+            }
+            catch {
+                // best-effort
+            }
+            try {
+                instructionLanguage =
+                    typeof learnerProfileStore_1.getInstructionLanguage === "function"
+                        ? await (0, learnerProfileStore_1.getInstructionLanguage)(session.userId, session.language)
+                        : null;
+            }
+            catch {
+                instructionLanguage = null;
             }
         }
         const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
@@ -380,6 +429,7 @@ const submitAnswer = async (req, res) => {
                 revealAnswer: "",
                 learnerProfileSummary: learnerProfileSummary ?? undefined,
                 explanationText: "",
+                instructionLanguage: instructionLanguage ?? undefined,
             });
         }
         catch {
@@ -391,6 +441,7 @@ const submitAnswer = async (req, res) => {
                 revealAnswer: "",
                 learnerProfileSummary: learnerProfileSummary ?? undefined,
                 explanationText: intent === "FORCED_ADVANCE" ? (currentQuestion?.explanation ?? "") : "",
+                instructionLanguage: instructionLanguage ?? undefined,
             });
         }
         let tutorMessage;
@@ -510,7 +561,19 @@ const getSessionHandler = async (req, res) => {
         const session = await sessionState_1.LessonSessionModel.findOne({ userId });
         if (!session)
             return (0, sendError_1.sendError)(res, 404, "No active sessions found", "NOT_FOUND");
-        const tutorMessage = await ensureTutorPromptOnResume(session);
+        let instructionLanguage = null;
+        if ((0, featureFlags_1.isInstructionLanguageEnabled)() && session?.language) {
+            try {
+                instructionLanguage =
+                    typeof learnerProfileStore_1.getInstructionLanguage === "function"
+                        ? await (0, learnerProfileStore_1.getInstructionLanguage)(session.userId, session.language)
+                        : null;
+            }
+            catch {
+                instructionLanguage = null;
+            }
+        }
+        const tutorMessage = await ensureTutorPromptOnResume(session, instructionLanguage);
         const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
         const progress = lesson ? (0, lessonHelpers_1.buildProgressPayload)(session, lesson) : undefined;
         return res.status(200).json({

@@ -7,6 +7,7 @@
             "id": 1,
             "question": "How do you say 'Hello' in English?",
             "answer": "Hello",
+            "conceptTag": "greetings_hello",
             "hint": "It's a common greeting used to start a conversation",
             "examples": ["Hello", "Hi", "Hey"]
         },
@@ -16,6 +17,7 @@
             "answer": "What is your name?",
             "conceptTag": "asking_name",
             "acceptedAnswers": [
+              "What is your name?",
               "What's your name?",
               "What’s your name?",
               "May I know your name?",
@@ -30,6 +32,7 @@
             "id": 3,
             "question": "Reply to 'How are you' in English",
             "answer": "I am fine",
+            "conceptTag": "how_are_you_reply",
             "hint": "It starts with 'I am'.",
             "examples": ["I am fine", "I am good", "I'm doing well", "I'm fine"]
         },
@@ -37,6 +40,7 @@
             "id": 4,
             "question": "How do you say 'Good Morning'?",
             "answer": "Good Morning",
+            "conceptTag": "good_morning",
             "hint": "Used before noon as a greeting",
             "examples": ["Good Morning"]
         },
@@ -44,6 +48,7 @@
             "id": 5,
             "question": "How do you introduce youself?",
             "answer": "My name is [Your name]",
+            "conceptTag": "introduce_self",
             "hint": "Starts with 'My name is ....'",
             "examples": ["My name is John", "My name is Sarah"]
         },
@@ -51,6 +56,7 @@
             "id": 6,
             "question": "How do you say 'Nice to meet you.'?",
             "answer": "Nice to meet you",
+            "conceptTag": "nice_to_meet_you",
             "hint": "Say this after being introduced to someone",
             "examples": ["Nice to meet you"]
         }

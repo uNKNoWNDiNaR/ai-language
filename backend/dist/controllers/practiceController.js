@@ -10,7 +10,7 @@ const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 const mapLike_1 = require("../utils/mapLike");
 const sendError_1 = require("../http/sendError");
 function isSupportedLanguage(v) {
-    return v === "en";
+    return v === "en" || v === "de" || v === "es" || v === "fr";
 }
 function isPracticeMetaType(v) {
     return v === "variation" || v === "dialogue_turn" || v === "cloze";
@@ -24,7 +24,7 @@ const generatePractice = async (req, res) => {
         return (0, sendError_1.sendError)(res, 400, "lessonId is required", "INVALID_REQUEST");
     }
     if (!isSupportedLanguage(language)) {
-        return (0, sendError_1.sendError)(res, 400, "language must be 'en' (English only for now)", "INVALID_REQUEST");
+        return (0, sendError_1.sendError)(res, 400, "language must be one of: en, de, es, fr", "INVALID_REQUEST");
     }
     const lesson = (0, lessonLoader_1.loadLesson)(language, lessonId);
     if (!lesson) {
@@ -125,7 +125,7 @@ const generateReview = async (req, res) => {
         return (0, sendError_1.sendError)(res, 400, "userId is required", "INVALID_REQUEST");
     }
     if (!isSupportedLanguage(language)) {
-        return (0, sendError_1.sendError)(res, 400, "language must be 'en' (English only for now)", "INVALID_REQUEST");
+        return (0, sendError_1.sendError)(res, 400, "language must be one of: en, de, es, fr", "INVALID_REQUEST");
     }
     const requested = parseReviewItems(items).slice(0, 2);
     if (requested.length === 0) {

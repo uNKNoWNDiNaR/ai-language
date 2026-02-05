@@ -11,7 +11,7 @@ import { mapLikeHas, mapLikeSet } from "../utils/mapLike";
 import { sendError } from "../http/sendError";
 
 function isSupportedLanguage(v: unknown): v is SupportedLanguage {
-  return v === "en";
+  return v === "en" || v === "de" || v === "es" || v === "fr";
 }
 
 function isPracticeMetaType(v: unknown): v is PracticeMetaType {
@@ -30,7 +30,7 @@ export const generatePractice = async (req: Request, res: Response) => {
   }
 
   if (!isSupportedLanguage(language)) {
-    return sendError(res, 400, "language must be 'en' (English only for now)", "INVALID_REQUEST");
+    return sendError(res, 400, "language must be one of: en, de, es, fr", "INVALID_REQUEST");
   }
 
   const lesson = loadLesson(language, lessonId);
@@ -162,7 +162,7 @@ export const generateReview = async (req: Request, res: Response) => {
   }
 
   if (!isSupportedLanguage(language)) {
-    return sendError(res, 400, "language must be 'en' (English only for now)", "INVALID_REQUEST");
+    return sendError(res, 400, "language must be one of: en, de, es, fr", "INVALID_REQUEST");
   }
 
   const requested = parseReviewItems(items).slice(0, 2);

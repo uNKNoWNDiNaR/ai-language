@@ -4,6 +4,9 @@ import mongoose from "mongoose";
 import { LearnerProfileModel } from "../state/learnerProfileState";
 import type { EvalResult, ReasonCode } from "../state/answerEvaluator";
 import { SupportedLanguage } from "../types";
+import {
+  normalizeLanguage as normalizeInstructionLanguage,
+} from "../utils/instructionLanguage";
 
 function isMongoReady(): boolean {
   // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
@@ -47,6 +50,8 @@ function toExplanationDepth(v: unknown): TeachingExplanationDepth | undefined {
   return v === "short" || v === "normal" || v === "detailed" ? v : undefined;
 }
 
+const DEFAULT_INSTRUCTION_LANGUAGE: SupportedLanguage = "en";
+
 export async function updateTeachingProfilePrefs(args: {
   userId: string;
   language: SupportedLanguage;
@@ -69,6 +74,43 @@ export async function updateTeachingProfilePrefs(args: {
     {
       $setOnInsert: { userId: args.userId, language: args.language },
       $set: set,
+    },
+    { upsert: true }
+  );
+}
+
+export async function getInstructionLanguage(
+  userId: string,
+  language: SupportedLanguage
+): Promise<SupportedLanguage> {
+  if (!isMongoReady()) return DEFAULT_INSTRUCTION_LANGUAGE;
+
+  const doc = (await LearnerProfileModel.findOne(
+    { userId, language },
+    { instructionLanguage: 1 }
+  ).lean()) as Record<string, unknown> | null;
+
+  if (!doc) return DEFAULT_INSTRUCTION_LANGUAGE;
+
+  const raw = (doc as any).instructionLanguage;
+  return normalizeInstructionLanguage(raw) ?? DEFAULT_INSTRUCTION_LANGUAGE;
+}
+
+export async function setInstructionLanguage(args: {
+  userId: string;
+  language: SupportedLanguage;
+  instructionLanguage?: unknown;
+}): Promise<void> {
+  if (!isMongoReady()) return;
+
+  const normalized = normalizeInstructionLanguage(args.instructionLanguage);
+  if (!normalized) return;
+
+  await LearnerProfileModel.updateOne(
+    { userId: args.userId, language: args.language },
+    {
+      $setOnInsert: { userId: args.userId, language: args.language },
+      $set: { instructionLanguage: normalized, lastActiveAt: new Date() },
     },
     { upsert: true }
   );

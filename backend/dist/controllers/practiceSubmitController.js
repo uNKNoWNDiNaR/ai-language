@@ -8,6 +8,7 @@ const practiceTutorEplainer_1 = require("../ai/practiceTutorEplainer");
 const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 const mapLike_1 = require("../utils/mapLike");
 const sendError_1 = require("../http/sendError");
+const featureFlags_1 = require("../config/featureFlags");
 function parseQuestionIdFromConceptTag(tag) {
     if (typeof tag !== "string")
         return null;
@@ -104,15 +105,30 @@ const submitPractice = async (req, res) => {
     const hint = getHintForAttempt(item, attemptCount);
     const baseMessage = buildTutorMessage(evalRes.result, hint);
     let explanation = null;
+    let instructionLanguage = null;
+    if ((0, featureFlags_1.isInstructionLanguageEnabled)()) {
+        try {
+            const lang = (typeof session.language === "string" && session.language.trim()
+                ? session.language
+                : item.language) || item.language;
+            instructionLanguage = await (0, learnerProfileStore_1.getInstructionLanguage)(session.userId, lang);
+        }
+        catch {
+            instructionLanguage = null;
+        }
+    }
     // Only add an explanation when it helps learning without overpacking:
     // - correct: short "why it works"
     // - almost/wrong: only after attempt 2/3 (attempt 1 stays "try again"; attempt 4+ reveals answer)
     const shouldExplain = evalRes.result === "correct" ||
-        ((evalRes.result === "almost" || evalRes.result === "wrong") && attemptCount >= 2 && attemptCount <= 3);
+        ((evalRes.result === "almost" || evalRes.result === "wrong") &&
+            attemptCount >= 2 &&
+            attemptCount <= 3);
     if (shouldExplain) {
         try {
             explanation = await (0, practiceTutorEplainer_1.explainPracticeResult)({
                 language: item.language,
+                instructionLanguage: instructionLanguage ?? undefined,
                 result: evalRes.result,
                 reasonCode: evalRes.reasonCode,
                 expectedAnswer: item.expectedAnswerRaw,

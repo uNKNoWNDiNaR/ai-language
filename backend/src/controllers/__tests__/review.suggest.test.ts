@@ -55,6 +55,18 @@ describe("reviewController.suggestReview", () => {
     expect(res.json).toHaveBeenCalledWith({ items: [], message: "" });
   });
 
+  it.each(["de", "es", "fr"])("accepts %s language", async (lang) => {
+    findOneMock.mockReturnValueOnce({ lean: vi.fn(async () => null) });
+
+    const { suggestReview } = await import("../reviewController");
+    const req: any = { body: { userId: "u1", language: lang } };
+    const res = makeRes();
+
+    await suggestReview(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
   it("returns suggested items (bounded) from review items", async () => {
     const profile = {
       reviewItems: {

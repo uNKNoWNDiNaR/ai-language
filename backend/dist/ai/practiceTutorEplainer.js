@@ -3,6 +3,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.explainPracticeResult = explainPracticeResult;
 const openaiClient_1 = require("./openaiClient");
+const instructionLanguage_1 = require("../utils/instructionLanguage");
 function sanitizeExplanation(text) {
     const t = text.trim();
     if (!t)
@@ -25,6 +26,9 @@ function sanitizeExplanation(text) {
 }
 async function explainPracticeResult(p) {
     try {
+        const instructionLanguage = (0, instructionLanguage_1.normalizeLanguage)(p.instructionLanguage) ??
+            (0, instructionLanguage_1.normalizeLanguage)(p.language) ??
+            "en";
         const systemPrompt = `
 You are a calm, patient, native-speaker language tutor.
 You NEVER decide if an answer is correct - that is already decided
@@ -41,7 +45,7 @@ Rules:
 - Do not include labels like "Result:", "Reason:", "Expected answer:", or "User answer:".
 - Never combine single encouraging sentenceslike Almost.Try again. Geat effort!. in one explnation.Only choose one relevant one 
 - If a hint is provided, use it as guidance for what to focus on.
-- Use the learner's language: ${p.language}.`
+- Use the learner's instruction language: ${instructionLanguage}.`
             .trim();
         const userPrompt = `
 Target phrase (for you): "${p.expectedAnswer}"
@@ -53,7 +57,8 @@ ${p.hint ? `Hint to focus on (for you): "${p.hint}"` : ""}`
         const intent = "EXPLAIN_PRACTICE_RESULT";
         const reply = await (0, openaiClient_1.generateTutorResponse)(prompt, intent, {
             temperature: 0.3,
-            maxOutputTokens: 120
+            maxOutputTokens: 120,
+            language: instructionLanguage,
         });
         return typeof reply === "string" ? sanitizeExplanation(reply) : null;
     }

@@ -31,4 +31,28 @@ describe("buildTutorPrompt language guard", () => {
     expect(prompt).toMatch(/ONLY quote foreign words/i);
     expect(prompt).toMatch(/do NOT turn the prompt into a translation task/i);
   });
+
+  it("includes instruction language guidance when provided", () => {
+    const session: any = {
+      userId: "u1",
+      lessonId: "basic-1",
+      language: "en",
+      state: "USER_INPUT",
+      attempts: 0,
+      maxAttempts: 4,
+      currentQuestionIndex: 0,
+      messages: [],
+    };
+
+    const prompt = buildTutorPrompt(
+      session,
+      "ASK_QUESTION" as any,
+      "Q?",
+      { instructionLanguage: "de" }
+    );
+
+    expect(prompt).toMatch(/INSTRUCTION LANGUAGE:/i);
+    expect(prompt).toMatch(/"de"/i);
+    expect(prompt).toMatch(/Do NOT use it for tutor messages/i);
+  });
 });

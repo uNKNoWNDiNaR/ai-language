@@ -79,7 +79,23 @@ describe("explanaPracticeResult", () => {
     const args = (generateTutorResponse as any).mock.calls[0];
     // args: [prompt, intent, opts]
     expect(args[1]).toBe("EXPLAIN_PRACTICE_RESULT");
-    expect(args[2]).toEqual({ temperature: 0.3, maxOutputTokens: 120 });
+    expect(args[2]).toEqual({ temperature: 0.3, maxOutputTokens: 120, language: "en" });
     });
+
+  it("uses instructionLanguage when provided", async () => {
+    (generateTutorResponse as any).mockResolvedValueOnce("Short explanation.");
+
+    await explainPracticeResult({
+      language: "de",
+      instructionLanguage: "en",
+      result: "wrong",
+      expectedAnswer: "Hallo",
+      userAnswer: "Hello",
+    });
+
+    const args = (generateTutorResponse as any).mock.calls[0];
+    expect(args[0]).toMatch(/instruction language:\s*en/i);
+    expect(args[2]).toMatchObject({ language: "en" });
+  });
 
 });

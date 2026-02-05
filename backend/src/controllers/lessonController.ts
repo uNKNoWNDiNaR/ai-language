@@ -32,9 +32,14 @@ import {
   getConceptMistakeCount,
   getTeachingProfilePrefs,
   updateTeachingProfilePrefs,
+  getInstructionLanguage,
+  setInstructionLanguage,
 } from "../storage/learnerProfileStore";
 
-import { isPracticeGenEnabled } from "../config/featureFlags";
+import { isPracticeGenEnabled, isInstructionLanguageEnabled } from "../config/featureFlags";
+import {
+  normalizeLanguage as normalizeInstructionLanguage,
+} from "../utils/instructionLanguage";
 
 import {
   normalizeLanguage,
@@ -50,7 +55,10 @@ import { logServerError } from "../utils/logger";
 
 const FORCED_ADVANCE_PRACTICE_THRESHOLD = 2;
 
-async function ensureTutorPromptOnResume(session: any): Promise<string | null> {
+async function ensureTutorPromptOnResume(
+  session: any,
+  instructionLanguage?: SupportedLanguage | null
+): Promise<string | null> {
   const last = session.messages?.[session.messages.length - 1];
   if (last && last.role === "assistant") return null;
 
@@ -66,7 +74,12 @@ async function ensureTutorPromptOnResume(session: any): Promise<string | null> {
   else if (session.state === "ADVANCE") intent = "ADVANCE_LESSON";
   else intent = "ASK_QUESTION";
 
-  const tutorPrompt = buildTutorPrompt(session as any, intent, questionText);
+  const tutorPrompt = buildTutorPrompt(
+    session as any,
+    intent,
+    questionText,
+    instructionLanguage ? { instructionLanguage } : undefined
+  );
 
   let tutorMessage: string;
   try {
@@ -111,6 +124,8 @@ export const startLesson = async (req: Request, res: Response) => {
   if (!lessonId) return sendError(res, 400, "lessonId is required", "INVALID_REQUEST");
 
   try {
+    let instructionLanguage: SupportedLanguage | null = null;
+
     if (teachingPrefs && typeof updateTeachingProfilePrefs === "function") {
       try {
         await updateTeachingProfilePrefs({
@@ -121,6 +136,28 @@ export const startLesson = async (req: Request, res: Response) => {
         });
       } catch {
         // best-effort: never block lesson start
+      }
+    }
+
+    if (isInstructionLanguageEnabled()) {
+      try {
+        const normalizedInstruction = normalizeInstructionLanguage(teachingPrefs?.instructionLanguage);
+        if (normalizedInstruction && typeof setInstructionLanguage === "function") {
+          await setInstructionLanguage({
+            userId,
+            language: lang,
+            instructionLanguage: normalizedInstruction,
+          });
+        }
+      } catch {
+        // best-effort
+      }
+
+      try {
+        instructionLanguage =
+          typeof getInstructionLanguage === "function" ? await getInstructionLanguage(userId, lang) : null;
+      } catch {
+        instructionLanguage = null;
       }
     }
 
@@ -135,7 +172,7 @@ export const startLesson = async (req: Request, res: Response) => {
         } else {
           const resumeLesson = loadLesson(session.language, session.lessonId);
           const progress = resumeLesson ? buildProgressPayload(session, resumeLesson) : undefined;
-          const tutorMessage = await ensureTutorPromptOnResume(session);
+          const tutorMessage = await ensureTutorPromptOnResume(session, instructionLanguage);
 
           return res.status(200).json({
             session,
@@ -165,7 +202,12 @@ export const startLesson = async (req: Request, res: Response) => {
 
     const firstQuestion = lesson.questions[0];
     const intent: TutorIntent = "ASK_QUESTION";
-    const tutorPrompt = buildTutorPrompt(newSession, intent, firstQuestion.question);
+    const tutorPrompt = buildTutorPrompt(
+      newSession,
+      intent,
+      firstQuestion.question,
+      instructionLanguage ? { instructionLanguage } : undefined
+    );
 
     let tutorMessage: string;
     try {
@@ -256,6 +298,31 @@ export const submitAnswer = async (req: Request, res: Response) => {
         });
       } catch {
         // best-effort: do not block answering
+      }
+    }
+
+    let instructionLanguage: SupportedLanguage | null = null;
+    if (isInstructionLanguageEnabled()) {
+      try {
+        const normalizedInstruction = normalizeInstructionLanguage(teachingPrefs?.instructionLanguage);
+        if (normalizedInstruction && typeof setInstructionLanguage === "function") {
+          await setInstructionLanguage({
+            userId: session.userId,
+            language: session.language as SupportedLanguage,
+            instructionLanguage: normalizedInstruction,
+          });
+        }
+      } catch {
+        // best-effort
+      }
+
+      try {
+        instructionLanguage =
+          typeof getInstructionLanguage === "function"
+            ? await getInstructionLanguage(session.userId, session.language as SupportedLanguage)
+            : null;
+      } catch {
+        instructionLanguage = null;
       }
     }
 
@@ -491,6 +558,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
         revealAnswer: "",
         learnerProfileSummary: learnerProfileSummary ?? undefined,
         explanationText: "",
+        instructionLanguage: instructionLanguage ?? undefined,
       });
     } catch {
       tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
@@ -501,6 +569,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
         revealAnswer: "",
         learnerProfileSummary: learnerProfileSummary ?? undefined,
         explanationText: intent === "FORCED_ADVANCE" ? (currentQuestion?.explanation ?? "") : "",
+        instructionLanguage: instructionLanguage ?? undefined,
       });
     }
 
@@ -647,7 +716,19 @@ export const getSessionHandler = async (req: Request, res: Response) => {
     const session = await LessonSessionModel.findOne({ userId });
     if (!session) return sendError(res, 404, "No active sessions found", "NOT_FOUND");
 
-    const tutorMessage = await ensureTutorPromptOnResume(session);
+    let instructionLanguage: SupportedLanguage | null = null;
+    if (isInstructionLanguageEnabled() && session?.language) {
+      try {
+        instructionLanguage =
+          typeof getInstructionLanguage === "function"
+            ? await getInstructionLanguage(session.userId, session.language as SupportedLanguage)
+            : null;
+      } catch {
+        instructionLanguage = null;
+      }
+    }
+
+    const tutorMessage = await ensureTutorPromptOnResume(session, instructionLanguage);
 
     const lesson = loadLesson(session.language, session.lessonId);
     const progress = lesson ? buildProgressPayload(session, lesson) : undefined;

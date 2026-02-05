@@ -7,6 +7,7 @@
       "id": 1,
       "question": "How do you say 'Hello' in Spanish?",
       "answer": "Hola",
+      "conceptTag": "greetings_hello",
       "hint": "Common greeting.",
       "examples": ["Hola", "Buenos días"]
     },
@@ -14,6 +15,7 @@
       "id": 2,
       "question": "How do you ask someone's name?",
       "answer": "¿Cómo te llamas?",
+      "conceptTag": "asking_name",
       "hint": "Starts with 'Cómo'.",
       "examples": ["¿Cómo te llamas?", "¿Cuál es tu nombre?"]
     },
@@ -21,6 +23,7 @@
       "id": 3,
       "question": "Respond to '¿Cómo estás?' in Spanish.",
       "answer": "Bien",
+      "conceptTag": "how_are_you_reply",
       "hint": "Means 'Good'.",
       "examples": ["Bien", "Muy bien", "Todo bien"]
     }

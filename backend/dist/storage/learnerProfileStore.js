@@ -5,6 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateTeachingProfilePrefs = updateTeachingProfilePrefs;
+exports.getInstructionLanguage = getInstructionLanguage;
+exports.setInstructionLanguage = setInstructionLanguage;
 exports.recordLessonAttempt = recordLessonAttempt;
 exports.recordReviewPracticeOutcome = recordReviewPracticeOutcome;
 exports.recordPracticeAttempt = recordPracticeAttempt;
@@ -16,6 +18,7 @@ exports.getRecentConfusionConceptTag = getRecentConfusionConceptTag;
 exports.getTeachingProfilePrefs = getTeachingProfilePrefs;
 const mongoose_1 = __importDefault(require("mongoose"));
 const learnerProfileState_1 = require("../state/learnerProfileState");
+const instructionLanguage_1 = require("../utils/instructionLanguage");
 function isMongoReady() {
     // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
     // We skip writes unless connected to avoid buffering/hanging in tests.
@@ -46,6 +49,7 @@ function toPace(v) {
 function toExplanationDepth(v) {
     return v === "short" || v === "normal" || v === "detailed" ? v : undefined;
 }
+const DEFAULT_INSTRUCTION_LANGUAGE = "en";
 async function updateTeachingProfilePrefs(args) {
     if (!isMongoReady())
         return;
@@ -61,6 +65,26 @@ async function updateTeachingProfilePrefs(args) {
     await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, {
         $setOnInsert: { userId: args.userId, language: args.language },
         $set: set,
+    }, { upsert: true });
+}
+async function getInstructionLanguage(userId, language) {
+    if (!isMongoReady())
+        return DEFAULT_INSTRUCTION_LANGUAGE;
+    const doc = (await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { instructionLanguage: 1 }).lean());
+    if (!doc)
+        return DEFAULT_INSTRUCTION_LANGUAGE;
+    const raw = doc.instructionLanguage;
+    return (0, instructionLanguage_1.normalizeLanguage)(raw) ?? DEFAULT_INSTRUCTION_LANGUAGE;
+}
+async function setInstructionLanguage(args) {
+    if (!isMongoReady())
+        return;
+    const normalized = (0, instructionLanguage_1.normalizeLanguage)(args.instructionLanguage);
+    if (!normalized)
+        return;
+    await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, {
+        $setOnInsert: { userId: args.userId, language: args.language },
+        $set: { instructionLanguage: normalized, lastActiveAt: new Date() },
     }, { upsert: true });
 }
 function mistakeTagFromReasonCode(reasonCode) {

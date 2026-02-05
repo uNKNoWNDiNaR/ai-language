@@ -39,10 +39,13 @@ vi.mock("../../storage/learnerProfileStore", () => ({
   getLearnerTopFocusReason: vi.fn(async () => null),
   getConceptMistakeCount: vi.fn(async () => 0),
   getTeachingProfilePrefs: vi.fn(async () => null),
+  getInstructionLanguage: vi.fn(async () => "en"),
+  setInstructionLanguage: vi.fn(async () => undefined),
 }));
 
 vi.mock("../../config/featureFlags", () => ({
   isPracticeGenEnabled: () => false,
+  isInstructionLanguageEnabled: () => false,
 }));
 
 function makeRes() {

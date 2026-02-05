@@ -2,10 +2,10 @@
 
 import type { Request, Response } from "express";
 import { sendError } from "../http/sendError";
-import { normalizeLanguage } from "./lessonHelpers";
 import { LearnerProfileModel } from "../state/learnerProfileState";
 import { suggestReviewItems } from "../services/reviewScheduler";
 import { logServerError } from "../utils/logger";
+import type { SupportedLanguage } from "../types";
 
 type SuggestReviewInput = {
   userId?: unknown;
@@ -13,6 +13,13 @@ type SuggestReviewInput = {
   maxItems?: unknown;
   limit?: unknown;
 };
+
+function normalizeLanguage(value: unknown): SupportedLanguage | null {
+  if (typeof value !== "string") return null;
+  const t = value.trim().toLowerCase();
+  if (t === "en" || t === "de" || t === "es" || t === "fr") return t as SupportedLanguage;
+  return null;
+}
 
 function parseSuggestReviewInput(req: Request): { userId: string; language: string; maxItems: number } {
   const body = (req.body ?? {}) as SuggestReviewInput;
@@ -38,7 +45,7 @@ export async function suggestReview(req: Request, res: Response) {
 
   if (!userId) return sendError(res, 400, "userId is required", "INVALID_REQUEST");
   if (!language)
-    return sendError(res, 400, "language must be 'en' (English only for now)", "INVALID_REQUEST");
+    return sendError(res, 400, "language must be one of: en, de, es, fr", "INVALID_REQUEST");
 
   try {
     const profile = await LearnerProfileModel.findOne({ userId, language }, { reviewItems: 1 }).lean();

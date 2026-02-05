@@ -88,6 +88,8 @@ vi.mock("../../storage/learnerProfileStore", () => {
     recordReviewPracticeOutcome: vi.fn(async () => undefined),
     getLearnerProfileSummary: vi.fn(async () => null),
     getLearnerTopFocusReason: vi.fn(async () => null),
+    getInstructionLanguage: vi.fn(async () => "en"),
+    setInstructionLanguage: vi.fn(async () => undefined),
   };
 });
 

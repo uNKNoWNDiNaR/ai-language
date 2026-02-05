@@ -7,6 +7,7 @@
       "id": 1,
       "question": "How do you say 'Hello' in French?",
       "answer": "Bonjour",
+      "conceptTag": "greetings_hello",
       "hint": "Common greeting.",
       "examples": ["Bonjour", "Salut"]
     },
@@ -14,6 +15,7 @@
       "id": 2,
       "question": "How do you ask someone's name?",
       "answer": "Comment tu t'appelles?",
+      "conceptTag": "asking_name",
       "hint": "Starts with 'Comment'.",
       "examples": ["Comment tu t'appelles?", "Quel est ton nom?"]
     },
@@ -21,6 +23,7 @@
       "id": 3,
       "question": "Respond to 'Ça va?' in French.",
       "answer": "Ça va bien",
+      "conceptTag": "how_are_you_reply",
       "hint": "Means 'I am fine'.",
       "examples": ["Ça va bien", "Bien", "Très bien"]
     }

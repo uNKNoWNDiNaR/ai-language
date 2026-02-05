@@ -21,6 +21,7 @@ export type ExplanationDepth = "short" | "normal" | "detailed";
 export type TeachingPrefs = {
   pace: TeachingPace;
   explanationDepth: ExplanationDepth;
+  instructionLanguage?: SupportedLanguage;
 };
 
 

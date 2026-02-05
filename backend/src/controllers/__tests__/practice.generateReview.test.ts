@@ -99,6 +99,21 @@ describe("POST /practice/generateReview", () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
+  it.each(["de", "es", "fr"])("accepts %s language", async (lang) => {
+    const req: any = {
+      body: {
+        userId: "u1",
+        language: lang,
+        items: [{ lessonId: "basic-1", questionId: "1" }],
+      },
+    };
+    const res = makeRes();
+
+    await generateReview(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
   it("200 returns review practice and does not alter lesson state", async () => {
     const req: any = {
       body: {

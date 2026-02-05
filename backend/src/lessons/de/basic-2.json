@@ -7,6 +7,7 @@
       "id": 1,
       "question": "How do you say 'one' in German?",
       "answer": "eins",
+      "conceptTag": "number_one",
       "hint": "The number after zero.",
       "examples": ["eins", "1"]
     },
@@ -14,6 +15,7 @@
       "id": 2,
       "question": "How do you say 'red' in German?",
       "answer": "rot",
+      "conceptTag": "color_red",
       "hint": "A color",
       "examples": ["rot", "Rot"]
     },
@@ -21,6 +23,7 @@
       "id": 3,
       "question": "How do you say 'blue' in German?",
       "answer": "blau",
+      "conceptTag": "color_blue",
       "hint": "A color",
       "examples": ["blau", "Blau"]
     }

@@ -14,6 +14,7 @@ function buildTutorPrompt(session, intent, questionText, ctx = {}) {
     const revealAnswer = safeStr(ctx.revealAnswer).trim();
     const learnerProfileSummary = safeStr(ctx.learnerProfileSummary).trim();
     const explanationText = safeStr(ctx.explanationText).trim();
+    const instructionLanguage = safeStr(ctx.instructionLanguage).trim();
     const languageGuard = [
         `LANGUAGE GUARD:`,
         `- The lesson language is "${lang}".`,
@@ -37,6 +38,14 @@ function buildTutorPrompt(session, intent, questionText, ctx = {}) {
             `Hard rules:`,
             `- do NOT mention tracking or counts (no “I noticed you struggle with...” / no metrics).`,
             `- Use this ONLY to shape tone and pacing.`,
+        ].join("\n")
+        : "";
+    const instructionLanguageBlock = instructionLanguage
+        ? [
+            ``,
+            `INSTRUCTION LANGUAGE:`,
+            `- Instruction language for explanations/help is "${instructionLanguage}".`,
+            `- Do NOT use it for tutor messages; keep tutor messages in the lesson language.`,
         ].join("\n")
         : "";
     const sessionBlock = [
@@ -98,6 +107,7 @@ function buildTutorPrompt(session, intent, questionText, ctx = {}) {
         `You are a calm, patient language tutor.`,
         ``,
         languageGuard,
+        instructionLanguageBlock,
         learnerProfileBlock,
         sessionBlock,
         intentBlock.join("\n"),

@@ -4,11 +4,16 @@ import type { Request, Response } from "express";
 import { getSession, updateSession } from "../storage/sessionStore";
 import { evaluateAnswer } from "../state/answerEvaluator";
 import type { LessonQuestion } from "../state/lessonLoader";
-import type { PracticeItem } from "../types";
+import type { PracticeItem, SupportedLanguage } from "../types";
 import { explainPracticeResult } from "../ai/practiceTutorEplainer";
-import { recordPracticeAttempt, recordReviewPracticeOutcome } from "../storage/learnerProfileStore";
+import {
+  recordPracticeAttempt,
+  recordReviewPracticeOutcome,
+  getInstructionLanguage,
+} from "../storage/learnerProfileStore";
 import { mapLikeGet, mapLikeSet, mapLikeGetNumber } from "../utils/mapLike";
 import { sendError } from "../http/sendError";
+import { isInstructionLanguageEnabled } from "../config/featureFlags";
 
 function parseQuestionIdFromConceptTag(tag: unknown): string | null {
   if (typeof tag !== "string") return null;
@@ -120,43 +125,59 @@ export const submitPractice = async (req: Request, res: Response) => {
 
   const baseMessage = buildTutorMessage(evalRes.result, hint);
 
-let explanation: string | null = null;
+  let explanation: string | null = null;
+  let instructionLanguage: string | null = null;
 
-// Only add an explanation when it helps learning without overpacking:
-// - correct: short "why it works"
-// - almost/wrong: only after attempt 2/3 (attempt 1 stays "try again"; attempt 4+ reveals answer)
-const shouldExplain =
-  evalRes.result === "correct" ||
-  ((evalRes.result === "almost" || evalRes.result === "wrong") && attemptCount >= 2 && attemptCount <= 3);
-
-if (shouldExplain) {
-  try {
-    explanation = await explainPracticeResult({
-      language: item.language,
-      result: evalRes.result,
-      reasonCode: evalRes.reasonCode,
-      expectedAnswer: item.expectedAnswerRaw,
-      userAnswer: answer,
-      hint,
-      attemptCount,
-    });
-  } catch {
-    explanation = null;
+  if (isInstructionLanguageEnabled()) {
+    try {
+      const lang =
+        (typeof session.language === "string" && session.language.trim()
+          ? session.language
+          : item.language) || item.language;
+      instructionLanguage = await getInstructionLanguage(session.userId, lang as SupportedLanguage);
+    } catch {
+      instructionLanguage = null;
+    }
   }
-}
 
-const rawLabelLeak =
-  /(^|\n)\s*(result|reason|expected(\s*answer)?|user\s*answer|your\s*answer)\s*[:\-–—>]/i;
+  // Only add an explanation when it helps learning without overpacking:
+  // - correct: short "why it works"
+  // - almost/wrong: only after attempt 2/3 (attempt 1 stays "try again"; attempt 4+ reveals answer)
+  const shouldExplain =
+    evalRes.result === "correct" ||
+    ((evalRes.result === "almost" || evalRes.result === "wrong") &&
+      attemptCount >= 2 &&
+      attemptCount <= 3);
 
-// If the explainer output looks like internal/debug formatting, reject it entirely.
-// (Do NOT try to "strip" and salvage it.)
-const explainerText = explanation && !rawLabelLeak.test(explanation) ? explanation : null;
+  if (shouldExplain) {
+    try {
+      explanation = await explainPracticeResult({
+        language: item.language,
+        instructionLanguage: instructionLanguage ?? undefined,
+        result: evalRes.result,
+        reasonCode: evalRes.reasonCode,
+        expectedAnswer: item.expectedAnswerRaw,
+        userAnswer: answer,
+        hint,
+        attemptCount,
+      });
+    } catch {
+      explanation = null;
+    }
+  }
 
-const cleanedExplanation = explainerText ? stripDebugPrefixes(explainerText) : "";
-const safeExplanation = cleanedExplanation && !looksInternal(cleanedExplanation) ? cleanedExplanation : "";
+  const rawLabelLeak =
+    /(^|\n)\s*(result|reason|expected(\s*answer)?|user\s*answer|your\s*answer)\s*[:\-–—>]/i;
 
-// Keep the deterministic base (with hint escalation), and add a short user-facing explanation if available.
-const tutorMessage = safeExplanation ? `${baseMessage} ${safeExplanation}`.trim() : baseMessage;
+  // If the explainer output looks like internal/debug formatting, reject it entirely.
+  // (Do NOT try to "strip" and salvage it.)
+  const explainerText = explanation && !rawLabelLeak.test(explanation) ? explanation : null;
+
+  const cleanedExplanation = explainerText ? stripDebugPrefixes(explainerText) : "";
+  const safeExplanation = cleanedExplanation && !looksInternal(cleanedExplanation) ? cleanedExplanation : "";
+
+  // Keep the deterministic base (with hint escalation), and add a short user-facing explanation if available.
+  const tutorMessage = safeExplanation ? `${baseMessage} ${safeExplanation}`.trim() : baseMessage;
 
   // ---- Learner profile tracking (BITE 4.1, best-effort; no behavior change) ----
   try {

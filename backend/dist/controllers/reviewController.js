@@ -3,10 +3,17 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.suggestReview = suggestReview;
 const sendError_1 = require("../http/sendError");
-const lessonHelpers_1 = require("./lessonHelpers");
 const learnerProfileState_1 = require("../state/learnerProfileState");
 const reviewScheduler_1 = require("../services/reviewScheduler");
 const logger_1 = require("../utils/logger");
+function normalizeLanguage(value) {
+    if (typeof value !== "string")
+        return null;
+    const t = value.trim().toLowerCase();
+    if (t === "en" || t === "de" || t === "es" || t === "fr")
+        return t;
+    return null;
+}
 function parseSuggestReviewInput(req) {
     const body = (req.body ?? {});
     const query = (req.query ?? {});
@@ -14,7 +21,7 @@ function parseSuggestReviewInput(req) {
     const languageRaw = body.language ?? query.language;
     const maxItemsRaw = body.maxItems ?? body.limit ?? query.maxItems ?? query.limit;
     const userId = typeof userIdRaw === "string" ? userIdRaw.trim() : "";
-    const language = (0, lessonHelpers_1.normalizeLanguage)(languageRaw);
+    const language = normalizeLanguage(languageRaw);
     const maxItems = typeof maxItemsRaw === "number" || typeof maxItemsRaw === "string"
         ? Math.max(1, Math.min(5, Math.floor(Number(maxItemsRaw))))
         : 2;
@@ -25,7 +32,7 @@ async function suggestReview(req, res) {
     if (!userId)
         return (0, sendError_1.sendError)(res, 400, "userId is required", "INVALID_REQUEST");
     if (!language)
-        return (0, sendError_1.sendError)(res, 400, "language must be 'en' (English only for now)", "INVALID_REQUEST");
+        return (0, sendError_1.sendError)(res, 400, "language must be one of: en, de, es, fr", "INVALID_REQUEST");
     try {
         const profile = await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { reviewItems: 1 }).lean();
         if (!profile) {

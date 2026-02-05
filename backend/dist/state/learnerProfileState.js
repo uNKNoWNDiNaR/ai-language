@@ -24,6 +24,7 @@ const LearnerProfileSchema = new mongoose_1.default.Schema({
     language: { type: String, required: true },
     pace: { type: String, default: "normal" }, // "slow" | "normal"
     explanationDepth: { type: String, default: "normal" }, // "short" | "normal" | "detailed"
+    instructionLanguage: { type: String, default: "en" }, // "en" | "de" | "es" | "fr"
     attemptsTotal: { type: Number, default: 0 },
     forcedAdvanceCount: { type: Number, default: 0 },
     practiceAttempts: { type: Number, default: 0 },

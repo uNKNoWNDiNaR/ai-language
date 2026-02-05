@@ -7,6 +7,7 @@
       "id": 1,
       "question": "What is the number after one?",
       "answer": "two",
+      "conceptTag": "number_after_one",
       "hint": "It comes after one.",
       "examples": ["two", "2"]
     },
@@ -14,6 +15,7 @@
       "id": 2,
       "question": "What color is the sky on a clear day?",
       "answer": "blue",
+      "conceptTag": "color_sky",
       "hint": "Think of the ocean.",
       "examples": ["blue", "light blue"]
     },
@@ -21,6 +23,7 @@
       "id": 3,
       "question": "What color is an apple usually?",
       "answer": "red",
+      "conceptTag": "color_apple",
       "hint": "Common fruit color.",
       "examples": ["red", "green"]
     }

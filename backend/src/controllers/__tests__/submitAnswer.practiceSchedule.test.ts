@@ -79,6 +79,8 @@ vi.mock("../../storage/learnerProfileStore", () => {
     getLearnerProfileSummary: getLearnerProfileSummaryMock,
     getLearnerTopFocusReason: getLearnerTopFocusReasonMock,
     getConceptMistakeCount: getConceptMistakeCountMock,
+    getInstructionLanguage: vi.fn(async () => "en"),
+    setInstructionLanguage: vi.fn(async () => undefined),
   };
 });
 

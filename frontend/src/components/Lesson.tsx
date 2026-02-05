@@ -22,12 +22,21 @@ import {
   type SuggestedReviewItem,
   type SupportedLanguage,
 } from "../api/lessonAPI";
+import {
+  isInstructionLanguageEnabledFlag,
+  normalizeInstructionLanguage,
+  buildTeachingPrefsPayload,
+} from "../utils/instructionLanguage";
 
 type Role = "user" | "assistant";
 
 const LAST_SESSION_KEY = "ai-language:lastSessionKey";
 
 const TEACHING_PREFS_PREFIX = "ai-language:teachingPrefs:";
+
+const INSTRUCTION_LANGUAGE_ENABLED = isInstructionLanguageEnabledFlag(
+  import.meta.env.VITE_FEATURE_INSTRUCTION_LANGUAGE
+);
 
 function makeTeachingPrefsKey(userId: string, language: string): string {
   const u = userId.trim();
@@ -52,14 +61,17 @@ function readTeachingPrefs(key: string): TeachingPrefs | null {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
 
-    const obj = parsed as { pace?: unknown; explanationDepth?: unknown };
+    const obj = parsed as { pace?: unknown; explanationDepth?: unknown; instructionLanguage?: unknown };
 
     const pace: TeachingPace = isTeachingPace(obj.pace) ? obj.pace : "normal";
     const explanationDepth: ExplanationDepth = isExplanationDepth(obj.explanationDepth)
       ? obj.explanationDepth
       : "normal";
 
-    return { pace, explanationDepth };
+    const instructionLanguage =
+      normalizeInstructionLanguage(obj.instructionLanguage) ?? "en";
+
+    return { pace, explanationDepth, instructionLanguage };
   } catch {
     return null;
   }
@@ -212,6 +224,7 @@ export function Lesson() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [teachingPace, setTeachingPace] = useState<TeachingPace>("normal");
   const [explanationDepth, setExplanationDepth] = useState<ExplanationDepth>("normal");
+  const [instructionLanguage, setInstructionLanguage] = useState<SupportedLanguage>("en");
   const [hintAnchorIndex, setHintAnchorIndex] = useState<number | null>(null);
 
   const [suggestedReviewItems, setSuggestedReviewItems] = useState<SuggestedReviewItem[]>([]);
@@ -275,7 +288,7 @@ export function Lesson() {
     return `${u}|${language}|${lid}`;
   }, [userId, language, lessonId]);
 
-    const teachingPrefsKey = useMemo(() => {
+  const teachingPrefsKey = useMemo(() => {
     return makeTeachingPrefsKey(userId, language);
   }, [userId, language]);
 
@@ -284,15 +297,32 @@ export function Lesson() {
     if (loaded) {
       setTeachingPace(loaded.pace);
       setExplanationDepth(loaded.explanationDepth);
+      setInstructionLanguage(loaded.instructionLanguage ?? "en");
       return;
     }
     setTeachingPace("normal");
     setExplanationDepth("normal");
+    setInstructionLanguage("en");
   }, [teachingPrefsKey]);
 
   useEffect(() => {
-    writeTeachingPrefs(teachingPrefsKey, { pace: teachingPace, explanationDepth });
-  }, [teachingPrefsKey, teachingPace, explanationDepth]);
+    writeTeachingPrefs(teachingPrefsKey, {
+      pace: teachingPace,
+      explanationDepth,
+      instructionLanguage,
+    });
+  }, [teachingPrefsKey, teachingPace, explanationDepth, instructionLanguage]);
+
+  const teachingPrefsPayload = useMemo(
+    () =>
+      buildTeachingPrefsPayload({
+        pace: teachingPace,
+        explanationDepth,
+        instructionLanguage,
+        enableInstructionLanguage: INSTRUCTION_LANGUAGE_ENABLED,
+      }),
+    [teachingPace, explanationDepth, instructionLanguage]
+  );
 
 
   const canResume = useMemo(() => {
@@ -489,7 +519,7 @@ export function Lesson() {
         language,
         lessonId: lessonId.trim(),
         restart: false,
-        teachingPrefs: {pace: teachingPace, explanationDepth},
+        teachingPrefs: teachingPrefsPayload,
       });
 
       setSession(res.session);
@@ -604,7 +634,7 @@ export function Lesson() {
         language,
         lessonId: lessonId.trim(),
         restart: true,
-        teachingPrefs: {pace: teachingPace, explanationDepth},
+        teachingPrefs: teachingPrefsPayload,
       });
 
       setSession(res.session);
@@ -688,7 +718,7 @@ export function Lesson() {
         answer: toSend,
         language: session.language,
         lessonId: session.lessonId,
-        teachingPrefs: {pace: teachingPace, explanationDepth}
+        teachingPrefs: teachingPrefsPayload
       });
 
     setSession(res.session);
@@ -1074,6 +1104,36 @@ export function Lesson() {
                   <option value="detailed">Detailed</option>
                 </select>
               </label>
+
+              {INSTRUCTION_LANGUAGE_ENABLED && (
+                <label style={{ display: "grid", gap: 6 }}>
+                  <span style={{ fontSize: 12, opacity: 0.75 }}>
+                    Instruction language (for explanations)
+                  </span>
+                  <select
+                    value={instructionLanguage}
+                    onChange={(e) =>
+                      setInstructionLanguage(
+                        (normalizeInstructionLanguage(e.target.value) ?? "en") as SupportedLanguage
+                      )
+                    }
+                    disabled={lockControls}
+                    style={{
+                      padding: 10,
+                      borderRadius: 10,
+                      border: "1px solid var(--border)",
+                      backgroundColor: lockControls ? "var(--surface-muted)" : "white",
+                      cursor: lockControls ? "not-allowed" : "pointer",
+                      minWidth: 200,
+                    }}
+                  >
+                    <option value="en">English</option>
+                    <option value="de">German</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                  </select>
+                </label>
+              )}
             </div>
           </div>
         </>
@@ -1185,6 +1245,14 @@ export function Lesson() {
               <div style={{ opacity: 0.75 }}>
                 Depth: <span style={{ fontWeight: 600 }}>{explanationDepth}</span>
               </div>
+              {INSTRUCTION_LANGUAGE_ENABLED && (
+                <>
+                  <span style={{ opacity: 0.35 }}>•</span>
+                  <div style={{ opacity: 0.75 }}>
+                    Instr: <span style={{ fontWeight: 600 }}>{prettyLanguage(instructionLanguage)}</span>
+                  </div>
+                </>
+              )}
             </div>
 
 

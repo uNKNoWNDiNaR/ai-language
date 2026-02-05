@@ -125,6 +125,15 @@ describe("POST /practice/generate (controller)", () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
+  it.each(["de", "es", "fr"])("accepts %s language", async (lang) => {
+    const req: any = { body: { userId: "u1", lessonId: "basic-1", language: lang } };
+    const res = makeRes();
+
+    await generatePractice(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
   it("404 if lesson not found", async () => {
     const req: any = { body: { userId: "u1", lessonId: "nope", language: "en" } };
     const res = makeRes();

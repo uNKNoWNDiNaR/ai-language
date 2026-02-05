@@ -7,6 +7,7 @@
       "id": 1,
       "question": "How do you say 'Hello' in German?",
       "answer": "Hallo",
+      "conceptTag": "greetings_hello",
       "hint": "Common greeting.",
       "examples": ["Hallo", "Hi", "Guten Tag", "Hey"]
     },
@@ -14,6 +15,7 @@
       "id": 2,
       "question": "How do you ask someone's name?",
       "answer": "Wie heißt du?",
+      "conceptTag": "asking_name",
       "hint": "Starts with 'Wie'.",
       "examples": [
         "Wie heißt du?", 
@@ -24,6 +26,7 @@
       "id": 3,
       "question": "Respond to 'Wie geht's?' in German.",
       "answer": "Mir geht's gut",
+      "conceptTag": "how_are_you_reply",
       "hint": "Starts with 'Mir geht'.",
       "examples": [
         "Mir geht's gut", 
