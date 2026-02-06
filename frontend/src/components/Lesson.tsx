@@ -1,6 +1,6 @@
 // frontend/src/components/Lesson.tsx
 
-import React, { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import { FeedbackCard } from "./FeedbackCard";
 import {
   startLesson,
@@ -27,8 +27,15 @@ import {
   normalizeInstructionLanguage,
   buildTeachingPrefsPayload,
 } from "../utils/instructionLanguage";
-
-type Role = "user" | "assistant";
+import {
+  LessonShell,
+  LessonSetupPanel,
+  SessionHeader,
+  ChatPane,
+  SuggestedReviewCard,
+  PracticeCard,
+  AnswerBar,
+} from "./lesson/index";
 
 const LAST_SESSION_KEY = "ai-language:lastSessionKey";
 
@@ -86,70 +93,6 @@ function writeTeachingPrefs(key: string, prefs: TeachingPrefs) {
   }
 }
 
-function rowStyle(role: Role): React.CSSProperties {
-  const isUser = role === "user";
-  return {
-    display: "flex",
-    justifyContent: isUser ? "flex-end" : "flex-start",
-    padding: "0 6px",
-  };
-}
-
-function bubbleStyle(role: Role, isLastInGroup: boolean): React.CSSProperties {
-  const isUser = role === "user";
-
-  const bottomLeft = !isLastInGroup ? 18 : isUser ? 18 : 6;
-  const bottomRight = !isLastInGroup ? 18 : isUser ? 6 : 18;
-
-  return {
-    maxWidth: "74%",
-    padding: "11px 13px",
-    whiteSpace: "pre-wrap",
-    lineHeight: 1.42,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderBottomLeftRadius: bottomLeft,
-    borderBottomRightRadius: bottomRight,
-    background: isUser ? "var(--accent)" : "var(--surface)",
-    color: isUser ? "white" : "var(--text)",
-    border: isUser ? "1px solid var(--accent-strong)" : "1px solid var(--border)",
-    boxShadow: "var(--shadow-sm)",
-  };
-}
-
-function bubbleMetaStyle(role: Role): React.CSSProperties {
-  const isUser = role === "user";
-  return {
-    fontSize: 11,
-    marginBottom: 4,
-    opacity: isUser ? 0.85 : 0.7,
-    color: isUser ? "rgba(255,255,255,0.82)" : "var(--text-muted)",
-  };
-}
-
-function prettyLanguage(lang: string | undefined): string {
-  switch (lang) {
-    case "en":
-      return "English";
-    case "de":
-      return "German";
-    case "es":
-      return "Spanish";
-    case "fr":
-      return "French";
-    default:
-      return lang ?? "—";
-  }
-}
-
-function prettyStatus(s: string | undefined): string {
-  const t = (s ?? "").toLowerCase();
-  if (t.includes("needs")) return "Needs review";
-  if (t.includes("complete")) return "Completed";
-  if (t.includes("progress")) return "In progress";
-  return s ? s.replace(/_/g, " ") : "—";
-}
-
 function splitNextQuestion(text: string): { before: string; next: string } | null {
   const raw = (text ?? "");
   const idx = raw.toLowerCase().indexOf("next question:");
@@ -203,15 +146,16 @@ function parseRevealParts(text: string): { explanation: string; answer: string }
   return { explanation, answer };
 }
 
+const REVEAL_PREFIX = "__REVEAL__";
+
 export function Lesson() {
-  const [userId, setUserId] = useState("user-1");
-  const [language, setLanguage] = useState<"en" | "de" | "es" | "fr">("en");
-  const [lessonId, setLessonId] = useState("basic-1");
+  const [userId] = useState("user-1");
+  const [language] = useState<"en" | "de" | "es" | "fr">("en");
+  const [lessonId] = useState("basic-1");
   const [session, setSession] = useState<LessonSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [answer, setAnswer] = useState("");
   const [hintText, setHintText] = useState<string | null>(null);
-  const [hintLevel, setHintLevel] = useState<number | null>(null);
   const [practiceId, setPracticeId] = useState<string | null>(null);
   const [practicePrompt, setPracticePrompt] = useState<string | null>(null);
   const [practiceAnswer, setPracticeAnswer] = useState("");
@@ -221,11 +165,11 @@ export function Lesson() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<null | "start" | "resume" | "answer" | "practice">(null);
   const [progress, setProgress] = useState<LessonProgressPayload | null>(null);
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [practiceScreenOpen, setPracticeScreenOpen] = useState(false);
   const [teachingPace, setTeachingPace] = useState<TeachingPace>("normal");
   const [explanationDepth, setExplanationDepth] = useState<ExplanationDepth>("normal");
   const [instructionLanguage, setInstructionLanguage] = useState<SupportedLanguage>("en");
-  const [hintAnchorIndex, setHintAnchorIndex] = useState<number | null>(null);
 
   const [suggestedReviewItems, setSuggestedReviewItems] = useState<SuggestedReviewItem[]>([]);
   const [reviewDismissed, setReviewDismissed] = useState(false);
@@ -248,38 +192,48 @@ export function Lesson() {
   const answerInputRef = useRef<HTMLInputElement | null>(null);
   const practiceInputRef = useRef<HTMLInputElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
-  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
-  const moreMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const el = chatRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages.length, hintText, practicePrompt, practiceTutorMessage, pending]);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, hintText, practicePrompt, practiceTutorMessage]);
+  const prefsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const prefsMenuRef = useRef<HTMLDivElement | null>(null);
+  const scrollOnEnterRef = useRef(false);
 
   const practiceActive = useMemo(() => {
     return Boolean(practiceId && practicePrompt);
   }, [practiceId, practicePrompt]);
 
   const sessionActive = Boolean(session);
-  const lockControls = sessionActive || loading;
-  const disableStartResume = loading || practiceActive || sessionActive;
-  const disableRestart = loading || practiceActive || !sessionActive;
-
+  const showHome = !sessionActive && !practiceScreenOpen;
+  const showConversation = sessionActive && !practiceScreenOpen;
   const lessonCompleted = useMemo(() => {
     const status = (progress?.status ?? "").toLowerCase();
     return status === "completed" || status === "needs_review";
   }, [progress]);
 
+  const showPracticeScreen = practiceMode === "review" && practiceScreenOpen;
+  const reviewAvailable = practiceMode === "review" && practiceActive;
+  const reviewSuggested = suggestedReviewItems.length > 0 && !reviewDismissed;
+  const canOpenReview = reviewAvailable || reviewSuggested;
+  const showReviewBanner =
+    lessonCompleted &&
+    sessionActive &&
+    !practiceScreenOpen &&
+    canOpenReview &&
+    !(practiceActive && practiceMode === "lesson");
+  const disableStartResume = loading || practiceActive || sessionActive;
+
   const inProgressSession = Boolean(session) && !lessonCompleted;
   const showSuggestedReview =
     !inProgressSession && !practiceActive && suggestedReviewItems.length > 0 && !reviewDismissed;
-  const isReveal = hintLevel === 3;
-  const revealParts = isReveal && hintText ? parseRevealParts(hintText) : null;
+  const isReviewPractice = practiceMode === "review";
+  const hintMessage = useMemo(() => {
+    if (!hintText) return null;
+    return `Hint\n${hintText}`;
+  }, [hintText]);
+
+  const chatMessages = useMemo(() => {
+    if (!hintMessage) return messages;
+    const hintMsg: ChatMessage = { role: "assistant", content: hintMessage };
+    return [...messages, hintMsg];
+  }, [messages, hintMessage]);
 
   const currentSessionKey = useMemo(() => {
     const u = userId.trim();
@@ -312,6 +266,10 @@ export function Lesson() {
       instructionLanguage,
     });
   }, [teachingPrefsKey, teachingPace, explanationDepth, instructionLanguage]);
+
+  useEffect(() => {
+    void refreshSuggestedReview();
+  }, [userId, language]);
 
   const teachingPrefsPayload = useMemo(
     () =>
@@ -364,20 +322,20 @@ export function Lesson() {
   }, [session, practiceActive, loading, pending]);
 
   useEffect(() => {
-    if (!moreOpen) return;
+    if (!prefsOpen) return;
 
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setMoreOpen(false);
+      if (e.key === "Escape") setPrefsOpen(false);
     }
 
     function onMouseDown(e: MouseEvent) {
       const target = e.target as Node | null;
       if (!target) return;
 
-      if (moreMenuRef.current?.contains(target)) return;
-      if (moreButtonRef.current?.contains(target)) return;
+      if (prefsMenuRef.current?.contains(target)) return;
+      if (prefsButtonRef.current?.contains(target)) return;
 
-      setMoreOpen(false);
+      setPrefsOpen(false);
     }
 
     window.addEventListener("keydown", onKeyDown);
@@ -386,16 +344,34 @@ export function Lesson() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("mousedown", onMouseDown);
     };
-  }, [moreOpen]);
+  }, [prefsOpen]);
 
   useEffect(() => {
-    if (!sessionActive) setMoreOpen(false);
-  }, [sessionActive]);
+    if (!showHome) setPrefsOpen(false);
+  }, [showHome]);
 
   useEffect(() => {
-    if (lessonCompleted) setMoreOpen(false);
-  }, [lessonCompleted]);
+    if (!sessionActive) return;
+    if (!scrollOnEnterRef.current) return;
 
+    scrollOnEnterRef.current = false;
+    requestAnimationFrame(() => {
+      if (chatRef.current) {
+        chatRef.current.scrollTo({ top: chatRef.current.scrollHeight, behavior: "auto" });
+      }
+      chatEndRef.current?.scrollIntoView({ block: "end" });
+    });
+  }, [sessionActive, messages.length]);
+
+  useEffect(() => {
+    if (!showConversation) return;
+    requestAnimationFrame(() => {
+      if (chatRef.current) {
+        chatRef.current.scrollTo({ top: chatRef.current.scrollHeight, behavior: "auto" });
+      }
+      chatEndRef.current?.scrollIntoView({ block: "end" });
+    });
+  }, [showConversation, chatMessages.length, pending]);
 
   async function refreshSuggestedReview(nextUserId?: string, nextLanguage?: SupportedLanguage) {
     const uid = (nextUserId ?? session?.userId ?? userId).trim();
@@ -406,16 +382,24 @@ export function Lesson() {
     }
 
     try {
+      console.log("[review] fetching suggested", { userId: uid, language: lang });
       const res = await getSuggestedReview({
         userId: uid,
         language: lang,
-        maxItems: 2,
+        maxItems: 3,
       });
 
       const items = Array.isArray(res.items) ? res.items : [];
       setSuggestedReviewItems(items);
       setReviewDismissed(false);
-    } catch {
+      console.log("[review] suggested response", {
+        userId: uid,
+        language: lang,
+        suggestedCount: items.length,
+        suggestedKeys: items.map((item) => `${item.lessonId}__${item.questionId}`),
+      });
+    } catch (err) {
+      console.warn("[review] suggested fetch failed", err);
       setSuggestedReviewItems([]);
     }
   }
@@ -426,6 +410,7 @@ export function Lesson() {
     setPracticeAnswer("");
     setPracticeTutorMessage(null);
     setPracticeAttemptCount(null);
+    setPracticeScreenOpen(false);
 
     setPracticeMode(null);
     setReviewQueue([]);
@@ -468,6 +453,7 @@ export function Lesson() {
       setPracticeTutorMessage(null);
       setPracticeAttemptCount(null);
       setPracticeMode("review");
+      setPracticeScreenOpen(true);
     } catch {
       stopReview("Couldn't load review right now. You can continue the lesson.");
     } finally {
@@ -477,7 +463,6 @@ export function Lesson() {
 
   async function beginSuggestedReview() {
     if (practiceActive) return;
-    if (session && !lessonCompleted) return;
     if (!userId.trim()) return;
     if (suggestedReviewItems.length === 0) return;
 
@@ -487,15 +472,21 @@ export function Lesson() {
     await loadReviewPractice(suggestedReviewItems[0]);
   }
 
+  function handleOpenReview() {
+    if (reviewAvailable) {
+      setPracticeScreenOpen(true);
+      return;
+    }
+    void beginSuggestedReview();
+  }
+
   async function handleStart() {
-    setMoreOpen(false);
     setError(null);
 
     setSession(null);
     setMessages([]);
     setProgress(null);
     setHintText(null);
-    setHintLevel(null);
     setAnswer("");
     setPracticeId(null);
     setPracticePrompt(null);
@@ -512,6 +503,7 @@ export function Lesson() {
 
     setLoading(true);
     setPending("start");
+    scrollOnEnterRef.current = true;
 
     try {
       const res = await startLesson({
@@ -525,7 +517,6 @@ export function Lesson() {
       setSession(res.session);
       setMessages(res.session.messages ?? []);
       setHintText(null);
-      setHintLevel(null);
       setProgress(res.progress ?? null);
 
       const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
@@ -539,9 +530,10 @@ export function Lesson() {
       setPracticeId(null);
       setPracticePrompt(null);
       setPracticeAnswer("");
-      setPracticeTutorMessage(null);
-      setPracticeAttemptCount(null);
-      setPracticeMode(null);
+    setPracticeTutorMessage(null);
+    setPracticeAttemptCount(null);
+    setPracticeMode(null);
+    setPracticeScreenOpen(false);
       void refreshSuggestedReview(res.session.userId, res.session.language);
     } catch (e: unknown) {
       setError(toUserSafeErrorMessage(e));
@@ -552,13 +544,13 @@ export function Lesson() {
   }
 
   async function handleResume() {
-    setMoreOpen(false);
     setError(null);
 
     if (!canResume) return;
 
     setLoading(true);
     setPending("resume");
+    scrollOnEnterRef.current = true;
 
     try {
       const res = await getSession(userId.trim());
@@ -566,7 +558,7 @@ export function Lesson() {
       setMessages(res.session.messages ?? []);
       setProgress(res.progress ?? null);
       setHintText(null);
-      setHintLevel(null);
+      setPracticeScreenOpen(false);
 
       const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
       setLastSessionKey(key);
@@ -600,17 +592,13 @@ export function Lesson() {
   }
 
   async function handleRestart() {
-    setMoreOpen(false);
-    if (!window.confirm("Restart this lesson? Your current progres in this session will be reset.")) {
-      return;
-    }
+    if (!window.confirm("Restart this lesson? Your current progress will be reset.")) return;
 
     setError(null);
     setSession(null);
     setMessages([]);
     setProgress(null);
     setHintText(null);
-    setHintLevel(null);
     setAnswer("");
     setPracticeId(null);
     setPracticePrompt(null);
@@ -624,9 +612,11 @@ export function Lesson() {
     setReviewIndex(0);
     setReviewBanner(null);
     setPracticeMode(null);
+    setPracticeScreenOpen(false);
 
     setLoading(true);
     setPending("start");
+    scrollOnEnterRef.current = true;
 
     try {
       const res = await startLesson({
@@ -639,9 +629,8 @@ export function Lesson() {
 
       setSession(res.session);
       setMessages(res.session.messages ?? []);
-      setProgress(res.progress ?? null);
       setHintText(null);
-      setHintLevel(null);
+      setProgress(res.progress ?? null);
 
       const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
       setLastSessionKey(key);
@@ -651,12 +640,6 @@ export function Lesson() {
         // ignore
       }
 
-      setPracticeId(null);
-      setPracticePrompt(null);
-      setPracticeAnswer("");
-      setPracticeTutorMessage(null);
-      setPracticeAttemptCount(null);
-      setPracticeMode(null);
       void refreshSuggestedReview(res.session.userId, res.session.language);
     } catch (e: unknown) {
       setError(toUserSafeErrorMessage(e));
@@ -666,45 +649,59 @@ export function Lesson() {
     }
   }
 
-  function handleExit() {
-    setMoreOpen(false);
-    if (!window.confirm("Exit this lesson? You can resume later.")) return;
+  function resetToHome({
+    confirm,
+    preservePractice,
+  }: {
+    confirm: boolean;
+    preservePractice: boolean;
+  }) {
+    if (confirm && !window.confirm("Exit this lesson? You can resume later.")) return;
 
     setError(null);
     setSession(null);
     setMessages([]);
     setProgress(null);
     setHintText(null);
-    setHintLevel(null);
     setAnswer("");
 
-    setPracticeId(null);
-    setPracticePrompt(null);
-    setPracticeAnswer("");
-    setPracticeTutorMessage(null);
-    setPracticeAttemptCount(null);
+    if (!preservePractice) {
+      setPracticeId(null);
+      setPracticePrompt(null);
+      setPracticeAnswer("");
+      setPracticeTutorMessage(null);
+      setPracticeAttemptCount(null);
+      setPracticeMode(null);
+      setPracticeScreenOpen(false);
+    } else {
+      setPracticeScreenOpen(false);
+    }
 
     setSuggestedReviewItems([]);
     setReviewDismissed(false);
     setReviewQueue([]);
     setReviewIndex(0);
     setReviewBanner(null);
-    setPracticeMode(null);
 
     setPending(null);
-    setMoreOpen(false);
     void refreshSuggestedReview();
   }
 
+  function handleExit() {
+    resetToHome({ confirm: true, preservePractice: false });
+  }
+
+  function handleBack() {
+    resetToHome({ confirm: false, preservePractice: true });
+  }
+
   async function handleSendAnswer() {
-    setMoreOpen(false);
     if (!session || practiceActive || lessonCompleted) return;
 
     setError(null);
     setLoading(true);
     setPending("answer");
     setHintText(null);
-    setHintLevel(null);
 
     const userMsg: ChatMessage = { role: "user", content: answer };
     setMessages((prev) => [...prev, userMsg]);
@@ -725,27 +722,40 @@ export function Lesson() {
       setProgress(res.progress ?? null);
         
     const incomingHint = (res.hint?.text ?? "").trim();
-    const nextHintLevel = typeof res.hint?.level === "number" ? res.hint.level : null;
     const isForcedAdvance = res.hint?.level === 3;
         
     let nextMessages = [...(res.session.messages ?? [])];
-    setHintAnchorIndex(null);
         
     // On forced advance: split "Next question" into a separate bubble,
-    // and anchor the hint card between the two bubbles.
+    // and insert a reveal card between the two bubbles.
     if (isForcedAdvance && incomingHint) {
       const last = nextMessages[nextMessages.length - 1];
       if (last && last.role === "assistant") {
         const parts = splitNextQuestion(last.content);
-        if (parts) {
-          nextMessages = nextMessages.slice(0, -1);
-          nextMessages.push({ ...last, content: parts.before });
-          const anchor = nextMessages.length - 1;
-          nextMessages.push({ ...last, content: parts.next });
-          setHintAnchorIndex(anchor);
+          if (parts) {
+            const revealPayload =
+              parseRevealParts(incomingHint) ?? { explanation: incomingHint, answer: "" };
+            const revealMessage: ChatMessage = {
+              role: "assistant",
+              content: `${REVEAL_PREFIX}${JSON.stringify(revealPayload)}`,
+            };
+            nextMessages = nextMessages.slice(0, -1);
+            nextMessages.push({ ...last, content: parts.before });
+            nextMessages.push(revealMessage);
+            nextMessages.push({ ...last, content: parts.next });
+          } else {
+            const revealPayload =
+              parseRevealParts(incomingHint) ?? { explanation: incomingHint, answer: "" };
+            nextMessages = [
+              ...nextMessages,
+              {
+                role: "assistant",
+                content: `${REVEAL_PREFIX}${JSON.stringify(revealPayload)}`,
+              },
+            ];
+          }
         }
       }
-    }
     
     setMessages(nextMessages);
 
@@ -758,26 +768,25 @@ export function Lesson() {
       const tutorLower = tutorText.toLowerCase();
 
       if (incomingHint) {
-        // Forced advance: always show the reveal hint (we are preventing tutor bubble leakage now)
+        // Forced advance: handled via reveal card insertion
         if (isForcedAdvance) {
-          setHintText(incomingHint);
-          setHintLevel(nextHintLevel);
+          setHintText(null);
         } else if (evalResult !== "correct") {
           const hintLower = incomingHint.toLowerCase();
           if (tutorLower.includes(hintLower)) {
             setHintText(null);
-            setHintLevel(null);
           } else {
             setHintText(incomingHint);
-            setHintLevel(nextHintLevel);
           }
         } else {
           setHintText(null);
-          setHintLevel(null);
         }
       } else {
         setHintText(null);
-        setHintLevel(null);
+      }
+
+      if (isForcedAdvance || (evalResult && evalResult !== "correct")) {
+        void refreshSuggestedReview(res.session.userId, res.session.language);
       }
 
       if (res.hint?.level !== 3 && res.practice?.practiceId && res.practice?.prompt) {
@@ -787,6 +796,7 @@ export function Lesson() {
         setPracticeTutorMessage(null);
         setPracticeAttemptCount(null);
         setPracticeMode("lesson");
+        setPracticeScreenOpen(false);
       } else if (res.hint?.level === 3) {
         //ensure practice doesnt appear after reveal
         setPracticeId(null);
@@ -795,6 +805,7 @@ export function Lesson() {
         setPracticeTutorMessage(null);
         setPracticeAttemptCount(null);
         setPracticeMode(null);
+        setPracticeScreenOpen(false);
       }
 
       setProgress(res.progress ?? null);
@@ -811,7 +822,6 @@ export function Lesson() {
   }
 
   async function handleSendPractice() {
-    setMoreOpen(false);
     const effectiveUserId = (session?.userId ?? userId).trim();
     if (!practiceId || !effectiveUserId) return;
 
@@ -848,6 +858,7 @@ export function Lesson() {
           setPracticePrompt(null);
           setPracticeAnswer("");
           setPracticeMode(null);
+          setPracticeScreenOpen(false);
         }
       } else {
         setPracticeAnswer("");
@@ -861,994 +872,318 @@ export function Lesson() {
   }
 
   return (
-    <div className="lessonPage">
-      <style>{`
-        @import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600&family=Fraunces:wght@500;600&display=swap");
+    <LessonShell>
+      {showHome ? (
+        <div className="lessonHome">
+          {error && <div className="lessonError">{error}</div>}
 
-        :root {
-          --bg: #F6F4F0;
-          --surface: #FFFFFF;
-          --surface-muted: #F3F4F6;
-          --surface-quiet: #EEF1F4;
-          --border: #E2E6EA;
-          --text: #1D2433;
-          --text-muted: #5B6675;
-          --accent: #2F6F7E;
-          --accent-strong: #245E6A;
-          --accent-soft: #DCECEF;
-          --success: #2F855A;
-          --warning: #C9842A;
-          --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.08);
-          --shadow-md: 0 12px 30px rgba(16, 24, 40, 0.12);
-          --hint-bg: #F7F6F2;
-          --reveal-bg: #EEF7F8;
-        }
-
-        * { box-sizing: border-box; }
-
-        .lessonPage {
-          min-height: 100vh;
-          background: radial-gradient(1200px circle at 0% 0%, #F6FAFB 0%, #F6F4F0 45%, #F2F3F6 100%);
-          color: var(--text);
-          font-family: "Source Sans 3", "Avenir Next", "Segoe UI", sans-serif;
-        }
-
-        .lessonShell {
-          max-width: 920px;
-          margin: 0 auto;
-          padding: 24px 18px 28px;
-        }
-
-        .lessonTitle {
-          font-family: "Fraunces", "Palatino Linotype", "Book Antiqua", Palatino, serif;
-        }
-
-        .lessonShell button {
-          transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease,
-            transform 0.1s ease;
-        }
-
-        .lessonShell button:active {
-          transform: translateY(1px);
-        }
-
-        .lessonShell button:focus-visible,
-        .lessonShell input:focus-visible,
-        .lessonShell select:focus-visible {
-          outline: 2px solid var(--accent-soft);
-          outline-offset: 2px;
-        }
-
-        .lessonShell input:focus-visible,
-        .lessonShell select:focus-visible {
-          border-color: var(--accent-strong);
-        }
-
-        .fadeIn {
-          animation: fadeInUp 0.4s ease both;
-        }
-
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes dotPulse {
-          0%, 80%, 100% { transform: translateY(0); opacity: .35; }
-          40% { transform: translateY(-2px); opacity: 1; }
-        }
-        .typingDot {
-          width: 6px;
-          height: 6px;
-          border-radius: 999px;
-          background: rgba(0,0,0,.35);
-          display: inline-block;
-          margin-right: 5px;
-          animation: dotPulse 1.2s infinite ease-in-out;
-        }
-        .typingDot:nth-child(2) { animation-delay: .15s; }
-        .typingDot:nth-child(3) { animation-delay: .30s; }
-      `}</style>
-
-      <div className="lessonShell">
-
-      {/* Controls (only when NOT in a session) */}
-      {!sessionActive && (
-        <>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr auto",
-              gap: 10,
-              alignItems: "end",
-              marginBottom: 12,
-            }}
-          >
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 12, opacity: 0.75 }}>Profile</span>
-              <input
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                disabled={lockControls}
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  border: "1px solid var(--border)",
-                  background: lockControls ? "var(--surface-muted)" : "white",
-                  cursor: lockControls ? "not-allowed" : "text",
-                }}
-              />
-            </label>
-              
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 12, opacity: 0.75 }}>Language (English only)</span>
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value as "en" | "de" | "es" | "fr")}
-                disabled={lockControls}
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  border: "1px solid var(--border)",
-                  backgroundColor: lockControls ? "var(--surface-muted)" : "white",
-                  cursor: lockControls ? "not-allowed" : "pointer",
-                }}
-              >
-                <option value="en">English</option>
-                <option value="de" disabled>
-                  German (coming soon)
-                </option>
-                <option value="es" disabled>
-                  Spanish (coming soon)
-                </option>
-                <option value="fr" disabled>
-                  French (coming soon)
-                </option>
-              </select>
-            </label>
-              
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 12, opacity: 0.75 }}>Lesson</span>
-              <input
-                value={lessonId}
-                onChange={(e) => setLessonId(e.target.value)}
-                disabled={lockControls}
-                style={{
-                  padding: 10,
-                  borderRadius: 10,
-                  border: "1px solid var(--border)",
-                  background: lockControls ? "var(--surface-muted)" : "white",
-                  cursor: lockControls ? "not-allowed" : "text",
-                }}
-              />
-            </label>
-              
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={handleStart}
-                disabled={disableStartResume}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid var(--border)",
-                  borderColor: disableStartResume ? "var(--border)" : "var(--accent)",
-                  background: disableStartResume ? "var(--surface-muted)" : "var(--accent)",
-                  opacity: disableStartResume ? 0.7 : 1,
-                  color: disableStartResume ? "var(--text-muted)" : "white",
-                  cursor: disableStartResume ? "not-allowed" : "pointer",
-                }}
-              >
-                Start
-              </button>
-              
-              <button
-                onClick={handleResume}
-                disabled={!canResume}
-                title={!canResume ? "No saved session for this profile/language/lesson yet." : "Resume"}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid var(--border)",
-                  background: !canResume ? "var(--surface-muted)" : "white",
-                  opacity: !canResume ? 0.7 : 1,
-                  cursor: !canResume ? "not-allowed" : "pointer",
-                }}
-              >
-                Resume
-              </button>
-            </div>
-          </div>
-              
-          {/* Teaching prefs row */}
-          <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
+          {reviewBanner && (
             <div
+              className="fadeIn"
               style={{
-                display: "flex",
-                gap: 12,
-                alignItems: "end",
-                padding: "10px 12px",
-                borderRadius: 14,
+                padding: 12,
+                borderRadius: 16,
                 border: "1px solid var(--border)",
-                background: "var(--surface-muted)",
-                width: "fit-content",
+                background: "var(--surface)",
+                boxShadow: "var(--shadow-sm)",
               }}
             >
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 12, opacity: 0.7 }}>Pace</span>
-                <select
-                  value={teachingPace}
-                  onChange={(e) => setTeachingPace(e.target.value as TeachingPace)}
-                  disabled={lockControls}
-                  style={{
-                    padding: 10,
-                    borderRadius: 10,
-                    border: "1px solid var(--border)",
-                    backgroundColor: lockControls ? "var(--surface-muted)" : "white",
-                    cursor: lockControls ? "not-allowed" : "pointer",
-                    minWidth: 140,
-                  }}
+              <div style={{ fontSize: 13, opacity: 0.85 }}>{reviewBanner}</div>
+            </div>
+          )}
+
+          <div className="lessonHomeCard">
+            <div className="lessonHomeRow">
+              <LessonSetupPanel userId={userId} language={language} lessonId={lessonId} />
+
+              <div className="lessonPrefsArea">
+                <button
+                  type="button"
+                  className="lessonPrefsButton"
+                  ref={prefsButtonRef}
+                  onClick={() => setPrefsOpen((v) => !v)}
+                  aria-expanded={prefsOpen}
+                  aria-haspopup="true"
+                  title="Teaching preferences"
                 >
-                  <option value="normal">Normal</option>
-                  <option value="slow">Slow</option>
-                </select>
-              </label>
-                
-              <label style={{ display: "grid", gap: 6 }}>
-                <span style={{ fontSize: 12, opacity: 0.75 }}>Explanations</span>
-                <select
-                  value={explanationDepth}
-                  onChange={(e) => setExplanationDepth(e.target.value as ExplanationDepth)}
-                  disabled={lockControls}
-                  style={{
-                    padding: 10,
-                    borderRadius: 10,
-                    border: "1px solid var(--border)",
-                    backgroundColor: lockControls ? "var(--surface-muted)" : "white",
-                    cursor: lockControls ? "not-allowed" : "pointer",
-                    minWidth: 160,
-                  }}
-                >
-                  <option value="short">Short</option>
-                  <option value="normal">Normal</option>
-                  <option value="detailed">Detailed</option>
-                </select>
-              </label>
-
-              {INSTRUCTION_LANGUAGE_ENABLED && (
-                <label style={{ display: "grid", gap: 6 }}>
-                  <span style={{ fontSize: 12, opacity: 0.75 }}>
-                    Instruction language (for explanations)
-                  </span>
-                  <select
-                    value={instructionLanguage}
-                    onChange={(e) =>
-                      setInstructionLanguage(
-                        (normalizeInstructionLanguage(e.target.value) ?? "en") as SupportedLanguage
-                      )
-                    }
-                    disabled={lockControls}
-                    style={{
-                      padding: 10,
-                      borderRadius: 10,
-                      border: "1px solid var(--border)",
-                      backgroundColor: lockControls ? "var(--surface-muted)" : "white",
-                      cursor: lockControls ? "not-allowed" : "pointer",
-                      minWidth: 200,
-                    }}
+                  <svg
+                    className="lessonPrefsIcon"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
                   >
-                    <option value="en">English</option>
-                    <option value="de">German</option>
-                    <option value="es">Spanish</option>
-                    <option value="fr">French</option>
-                  </select>
-                </label>
-              )}
-            </div>
-          </div>
-        </>
-      )}
+                    <circle cx="12" cy="12" r="11" fill="#E0F2FE" />
+                    <path
+                      d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Zm8.1 3.8c0-.5-.1-1-.2-1.5l2-1.6-1.9-3.3-2.4 1a8.5 8.5 0 0 0-2.6-1.5l-.4-2.6H9.4L9 5.1c-.9.3-1.8.8-2.6 1.5l-2.4-1-1.9 3.3 2 1.6c-.1.5-.2 1-.2 1.5s.1 1 .2 1.5l-2 1.6 1.9 3.3 2.4-1c.8.7 1.7 1.2 2.6 1.5l.4 2.6h3.8l.4-2.6c.9-.3 1.8-.8 2.6-1.5l2.4 1 1.9-3.3-2-1.6c.1-.5.2-1 .2-1.5Z"
+                      fill="#334155"
+                    />
+                  </svg>
+                </button>
+                {prefsOpen && (
+                  <div className="lessonPrefsMenu" ref={prefsMenuRef}>
+                    <label className="lessonPrefsField">
+                      <span className="lessonPrefsLabel">Pace</span>
+                      <select
+                        value={teachingPace}
+                        onChange={(e) => setTeachingPace(e.target.value as TeachingPace)}
+                        disabled={loading}
+                        className="lessonPrefsSelect"
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="slow">Slow</option>
+                      </select>
+                    </label>
 
-      {/* Session header */}
-      {session && (
-        <div
-          className="fadeIn"
-          style={{
-            marginBottom: 10,
-            padding: "10px 12px",
-            borderRadius: 14,
-            border: "1px solid var(--border)",
-            background: "var(--surface)",
-            boxShadow: "var(--shadow-sm)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 10,
-            fontSize: 13,
-            flexWrap: "wrap",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              minWidth: 0,
-              alignItems: "center",
-              flexWrap: "wrap",
-              flex: "1 1 220px",
-            }}
-          >
-            <span className="lessonTitle" style={{ fontWeight: 600 }}>{session.lessonId}</span>
-            <span style={{ opacity: 0.45 }}>•</span>
-            <span style={{ opacity: 0.85 }}>{prettyLanguage(session.language)}</span>
+                    <label className="lessonPrefsField">
+                      <span className="lessonPrefsLabel">Explanations</span>
+                      <select
+                        value={explanationDepth}
+                        onChange={(e) => setExplanationDepth(e.target.value as ExplanationDepth)}
+                        disabled={loading}
+                        className="lessonPrefsSelect"
+                      >
+                        <option value="short">Short</option>
+                        <option value="normal">Normal</option>
+                        <option value="detailed">Detailed</option>
+                      </select>
+                    </label>
 
-            {progress && !loading && (
-              <>
-                <span style={{ opacity: 0.45 }}>•</span>
-                <span style={{ fontSize: 12, opacity: 0.75 }}>
-                  Q {progress.currentQuestionIndex + 1}/{progress.totalQuestions}
-                </span>
-              </>
-            )}
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              justifyContent: "flex-end",
-              flexWrap: "wrap",
-              rowGap: 6,
-              flex: "1 1 260px",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 10px",
-                borderRadius: 999,
-                background: "var(--surface-muted)",
-                border: "1px solid var(--border)",
-                whiteSpace: "nowrap",
-                fontSize: 12,
-                opacity: 0.92,
-              }}
-            >
-                <span
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 999,
-                    background:
-                      (progress?.status ?? "").includes("needs")
-                      ? "var(--warning)"
-                      : (progress?.status ?? "").includes("complete")
-                        ? "var(--success)"
-                        : "var(--accent)",
-                    opacity: 0.9,
-                  }}
-                />
-              <div>{prettyStatus(progress?.status ?? session.state)}</div>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "6px 10px",
-                borderRadius: 999,
-                background: "var(--surface-muted)",
-                border: "1px solid var(--border)",
-                whiteSpace: "nowrap",
-                fontSize: 12,
-                opacity: 0.92,
-              }}
-            >
-              <div style={{ opacity: 0.75 }}>
-                Pace: <span style={{ fontWeight: 600 }}>{teachingPace}</span>
-              </div>
-              <span style={{ opacity: 0.35 }}>•</span>
-              <div style={{ opacity: 0.75 }}>
-                Depth: <span style={{ fontWeight: 600 }}>{explanationDepth}</span>
-              </div>
-              {INSTRUCTION_LANGUAGE_ENABLED && (
-                <>
-                  <span style={{ opacity: 0.35 }}>•</span>
-                  <div style={{ opacity: 0.75 }}>
-                    Instr: <span style={{ fontWeight: 600 }}>{prettyLanguage(instructionLanguage)}</span>
-                  </div>
-                </>
-              )}
-            </div>
-
-
-            {/* ⋯ menu (now visible during session) */}
-            <div style={{ position: "relative" }}>
-              <button
-                ref={moreButtonRef}
-                onClick={() => setMoreOpen((v) => !v)}
-                disabled={disableRestart}
-                aria-label="More"
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 12,
-                  border: "1px solid var(--border)",
-                  background: disableRestart ? "var(--surface-muted)" : "white",
-                  color: "var(--text)",
-                  cursor: disableRestart ? "not-allowed" : "pointer",
-                  minWidth: 40,
-                }}
-              >
-                ⋯
-              </button>
-              
-              {moreOpen && !disableRestart && (
-                <div
-                  ref={moreMenuRef}
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: "calc(100% + 8px)",
-                    background: "white",
-                    border: "1px solid var(--border)",
-                    borderRadius: 12,
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-                    overflow: "hidden",
-                    minWidth: 200,
-                    zIndex: 50,
-                  }}
-                >
-                  <button
-                    onClick={() => {
-                      setMoreOpen(false);
-                      void handleRestart();
-                    }}
-                    disabled={disableRestart}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      background: "white",
-                      border: "none",
-                      cursor: disableRestart ? "not-allowed" : "pointer",
-                      fontSize: 13,
-                      color: disableRestart ? "var(--text-muted)" : "#ff3b30",
-                    }}
-                  >
-                    Restart lesson
-                  </button>
-                  
-                  <div style={{ height: 1, background: "#f0f0f0" }} />
-                  
-                  <button
-                    onClick={() => {
-                      setMoreOpen(false);
-                      handleExit();
-                    }}
-                    disabled={disableRestart}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      background: "white",
-                      border: "none",
-                      cursor: disableRestart ? "not-allowed" : "pointer",
-                      fontSize: 13,
-                      color: disableRestart ? "var(--text-muted)" : "var(--text)",
-                    }}
-                  >
-                    Exit lesson
-                  </button>
-                </div>
-              )}
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <div
-          style={{
-            marginBottom: 12,
-            padding: 10,
-            borderRadius: 12,
-            border: "1px solid #f1c0c0",
-            background: "#fff5f5",
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      <div
-        style={{
-          marginBottom: 12,
-          padding: 10,
-          borderRadius: 12,
-          border: "1px solid var(--border)",
-          background: "var(--surface-muted)",
-          fontSize: 12,
-          color: "#444",
-        }}
-      >
-        English only for now. Additional languages will be enabled in a later phase.
-      </div>
-
-
-
-      {reviewBanner && (
-        <div
-          className="fadeIn"
-          style={{
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 16,
-            border: "1px solid var(--border)",
-            background: "var(--surface)",
-            boxShadow: "var(--shadow-sm)",
-          }}
-        >
-          <div style={{ fontSize: 13, opacity: 0.85 }}>{reviewBanner}</div>
-        </div>
-      )}
-
-      {showSuggestedReview && (
-        <div
-          className="fadeIn"
-          style={{
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 16,
-            border: "1px solid var(--border)",
-            background: "var(--surface)",
-            boxShadow: "var(--shadow-sm)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 8,
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.75 }}>Suggested review</div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>Optional</div>
-          </div>
-
-          <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 10 }}>
-            Want to review {Math.min(2, suggestedReviewItems.length)} item
-            {Math.min(2, suggestedReviewItems.length) === 1 ? "" : "s"} you struggled with last time?
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-            {suggestedReviewItems.slice(0, 2).map((it, idx) => (
-              <div
-                key={`${it.lessonId}-${it.questionId}-${idx}`}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  background: "var(--surface-muted)",
-                  border: "1px solid var(--border)",
-                  fontSize: 12,
-                  opacity: 0.92,
-                }}
-              >
-                {(it.conceptTag && it.conceptTag.replace(/_/g, " ")) || "Review item"}
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", rowGap: 8 }}>
-            <button
-              onClick={() => void beginSuggestedReview()}
-              disabled={loading}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid",
-                borderColor: loading ? "var(--border)" : "var(--accent)",
-                background: loading ? "var(--surface-muted)" : "var(--accent)",
-                color: loading ? "var(--text-muted)" : "white",
-                cursor: loading ? "not-allowed" : "pointer",
-              }}
-            >
-              Review now
-            </button>
-            <button
-              onClick={() => setReviewDismissed(true)}
-              disabled={loading}
-              style={{
-                padding: "10px 14px",
-                borderRadius: 12,
-                border: "1px solid var(--border)",
-                background: "white",
-                cursor: loading ? "not-allowed" : "pointer",
-                opacity: loading ? 0.7 : 1,
-              }}
-            >
-              Not now
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Chat */}
-      <div
-        ref={chatRef}
-        className="fadeIn"
-        style={{
-          border: "1px solid var(--border)",
-          borderRadius: 18,
-          padding: 16,
-          height: 620,
-          overflow: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
-          background: "var(--surface-muted)",
-          boxShadow: "var(--shadow-sm)",
-        }}
-      >
-        {!session && <div style={{ opacity: 0.7 }}>Start a lesson to begin.</div>}
-
-        {messages.map((m, i) => {
-          const prevRole = i > 0 ? messages[i - 1]?.role : null;
-          const nextRole = i < messages.length - 1 ? messages[i + 1]?.role : null;
-
-          const isFirstInGroup = prevRole !== m.role;
-          const isLastInGroup = nextRole !== m.role;
-
-          return (
-            <React.Fragment key={`${m.role}-${i}`}>
-            <div style={{ ...rowStyle(m.role),marginTop: isFirstInGroup ? 10 : 2,}}>
-              <div style={bubbleStyle(m.role, isLastInGroup)}>
-                {isFirstInGroup && (
-                  <div style={bubbleMetaStyle(m.role)}>{m.role === "assistant" ? "Tutor" : "You"}</div>
-                )}
-                <div>{m.content}</div>
-              </div>
-            </div>
-
-            {hintText && hintAnchorIndex === i && (
-              <div
-                style={{
-                  marginTop: 6,
-                  padding: 12,
-                  borderRadius: 12,
-                  border: `1px solid ${isReveal ? "var(--accent-soft)" : "var(--border)"}`,
-                  background: isReveal ? "var(--reveal-bg)" : "var(--hint-bg)",
-                  boxShadow: "var(--shadow-sm)",
-                }}
-              >
-                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
-                  {isReveal ? "Reveal" : "Hint"}
-                </div>
-                {isReveal && revealParts ? (
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {revealParts.explanation && (
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            textTransform: "uppercase",
-                            letterSpacing: 0.6,
-                            color: "var(--text-muted)",
-                            marginBottom: 4,
-                          }}
+                    {INSTRUCTION_LANGUAGE_ENABLED && (
+                      <label className="lessonPrefsField">
+                        <span className="lessonPrefsLabel">Instruction language</span>
+                        <select
+                          value={instructionLanguage}
+                          onChange={(e) =>
+                            setInstructionLanguage(
+                              (normalizeInstructionLanguage(e.target.value) ?? "en") as SupportedLanguage
+                            )
+                          }
+                          disabled={loading}
+                          className="lessonPrefsSelect"
                         >
-                          Explanation
-                        </div>
-                        <div style={{ whiteSpace: "pre-wrap" }}>{revealParts.explanation}</div>
-                      </div>
+                          <option value="en">English</option>
+                          <option value="de">German</option>
+                          <option value="es">Spanish</option>
+                          <option value="fr">French</option>
+                        </select>
+                      </label>
                     )}
-                    {revealParts.answer && (
-                      <div
+
+                    <button
+                      type="button"
+                      className="lessonPrefsAction lessonPrefsActionWarm"
+                      onClick={() => void handleRestart()}
+                      disabled={loading}
+                    >
+                      Restart lesson
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="lessonHomeRow lessonHomeActionsRow">
+              <div className="lessonActionRow lessonActionCenter">
+                <div className="lessonActionArea">
+                  <div className="lessonActionStack">
+                    <button
+                      className="lessonPrimaryBtn lessonActionBtn"
+                      onClick={() => void handleStart()}
+                      disabled={disableStartResume}
+                    >
+                      Start
+                    </button>
+                  {canResume && (
+                      <button
+                        className="lessonSecondaryBtn lessonActionBtn"
+                        onClick={() => void handleResume()}
+                        disabled={!canResume}
+                        title="Continue last session"
+                      >
+                        Continue last session
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <SuggestedReviewCard
+            visible={showSuggestedReview}
+            items={suggestedReviewItems}
+            loading={loading}
+            onReviewNow={() => void beginSuggestedReview()}
+            onDismiss={() => setReviewDismissed(true)}
+          />
+
+        </div>
+      ) : (
+        <>
+          {session && (
+            <SessionHeader
+              session={session}
+              progress={progress}
+              loading={loading}
+              onBack={showPracticeScreen ? () => setPracticeScreenOpen(false) : handleBack}
+            />
+          )}
+
+          {showPracticeScreen && (
+            <div className="lessonPracticeScreen">
+              {!session && (
+                <div className="lessonPracticeHeader">
+                  <button
+                    className="lessonSecondaryBtn"
+                    onClick={handleBack}
+                  >
+                    Back
+                  </button>
+                  <div className="lessonPracticeTitle">
+                    {isReviewPractice ? "Review practice" : "Practice"}
+                  </div>
+                </div>
+              )}
+
+              <div
+                className={`lessonPracticeCue ${
+                  isReviewPractice ? "review" : "required"
+                }`}
+              >
+                {isReviewPractice
+                  ? "Optional review"
+                  : "Required to continue"}
+              </div>
+
+              <div className="lessonPracticePanel">
+                <PracticeCard
+                  practicePrompt={practicePrompt}
+                  practiceId={practiceId}
+                  practiceMode={practiceMode}
+                  reviewIndex={reviewIndex}
+                  reviewQueueLength={reviewQueue.length}
+                  onStopReview={() => stopReview("Review paused. Continue the lesson when you're ready.")}
+                  loading={loading}
+                  pending={pending}
+                  practiceTutorMessage={practiceTutorMessage}
+                  practiceAnswer={practiceAnswer}
+                  onPracticeAnswerChange={setPracticeAnswer}
+                  practiceInputRef={practiceInputRef}
+                  canSubmitPractice={canSubmitPractice}
+                  onSendPractice={handleSendPractice}
+                />
+              </div>
+            </div>
+          )}
+
+          {showConversation && (
+            <>
+              <ChatPane
+                chatRef={chatRef}
+                chatEndRef={chatEndRef}
+                messages={chatMessages}
+                session={session}
+                pending={pending}
+                showEmptyState={!practiceActive}
+              >
+                {showReviewBanner && (
+                  <div className="lessonPracticeBanner">
+                    <div className="lessonPracticeBannerText">
+                      Optional review is ready. Want to take a quick look?
+                    </div>
+                    <button
+                      type="button"
+                      className="lessonSecondaryBtn lessonReviewBtn"
+                      onClick={handleOpenReview}
+                      disabled={loading}
+                    >
+                      Let's review
+                    </button>
+                  </div>
+                )}
+                {practiceActive && practiceMode === "lesson" && (
+                  <div className="lessonPracticeInline">
+                    <PracticeCard
+                      practicePrompt={practicePrompt}
+                      practiceId={practiceId}
+                      practiceMode={practiceMode}
+                      reviewIndex={reviewIndex}
+                      reviewQueueLength={reviewQueue.length}
+                      onStopReview={() => stopReview("Review paused. Continue the lesson when you're ready.")}
+                      loading={loading}
+                      pending={pending}
+                      practiceTutorMessage={practiceTutorMessage}
+                      practiceAnswer={practiceAnswer}
+                      onPracticeAnswerChange={setPracticeAnswer}
+                      practiceInputRef={practiceInputRef}
+                      canSubmitPractice={canSubmitPractice}
+                      onSendPractice={handleSendPractice}
+                    />
+                  </div>
+                )}
+                {lessonCompleted && !practiceActive && (
+                  <>
+                    <div
+                    style={{
+                      alignSelf: "center",
+                      maxWidth: 520,
+                      background: "rgba(0,0,0,0.04)",
+                      border: "1px solid rgba(0,0,0,0.06)",
+                      borderRadius: 14,
+                      padding: "10px 12px",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: 2 }}>Lesson Complete.</div>
+                    <div style={{ fontSize: 13, opacity: 0.78 }}>
+                      You can exit now, or restart anytime.
+                    </div>
+
+                    <div style={{ marginTop: 10, display: "flex", justifyContent: "center" }}>
+                      <button
+                        onClick={handleExit}
+                        disabled={loading}
                         style={{
-                          padding: "8px 10px",
-                          borderRadius: 10,
-                          background: "var(--surface)",
-                          border: "1px dashed var(--accent)",
+                          padding: "10px 12px",
+                          borderRadius: 12,
+                          border: "1px solid var(--border)",
+                          background: loading ? "var(--surface-muted)" : "white",
+                          cursor: loading ? "not-allowed" : "pointer",
+                          fontSize: 13,
                         }}
                       >
-                        <div
-                          style={{
-                            fontSize: 11,
-                            textTransform: "uppercase",
-                            letterSpacing: 0.6,
-                            color: "var(--text-muted)",
-                            marginBottom: 4,
-                          }}
-                        >
-                          Answer
-                        </div>
-                        <div style={{ fontWeight: 600 }}>{revealParts.answer}</div>
-                      </div>
-                    )}
-                    {!revealParts.explanation && !revealParts.answer && (
-                      <div style={{ whiteSpace: "pre-wrap" }}>{hintText}</div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ whiteSpace: "pre-wrap" }}>{hintText}</div>
-                )}
-              </div>
-            )}
-            </React.Fragment>
-          );
-        })}
-
-        {Boolean(session) && pending === "answer" && (
-          <div style={rowStyle("assistant")}>
-            <div style={bubbleStyle("assistant", true)}>
-              <div style={{ display: "flex", alignItems: "center", padding: "2px 2px" }}>
-                <span className="typingDot" />
-                <span className="typingDot" />
-                <span className="typingDot" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {hintText && hintAnchorIndex === null && (
-          <div
-            style={{
-              marginTop: 6,
-              padding: 12,
-              borderRadius: 12,
-              border: `1px solid ${isReveal ? "var(--accent-soft)" : "var(--border)"}`,
-              background: isReveal ? "var(--reveal-bg)" : "var(--hint-bg)",
-              boxShadow: "var(--shadow-sm)",
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
-              {isReveal ? "Reveal" : "Hint"}
-            </div>
-            {isReveal && revealParts ? (
-              <div style={{ display: "grid", gap: 8 }}>
-                {revealParts.explanation && (
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        textTransform: "uppercase",
-                        letterSpacing: 0.6,
-                        color: "var(--text-muted)",
-                        marginBottom: 4,
-                      }}
-                    >
-                      Explanation
+                        Exit Lesson
+                      </button>
                     </div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>{revealParts.explanation}</div>
                   </div>
-                )}
-                {revealParts.answer && (
-                  <div
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      background: "var(--surface)",
-                      border: "1px dashed var(--accent)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 11,
-                        textTransform: "uppercase",
-                        letterSpacing: 0.6,
-                        color: "var(--text-muted)",
-                        marginBottom: 4,
-                      }}
-                    >
-                      Answer
-                    </div>
-                    <div style={{ fontWeight: 600 }}>{revealParts.answer}</div>
-                  </div>
-                )}
-                {!revealParts.explanation && !revealParts.answer && (
-                  <div style={{ whiteSpace: "pre-wrap" }}>{hintText}</div>
-                )}
-              </div>
-            ) : (
-              <div style={{ whiteSpace: "pre-wrap" }}>{hintText}</div>
-            )}
-          </div>
-        )}
 
-        {practicePrompt && practiceId && (
-          <div
-            className="fadeIn"
-            style={{
-              marginTop: 6,
-              padding: 12,
-              borderRadius: 16,
-              border: "1px solid var(--border)",
-              background: "var(--surface)",
-              boxShadow: "var(--shadow-sm)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ fontSize: 12, opacity: 0.75 }}>
-                  {practiceMode === "review"
-                    ? `Review ${reviewIndex + 1}/${Math.max(1, reviewQueue.length)}`
-                    : "Practice"}
-                </div>
-
-                {practiceMode === "review" && (
-                  <button
-                    onClick={() =>
-                      stopReview("Review paused. Continue the lesson when you're ready.")
-                    }
+                  <FeedbackCard
+                    userId={userId.trim()}
+                    language={language}
+                    lessonId={lessonId.trim()}
+                    sessionKey={currentSessionKey}
                     disabled={loading}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      border: "1px solid var(--border)",
-                      background: "white",
-                      cursor: loading ? "not-allowed" : "pointer",
-                      fontSize: 12,
-                      opacity: loading ? 0.7 : 1,
-                    }}
-                  >
-                    Stop
-                  </button>
+                  />
+                </>
                 )}
-              </div>
-
-              <div style={{ fontSize: 12, opacity: 0.7 }}>
-                {practiceMode === "review" ? "Optional review" : "Complete this to continue"}
-              </div>
-            </div>
-            <div style={{ whiteSpace: "pre-wrap", marginBottom: 10 }}>{practicePrompt}</div>
-
-            {pending === "practice" && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Tutor</div>
-                <div style={{ display: "flex", alignItems: "center", padding: "2px 2px" }}>
-                  <span className="typingDot" />
-                  <span className="typingDot" />
-                  <span className="typingDot" />
-                </div>
-              </div>
-            )}
-
-            {practiceTutorMessage && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>Tutor</div>
-                <div style={{ whiteSpace: "pre-wrap" }}>{practiceTutorMessage}</div>
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <input
-                ref={practiceInputRef}
-                value={practiceAnswer}
-                onChange={(e) => setPracticeAnswer(e.target.value)}
-                placeholder="Answer the practice..."
-                style={{
-                  flex: 1,
-                  padding: 10,
-                  borderRadius: 12,
-                  border: "1px solid var(--border)",
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && canSubmitPractice) void handleSendPractice();
-                }}
-              />
-              <button
-                onClick={handleSendPractice}
-                disabled={!canSubmitPractice}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid",
-                  borderColor: canSubmitPractice ? "var(--accent)" : "var(--border)",
-                  background: canSubmitPractice ? "var(--accent)" : "var(--surface-muted)",
-                  color: canSubmitPractice ? "white" : "var(--text-muted)",
-                  cursor: canSubmitPractice ? "pointer" : "not-allowed",
-                }}
-              >
-                Send
-              </button>
-            </div>
-          </div>
-        )}
-
-        {lessonCompleted && !practiceActive && (
-          <>
-            <div
-            style={{
-              alignSelf: "center",
-              maxWidth: 520,
-              background: "rgba(0,0,0,0.04)",
-              border: "1px solid rgba(0,0,0,0.06)",
-              borderRadius: 14,
-              padding: "10px 12px",
-              textAlign: "center",
-            }}
-            >
-            <div style={{ fontWeight: 600, marginBottom: 2 }}>Lesson Complete.</div>
-            <div style={{ fontSize: 13, opacity: 0.78 }}>You can exit now, or restart anytime.</div>
-
-            <div style={{ marginTop: 10, display: "flex", justifyContent: "center" }}>
-              <button
-                onClick={handleExit}
-                disabled={loading}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid var(--border)",
-                  background: loading ? "var(--surface-muted)" : "white",
-                  cursor: loading ? "not-allowed" : "pointer",
-                  fontSize: 13,
-                }}
-              >
-                Exit Lesson
-              </button>
-            </div>
-              </div>
-
-              <FeedbackCard
-                userId={userId.trim()}
-                language={language}
-                lessonId={lessonId.trim()}
-                sessionKey={currentSessionKey}
-                disabled={loading}
-              />
+              </ChatPane>
             </>
           )}
 
-        <div ref={chatEndRef} />
-      </div>
-
-      {/* Answer input */}
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <input
-          ref={answerInputRef}
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          placeholder={
-            !session
-              ? "Start a lesson first..."
-              : lessonCompleted
-                ? "Lesson completed - restart or exit."
-                : practiceActive
-                  ? "Finish the practice above first..."
-                  : "Type your answer..."
-          }
-          disabled={!session || loading || practiceActive || lessonCompleted}
-          style={{
-            flex: 1,
-            padding: 12,
-            borderRadius: 14,
-            border: "1px solid var(--border)",
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && canSubmitAnswer && !practiceActive) void handleSendAnswer();
-          }}
-        />
-        <button
-          onClick={handleSendAnswer}
-          disabled={!canSubmitAnswer}
-          style={{
-            padding: "12px 16px",
-            borderRadius: 14,
-            border: "1px solid",
-            borderColor: canSubmitAnswer ? "var(--accent)" : "var(--border)",
-            background: canSubmitAnswer ? "var(--accent)" : "var(--surface-muted)",
-            color: canSubmitAnswer ? "white" : "var(--text-muted)",
-            cursor: canSubmitAnswer ? "pointer" : "not-allowed",
-          }}
-        >
-          Send
-        </button>
-      </div>
-    </div>
-  </div>
+          {sessionActive && !practiceScreenOpen && (
+            <AnswerBar
+              answer={answer}
+              onAnswerChange={setAnswer}
+              answerInputRef={answerInputRef}
+              canSubmitAnswer={canSubmitAnswer}
+              onSendAnswer={handleSendAnswer}
+              sessionActive={sessionActive}
+              loading={loading}
+              practiceActive={practiceActive}
+              lessonCompleted={lessonCompleted}
+            />
+          )}
+        </>
+      )}
+    </LessonShell>
   );
 }

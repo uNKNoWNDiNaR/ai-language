@@ -93,7 +93,7 @@ describe("pickSuggestedReviewItems", () => {
     expect(items[0].conceptTag).toBe("word_order");
   });
 
-  it("skips items within the review cooldown window", () => {
+  it("falls back to cooldown items when they are the only candidates", () => {
     const now = new Date("2026-02-01T10:00:00.000Z");
 
     const items = pickSuggestedReviewItems(
@@ -112,6 +112,37 @@ describe("pickSuggestedReviewItems", () => {
       2
     );
 
-    expect(items).toHaveLength(0);
+    expect(items).toHaveLength(1);
+  });
+
+  it("prefers non-cooldown items when available", () => {
+    const now = new Date("2026-02-01T10:00:00.000Z");
+
+    const items = pickSuggestedReviewItems(
+      [
+        {
+          lessonId: "basic-1",
+          questionId: "1",
+          conceptTag: "articles",
+          lastSeenAt: new Date("2026-01-20T10:00:00.000Z"),
+          lastReviewedAt: new Date("2026-02-01T05:00:00.000Z"),
+          mistakeCount: 3,
+          confidence: 0.4,
+        },
+        {
+          lessonId: "basic-1",
+          questionId: "2",
+          conceptTag: "word_order",
+          lastSeenAt: new Date("2026-01-15T10:00:00.000Z"),
+          mistakeCount: 2,
+          confidence: 0.6,
+        },
+      ],
+      now,
+      2
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0].conceptTag).toBe("word_order");
   });
 });

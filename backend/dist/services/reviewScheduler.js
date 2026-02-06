@@ -8,26 +8,42 @@ function pickSuggestedReviewItems(items, now, limit = 2) {
     const safeNow = now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
     const reviewCooldownMs = 12 * 60 * 60 * 1000; // 12 hours
     const candidates = [];
-    for (const item of items) {
+    const cooldownCandidates = [];
+    function buildCandidate(item) {
         if (!item)
-            continue;
+            return null;
         const lessonId = typeof item.lessonId === "string" ? item.lessonId.trim() : "";
         const questionId = typeof item.questionId === "string" ? item.questionId.trim() : "";
         if (!lessonId || !questionId)
-            continue;
+            return null;
         const lastSeenAt = coerceDate(item.lastSeenAt) ?? safeNow;
-        const lastReviewedAt = coerceDate(item.lastReviewedAt);
-        if (lastReviewedAt && safeNow.getTime() - lastReviewedAt.getTime() < reviewCooldownMs) {
-            continue;
+        let mistakeCount = clampInt(item.mistakeCount, 0, 0, 1000);
+        if (mistakeCount <= 0) {
+            const wrongCount = clampInt(item.wrongCount, 0, 0, 1000);
+            const forcedCount = clampInt(item.forcedAdvanceCount, 0, 0, 1000);
+            if (wrongCount > 0) {
+                mistakeCount = wrongCount;
+            }
+            else if (forcedCount > 0) {
+                mistakeCount = forcedCount;
+            }
+            else if (typeof item.lastOutcome === "string") {
+                const outcome = item.lastOutcome.toLowerCase();
+                if (outcome === "wrong" || outcome === "almost" || outcome === "forced_advance") {
+                    mistakeCount = 1;
+                }
+            }
+            else {
+                mistakeCount = 1;
+            }
         }
-        const mistakeCount = clampInt(item.mistakeCount, 0, 0, 1000);
         if (mistakeCount <= 0)
-            continue;
+            return null;
         const confidence = clampNumber(item.confidence, 0.5, 0, 1);
         const ageDays = clampInt(Math.floor((safeNow.getTime() - lastSeenAt.getTime()) / 86400000), 0, 0, 30);
         const score = mistakeCount * 10 + ageDays + (1 - confidence) * 5;
         const conceptTag = typeof item.conceptTag === "string" ? item.conceptTag.trim() : "";
-        candidates.push({
+        return {
             lessonId,
             questionId,
             conceptTag,
@@ -35,9 +51,21 @@ function pickSuggestedReviewItems(items, now, limit = 2) {
             mistakeCount,
             confidence,
             score,
-        });
+        };
     }
-    candidates.sort((a, b) => {
+    for (const item of items) {
+        const lastReviewedAt = coerceDate(item.lastReviewedAt);
+        const candidate = buildCandidate(item);
+        if (!candidate)
+            continue;
+        if (lastReviewedAt && safeNow.getTime() - lastReviewedAt.getTime() < reviewCooldownMs) {
+            cooldownCandidates.push(candidate);
+            continue;
+        }
+        candidates.push(candidate);
+    }
+    const finalCandidates = candidates.length > 0 ? candidates : cooldownCandidates;
+    finalCandidates.sort((a, b) => {
         if (b.score !== a.score)
             return b.score - a.score;
         if (b.lastSeenAt.getTime() !== a.lastSeenAt.getTime()) {
@@ -51,7 +79,7 @@ function pickSuggestedReviewItems(items, now, limit = 2) {
             return lidCmp;
         return a.questionId.localeCompare(b.questionId);
     });
-    return candidates.slice(0, maxItems);
+    return finalCandidates.slice(0, maxItems);
 }
 function suggestReviewItems(input, opts) {
     const list = normalizeCandidates(input.reviewItems);
@@ -60,11 +88,24 @@ function suggestReviewItems(input, opts) {
 function normalizeCandidates(raw) {
     if (!raw)
         return [];
-    if (raw instanceof Map)
-        return Array.from(raw.values());
-    if (typeof raw === "object")
-        return Object.values(raw);
-    return [];
+    const entries = raw instanceof Map ? Array.from(raw.entries()) : Object.entries(raw);
+    return entries.map(([key, value]) => {
+        const candidate = { ...value };
+        if (typeof key === "string" && (!candidate.lessonId || !candidate.questionId)) {
+            const idx = key.indexOf("__");
+            if (idx > 0 && idx < key.length - 2) {
+                const lessonId = key.slice(0, idx).trim();
+                let questionId = key.slice(idx + 2).trim();
+                if (questionId.startsWith("q"))
+                    questionId = questionId.slice(1);
+                if (lessonId && !candidate.lessonId)
+                    candidate.lessonId = lessonId;
+                if (questionId && !candidate.questionId)
+                    candidate.questionId = questionId;
+            }
+        }
+        return candidate;
+    });
 }
 function coerceDate(value) {
     if (value instanceof Date)

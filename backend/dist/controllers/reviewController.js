@@ -2,6 +2,7 @@
 // backend/src/controllers/reviewController.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.suggestReview = suggestReview;
+exports.debugReview = debugReview;
 const sendError_1 = require("../http/sendError");
 const learnerProfileState_1 = require("../state/learnerProfileState");
 const reviewScheduler_1 = require("../services/reviewScheduler");
@@ -36,9 +37,27 @@ async function suggestReview(req, res) {
     try {
         const profile = await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { reviewItems: 1 }).lean();
         if (!profile) {
+            if (process.env.NODE_ENV !== "production") {
+                console.log("[review] no profile", { userId, language });
+            }
             return res.status(200).json({ items: [], message: "" });
         }
-        const items = (0, reviewScheduler_1.suggestReviewItems)({ reviewItems: profile.reviewItems }, { maxItems });
+        const rawItems = profile.reviewItems;
+        const items = (0, reviewScheduler_1.suggestReviewItems)({ reviewItems: rawItems }, { maxItems });
+        if (process.env.NODE_ENV !== "production") {
+            const reviewItemCount = rawItems instanceof Map ? rawItems.size : Object.keys(rawItems || {}).length;
+            const sample = rawItems instanceof Map
+                ? Array.from(rawItems.values()).slice(0, 2)
+                : Object.values(rawItems || {}).slice(0, 2);
+            console.log("[review] suggested", {
+                userId,
+                language,
+                reviewItemCount,
+                suggestedCount: items.length,
+                suggestedKeys: items.map((item) => `${item.lessonId}__${item.questionId}`),
+                reviewItemSample: sample,
+            });
+        }
         const message = items.length > 0 ? `Want to review ${items.length} item(s) you struggled with recently?` : "";
         return res.status(200).json({
             items: items.map((item) => ({
@@ -57,5 +76,29 @@ async function suggestReview(req, res) {
     catch (err) {
         (0, logger_1.logServerError)("suggestReview", err, res.locals?.requestId);
         return (0, sendError_1.sendError)(res, 500, "Failed to get suggested review", "SERVER_ERROR");
+    }
+}
+async function debugReview(req, res) {
+    if (process.env.NODE_ENV === "production") {
+        return (0, sendError_1.sendError)(res, 404, "Not found", "NOT_FOUND");
+    }
+    const { userId, language } = parseSuggestReviewInput(req);
+    if (!userId)
+        return (0, sendError_1.sendError)(res, 400, "userId is required", "INVALID_REQUEST");
+    if (!language)
+        return (0, sendError_1.sendError)(res, 400, "language must be one of: en, de, es, fr", "INVALID_REQUEST");
+    try {
+        const profile = await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { reviewItems: 1 }).lean();
+        const items = profile?.reviewItems ?? {};
+        return res.status(200).json({
+            userId,
+            language,
+            count: items instanceof Map ? items.size : Object.keys(items || {}).length,
+            reviewItems: items,
+        });
+    }
+    catch (err) {
+        (0, logger_1.logServerError)("debugReview", err, res.locals?.requestId);
+        return (0, sendError_1.sendError)(res, 500, "Failed to get review debug data", "SERVER_ERROR");
     }
 }

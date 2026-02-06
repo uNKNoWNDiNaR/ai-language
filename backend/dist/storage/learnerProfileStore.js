@@ -113,6 +113,20 @@ function makeReviewKey(lessonId, questionId) {
     const safe = raw.replace(/[^a-zA-Z0-9_\-]/g, "_");
     return safe.startsWith("$") ? `_${safe}` : safe;
 }
+function parseReviewKey(key) {
+    const idx = key.indexOf("__");
+    if (idx <= 0 || idx >= key.length - 1)
+        return null;
+    const lessonId = key.slice(0, idx).trim();
+    let questionId = key.slice(idx + 2).trim();
+    if (!lessonId || !questionId)
+        return null;
+    if (questionId.startsWith("q"))
+        questionId = questionId.slice(1);
+    if (!questionId)
+        return null;
+    return { lessonId, questionId };
+}
 const MAX_REVIEW_ITEMS = 120;
 const MAX_REVIEW_MISTAKES = 20;
 function clampNumber(v, fallback, min, max) {
@@ -157,8 +171,25 @@ function normalizeReviewItems(raw) {
             changed = true;
             continue;
         }
-        const lessonId = typeof value?.lessonId === "string" ? value.lessonId.trim() : "";
-        const questionId = typeof value?.questionId === "string" ? value.questionId.trim() : "";
+        let lessonId = typeof value?.lessonId === "string" ? value.lessonId.trim() : "";
+        let questionId = typeof value?.questionId === "string" ? value.questionId.trim() : "";
+        if ((!lessonId || !questionId) && typeof key === "string") {
+            const parsed = parseReviewKey(key);
+            if (parsed) {
+                if (!lessonId) {
+                    lessonId = parsed.lessonId;
+                    changed = true;
+                }
+                if (!questionId) {
+                    questionId = parsed.questionId;
+                    changed = true;
+                }
+            }
+        }
+        if (questionId.startsWith("q")) {
+            questionId = questionId.slice(1);
+            changed = true;
+        }
         if (!lessonId || !questionId) {
             changed = true;
             continue;
@@ -228,8 +259,15 @@ async function normalizeReviewItemsForProfile(userId, language) {
     await learnerProfileState_1.LearnerProfileModel.updateOne({ userId, language }, { $set: { reviewItems: items } });
 }
 async function recordLessonAttempt(args) {
-    if (!isMongoReady())
+    if (!isMongoReady()) {
+        if (process.env.NODE_ENV !== "production") {
+            console.log("[review] mongo not ready; skipping recordLessonAttempt", {
+                userId: args.userId,
+                language: args.language,
+            });
+        }
         return;
+    }
     const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
     const conceptKey = safeConceptKey(args.conceptTag);
     const inc = { attemptsTotal: 1 };

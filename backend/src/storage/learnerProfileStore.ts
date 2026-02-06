@@ -158,6 +158,17 @@ function makeReviewKey(lessonId: string, questionId: string | number): string {
   return safe.startsWith("$") ? `_${safe}` : safe;
 }
 
+function parseReviewKey(key: string): { lessonId: string; questionId: string } | null {
+  const idx = key.indexOf("__");
+  if (idx <= 0 || idx >= key.length - 1) return null;
+  const lessonId = key.slice(0, idx).trim();
+  let questionId = key.slice(idx + 2).trim();
+  if (!lessonId || !questionId) return null;
+  if (questionId.startsWith("q")) questionId = questionId.slice(1);
+  if (!questionId) return null;
+  return { lessonId, questionId };
+}
+
 const MAX_REVIEW_ITEMS = 120;
 const MAX_REVIEW_MISTAKES = 20;
 
@@ -221,8 +232,25 @@ function normalizeReviewItems(raw: unknown): { items: Record<string, ReviewItemR
       continue;
     }
 
-    const lessonId = typeof (value as any)?.lessonId === "string" ? (value as any).lessonId.trim() : "";
-    const questionId = typeof (value as any)?.questionId === "string" ? (value as any).questionId.trim() : "";
+    let lessonId = typeof (value as any)?.lessonId === "string" ? (value as any).lessonId.trim() : "";
+    let questionId = typeof (value as any)?.questionId === "string" ? (value as any).questionId.trim() : "";
+    if ((!lessonId || !questionId) && typeof key === "string") {
+      const parsed = parseReviewKey(key);
+      if (parsed) {
+        if (!lessonId) {
+          lessonId = parsed.lessonId;
+          changed = true;
+        }
+        if (!questionId) {
+          questionId = parsed.questionId;
+          changed = true;
+        }
+      }
+    }
+    if (questionId.startsWith("q")) {
+      questionId = questionId.slice(1);
+      changed = true;
+    }
     if (!lessonId || !questionId) {
       changed = true;
       continue;
@@ -305,7 +333,15 @@ async function normalizeReviewItemsForProfile(userId: string, language: string):
 }
 
 export async function recordLessonAttempt(args: RecordLessonAttemptArgs): Promise<void> {
-  if (!isMongoReady()) return;
+  if (!isMongoReady()) {
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[review] mongo not ready; skipping recordLessonAttempt", {
+        userId: args.userId,
+        language: args.language,
+      });
+    }
+    return;
+  }
 
   const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
   const conceptKey = safeConceptKey(args.conceptTag);
