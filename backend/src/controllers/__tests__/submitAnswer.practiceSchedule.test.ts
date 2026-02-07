@@ -184,7 +184,8 @@ describe("submitAnswer practice scheduling", () => {
     expect(generatePracticeItemMock).toHaveBeenCalledTimes(1);
     expect(generatePracticeItemMock).toHaveBeenCalledWith(
       expect.objectContaining({ conceptTag: "greetings" }),
-      expect.any(Object)
+      expect.any(Object),
+      expect.objectContaining({ forceEnabled: true })
   );
 
     // 2nd almost (same question) -> should NOT generate another practice
@@ -240,7 +241,8 @@ describe("submitAnswer practice scheduling", () => {
     // If you used Option A from earlier (recommended), use this:
     expect(generatePracticeItemMock).toHaveBeenCalledWith(
       expect.objectContaining({ conceptTag: "greetings" }),
-      expect.any(Object)
+      expect.any(Object),
+      expect.objectContaining({ forceEnabled: true })
     );
   });
 

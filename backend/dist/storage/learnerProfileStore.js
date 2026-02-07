@@ -9,6 +9,8 @@ exports.getInstructionLanguage = getInstructionLanguage;
 exports.setInstructionLanguage = setInstructionLanguage;
 exports.recordLessonAttempt = recordLessonAttempt;
 exports.recordReviewPracticeOutcome = recordReviewPracticeOutcome;
+exports.enqueueReviewQueueItems = enqueueReviewQueueItems;
+exports.getReviewQueueSnapshot = getReviewQueueSnapshot;
 exports.recordPracticeAttempt = recordPracticeAttempt;
 exports.getWeakestConceptTag = getWeakestConceptTag;
 exports.getConceptMistakeCount = getConceptMistakeCount;
@@ -259,15 +261,8 @@ async function normalizeReviewItemsForProfile(userId, language) {
     await learnerProfileState_1.LearnerProfileModel.updateOne({ userId, language }, { $set: { reviewItems: items } });
 }
 async function recordLessonAttempt(args) {
-    if (!isMongoReady()) {
-        if (process.env.NODE_ENV !== "production") {
-            console.log("[review] mongo not ready; skipping recordLessonAttempt", {
-                userId: args.userId,
-                language: args.language,
-            });
-        }
+    if (!isMongoReady())
         return;
-    }
     const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
     const conceptKey = safeConceptKey(args.conceptTag);
     const inc = { attemptsTotal: 1 };
@@ -361,6 +356,10 @@ async function recordReviewPracticeOutcome(args) {
     }
     const delta = args.result === "correct" ? 0.15 : args.result === "almost" ? -0.05 : -0.15;
     const nextConfidence = clampNumber(currentConfidence + delta, 0.5, 0, 1);
+    if (args.result === "correct" && nextConfidence >= 0.9) {
+        await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, { $unset: { [`reviewItems.${reviewKey}`]: "" } });
+        return;
+    }
     const set = {
         [`reviewItems.${reviewKey}.lessonId`]: lessonId,
         [`reviewItems.${reviewKey}.questionId`]: qid,
@@ -389,6 +388,56 @@ async function recordReviewPracticeOutcome(args) {
     catch {
         // ignore
     }
+}
+const MAX_REVIEW_QUEUE_ITEMS = 60;
+async function enqueueReviewQueueItems(args) {
+    if (!isMongoReady())
+        return;
+    if (!args.items || args.items.length === 0) {
+        if (args.summary) {
+            await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, {
+                $setOnInsert: { userId: args.userId, language: args.language },
+                $set: { lastSummary: args.summary, lastActiveAt: new Date() },
+            }, { upsert: true });
+        }
+        return;
+    }
+    const doc = await learnerProfileState_1.LearnerProfileModel.findOne({ userId: args.userId, language: args.language }, { reviewQueue: 1 }).lean();
+    const existing = Array.isArray(doc?.reviewQueue) ? doc.reviewQueue : [];
+    const nextQueue = [...existing];
+    for (const item of args.items) {
+        if (!item?.id || !item.lessonId)
+            continue;
+        const duplicate = nextQueue.find((q) => q.lessonId === item.lessonId && q.conceptTag === item.conceptTag && q.prompt === item.prompt);
+        if (!duplicate)
+            nextQueue.push(item);
+    }
+    nextQueue.sort((a, b) => {
+        const ta = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+        const tb = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+        return tb - ta;
+    });
+    if (nextQueue.length > MAX_REVIEW_QUEUE_ITEMS) {
+        nextQueue.length = MAX_REVIEW_QUEUE_ITEMS;
+    }
+    const set = { reviewQueue: nextQueue, lastActiveAt: new Date() };
+    if (args.summary)
+        set.lastSummary = args.summary;
+    await learnerProfileState_1.LearnerProfileModel.updateOne({ userId: args.userId, language: args.language }, {
+        $setOnInsert: { userId: args.userId, language: args.language },
+        $set: set,
+    }, { upsert: true });
+}
+async function getReviewQueueSnapshot(userId, language) {
+    if (!isMongoReady())
+        return null;
+    const doc = await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { reviewQueue: 1, lastSummary: 1 }).lean();
+    if (!doc)
+        return null;
+    return {
+        reviewQueue: Array.isArray(doc.reviewQueue) ? doc.reviewQueue : [],
+        lastSummary: doc.lastSummary,
+    };
 }
 async function recordPracticeAttempt(args) {
     if (!isMongoReady())

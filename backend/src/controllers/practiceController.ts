@@ -107,6 +107,7 @@ export const generatePractice = async (req: Request, res: Response) => {
       type: practiceType,
     },
     aiClient,
+    { forceEnabled: true },
   );
 
   const session = await getSession(userId);
@@ -237,6 +238,7 @@ export const generateReview = async (req: Request, res: Response) => {
           type: "variation",
         },
         aiClient,
+        { forceEnabled: true },
       );
 
       practiceItem.meta = {

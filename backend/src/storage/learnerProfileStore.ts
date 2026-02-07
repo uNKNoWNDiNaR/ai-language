@@ -333,15 +333,7 @@ async function normalizeReviewItemsForProfile(userId: string, language: string):
 }
 
 export async function recordLessonAttempt(args: RecordLessonAttemptArgs): Promise<void> {
-  if (!isMongoReady()) {
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[review] mongo not ready; skipping recordLessonAttempt", {
-        userId: args.userId,
-        language: args.language,
-      });
-    }
-    return;
-  }
+  if (!isMongoReady()) return;
 
   const reasonKey = args.result !== "correct" ? safeReasonKey(args.reasonCode) : null;
   const conceptKey = safeConceptKey(args.conceptTag);
@@ -473,6 +465,14 @@ export async function recordReviewPracticeOutcome(args: {
     args.result === "correct" ? 0.15 : args.result === "almost" ? -0.05 : -0.15;
   const nextConfidence = clampNumber(currentConfidence + delta, 0.5, 0, 1);
 
+  if (args.result === "correct" && nextConfidence >= 0.9) {
+    await LearnerProfileModel.updateOne(
+      { userId: args.userId, language: args.language },
+      { $unset: { [`reviewItems.${reviewKey}`]: "" } }
+    );
+    return;
+  }
+
   const set: Record<string, any> = {
     [`reviewItems.${reviewKey}.lessonId`]: lessonId,
     [`reviewItems.${reviewKey}.questionId`]: qid,
@@ -510,6 +510,101 @@ export async function recordReviewPracticeOutcome(args: {
   }
 }
 
+type ReviewQueueSummary = {
+  lessonId?: string;
+  completedAt?: Date;
+  didWell?: string;
+  focusNext?: string[];
+};
+
+export type ReviewQueueItemRecord = {
+  id: string;
+  lessonId: string;
+  conceptTag: string;
+  prompt: string;
+  expected?: string;
+  createdAt: Date;
+  dueAt: Date;
+  attempts: number;
+  lastResult?: EvalResult;
+};
+
+const MAX_REVIEW_QUEUE_ITEMS = 60;
+
+export async function enqueueReviewQueueItems(args: {
+  userId: string;
+  language: string;
+  items: ReviewQueueItemRecord[];
+  summary?: ReviewQueueSummary;
+}): Promise<void> {
+  if (!isMongoReady()) return;
+  if (!args.items || args.items.length === 0) {
+    if (args.summary) {
+      await LearnerProfileModel.updateOne(
+        { userId: args.userId, language: args.language },
+        {
+          $setOnInsert: { userId: args.userId, language: args.language },
+          $set: { lastSummary: args.summary, lastActiveAt: new Date() },
+        },
+        { upsert: true }
+      );
+    }
+    return;
+  }
+
+  const doc: any = await LearnerProfileModel.findOne(
+    { userId: args.userId, language: args.language },
+    { reviewQueue: 1 }
+  ).lean();
+
+  const existing: ReviewQueueItemRecord[] = Array.isArray(doc?.reviewQueue) ? doc.reviewQueue : [];
+  const nextQueue = [...existing];
+
+  for (const item of args.items) {
+    if (!item?.id || !item.lessonId) continue;
+    const duplicate = nextQueue.find(
+      (q) => q.lessonId === item.lessonId && q.conceptTag === item.conceptTag && q.prompt === item.prompt
+    );
+    if (!duplicate) nextQueue.push(item);
+  }
+
+  nextQueue.sort((a, b) => {
+    const ta = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt as any).getTime();
+    const tb = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt as any).getTime();
+    return tb - ta;
+  });
+  if (nextQueue.length > MAX_REVIEW_QUEUE_ITEMS) {
+    nextQueue.length = MAX_REVIEW_QUEUE_ITEMS;
+  }
+
+  const set: Record<string, unknown> = { reviewQueue: nextQueue, lastActiveAt: new Date() };
+  if (args.summary) set.lastSummary = args.summary;
+
+  await LearnerProfileModel.updateOne(
+    { userId: args.userId, language: args.language },
+    {
+      $setOnInsert: { userId: args.userId, language: args.language },
+      $set: set,
+    },
+    { upsert: true }
+  );
+}
+
+export async function getReviewQueueSnapshot(userId: string, language: string): Promise<{
+  reviewQueue: ReviewQueueItemRecord[];
+  lastSummary?: ReviewQueueSummary;
+} | null> {
+  if (!isMongoReady()) return null;
+  const doc: any = await LearnerProfileModel.findOne(
+    { userId, language },
+    { reviewQueue: 1, lastSummary: 1 }
+  ).lean();
+  if (!doc) return null;
+  return {
+    reviewQueue: Array.isArray(doc.reviewQueue) ? doc.reviewQueue : [],
+    lastSummary: doc.lastSummary,
+  };
+}
 
 export async function recordPracticeAttempt(args: RecordPracticeAttemptArgs): Promise<void> {
   if (!isMongoReady()) return;

@@ -27,6 +27,8 @@ type SessionHeaderProps = {
   session: LessonSession;
   progress: LessonProgressPayload | null;
   loading: boolean;
+  lessonTitle?: string;
+  lessonDescription?: string;
   onBack: () => void;
 };
 
@@ -34,8 +36,12 @@ export function SessionHeader({
   session,
   progress,
   loading,
+  lessonTitle,
+  lessonDescription,
   onBack,
 }: SessionHeaderProps) {
+  const title = lessonTitle?.trim() || session.lessonId;
+  const description = lessonDescription?.trim();
   return (
     <div
       className="fadeIn"
@@ -77,9 +83,16 @@ export function SessionHeader({
         >
           ← Back
         </button>
-        <span className="lessonTitle" style={{ fontWeight: 600 }}>
-          {session.lessonId}
-        </span>
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <span className="lessonTitle" style={{ fontWeight: 600 }}>
+            {title}
+          </span>
+          {description && (
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              {description}
+            </span>
+          )}
+        </div>
         <span style={{ opacity: 0.45 }}>•</span>
         <span style={{ opacity: 0.85 }}>{prettyLanguage(session.language)}</span>
 

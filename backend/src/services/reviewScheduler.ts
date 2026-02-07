@@ -1,5 +1,7 @@
 // backend/src/services/reviewScheduler.ts
 
+import type { EvalResult } from "../state/answerEvaluator";
+
 export type ReviewCandidate = {
   lessonId: string;
   questionId: string;
@@ -21,6 +23,18 @@ export type SuggestedReviewItem = {
   mistakeCount: number;
   confidence: number;
   score: number;
+};
+
+export type ReviewQueueItem = {
+  id: string;
+  lessonId: string;
+  conceptTag: string;
+  prompt: string;
+  expected?: string;
+  createdAt: Date;
+  dueAt: Date;
+  attempts: number;
+  lastResult?: EvalResult;
 };
 
 export function pickSuggestedReviewItems(
@@ -62,6 +76,7 @@ export function pickSuggestedReviewItems(
     if (mistakeCount <= 0) return null;
 
     const confidence = clampNumber(item.confidence, 0.5, 0, 1);
+    if (confidence >= 0.9) return null;
     const ageDays = clampInt(
       Math.floor((safeNow.getTime() - lastSeenAt.getTime()) / 86_400_000),
       0,
@@ -156,4 +171,35 @@ function clampNumber(v: unknown, fallback: number, min: number, max: number): nu
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, n));
+}
+
+export function computeNextReviewDueAt(attempts: number, result: EvalResult, now = new Date()): Date {
+  if (result !== "correct") return now;
+  const count = Math.max(1, Math.floor(attempts));
+  if (count === 1) return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  if (count === 2) return new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+}
+
+export function pickDueReviewQueueItems(
+  items: ReviewQueueItem[] | null | undefined,
+  now: Date,
+  limit = 5
+): ReviewQueueItem[] {
+  const safeNow = now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
+  const maxItems = clampInt(limit, 5, 1, 5);
+  if (!items || items.length === 0) return [];
+
+  const due = items.filter((item) => {
+    const dueAt = item?.dueAt instanceof Date ? item.dueAt : new Date(item?.dueAt as any);
+    return Number.isFinite(dueAt.getTime()) && dueAt.getTime() <= safeNow.getTime();
+  });
+
+  due.sort((a, b) => {
+    const da = a.dueAt instanceof Date ? a.dueAt.getTime() : new Date(a.dueAt as any).getTime();
+    const db = b.dueAt instanceof Date ? b.dueAt.getTime() : new Date(b.dueAt as any).getTime();
+    return da - db;
+  });
+
+  return due.slice(0, maxItems);
 }

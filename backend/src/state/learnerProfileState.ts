@@ -18,6 +18,21 @@ const ReviewItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const ReviewQueueItemSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    lessonId: { type: String, required: true },
+    conceptTag: { type: String, default: "" },
+    prompt: { type: String, required: true },
+    expected: { type: String, required: false },
+    createdAt: { type: Date, required: true },
+    dueAt: { type: Date, required: true },
+    attempts: { type: Number, default: 0 },
+    lastResult: { type: String, required: false },
+  },
+  { _id: false }
+);
+
 const LearnerProfileSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true },
@@ -51,6 +66,14 @@ const LearnerProfileSchema = new mongoose.Schema(
     },
 
     reviewItems: { type: Map, of: ReviewItemSchema, default: {} },
+    reviewQueue: { type: [ReviewQueueItemSchema], default: [] },
+
+    lastSummary: {
+      lessonId: { type: String, required: false },
+      completedAt: { type: Date, required: false },
+      didWell: { type: String, required: false },
+      focusNext: { type: [String], default: [] },
+    },
   },
   { timestamps: true }
 );

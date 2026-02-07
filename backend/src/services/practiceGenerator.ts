@@ -65,15 +65,63 @@ function buildPracticePrompt(p: GeneratePracticeParams): string {
   ].join("\n");
 }
 
+function normalizeForCompare(text: string): string {
+  return (text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function buildFallbackPromptBody(sourceQuestionText: string): string {
+  const raw = (sourceQuestionText || "").trim();
+  if (!raw) return "Respond naturally";
+
+  const stripped = raw.replace(/[?]+$/g, "").trim();
+  const lower = stripped.toLowerCase();
+  let body = stripped;
+
+  if (lower.startsWith("how do you say")) {
+    const rest = stripped.slice("How do you say".length).trim();
+    body = rest ? `Say ${rest}` : "Say it naturally";
+  } else if (lower.startsWith("how do you ask")) {
+    const rest = stripped.slice("How do you ask".length).trim();
+    body = rest ? `Ask ${rest}` : "Ask in a natural way";
+  } else if (lower.startsWith("how do you introduce")) {
+    body = "Introduce yourself politely";
+  } else if (lower.startsWith("reply to")) {
+    const rest = stripped.slice("Reply to".length).trim();
+    body = rest ? `Reply naturally to ${rest}` : "Reply naturally";
+  } else if (lower.startsWith("respond to")) {
+    const rest = stripped.slice("Respond to".length).trim();
+    body = rest ? `Respond naturally to ${rest}` : "Respond naturally";
+  } else if (lower.startsWith("how do you")) {
+    const rest = stripped.slice("How do you".length).trim();
+    body = rest ? `Please ${rest}` : "Please respond naturally";
+  }
+
+  body = body.replace(/\s+/g, " ").trim();
+  if (body && !/[.!?]$/.test(body)) body = `${body}.`;
+
+  const normalizedBody = normalizeForCompare(body);
+  const normalizedRaw = normalizeForCompare(raw);
+
+  if (!normalizedBody || normalizedBody === normalizedRaw) {
+    return "Respond naturally";
+  }
+
+  return body;
+}
+
 function fallbackPracticeItem(p: GeneratePracticeParams): PracticeItem {
   const type = p.type ?? "variation";
+  const body = buildFallbackPromptBody(p.sourceQuestionText);
 
   const prompt =
     type === "dialogue_turn"
-      ? `Practice: Reply naturally.\nTutor: ${p.sourceQuestionText}`
+      ? `Practice: Reply naturally.\nTutor: ${body}`
       : type === "cloze"
-        ? `Practice: Fill in the missing part.\n${p.sourceQuestionText}`
-        : `Practice: ${p.sourceQuestionText}`;
+        ? `Practice: Fill in the missing part.\n${body}`
+        : `Practice: ${body}`;
 
   return {
     practiceId: `fallback-${Date.now()}`,

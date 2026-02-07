@@ -25,7 +25,7 @@ type ChatPaneProps = {
   chatEndRef: RefObject<HTMLDivElement | null>;
   messages: ChatMessage[];
   session: LessonSession | null;
-  pending: null | "start" | "resume" | "answer" | "practice";
+  pending: null | "start" | "resume" | "answer" | "practice" | "review";
   showEmptyState?: boolean;
   children?: ReactNode;
 };

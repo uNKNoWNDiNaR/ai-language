@@ -1,8 +1,10 @@
-import type { SuggestedReviewItem } from "../../api/lessonAPI";
-
 type SuggestedReviewCardProps = {
   visible: boolean;
-  items: SuggestedReviewItem[];
+  items: Array<{
+    id?: string;
+    lessonId?: string;
+    conceptTag?: string;
+  }>;
   loading: boolean;
   onReviewNow: () => void;
   onDismiss: () => void;
@@ -37,19 +39,19 @@ export function SuggestedReviewCard({
           marginBottom: 8,
         }}
       >
-        <div style={{ fontSize: 12, opacity: 0.8 }}>Suggested review</div>
+        <div style={{ fontSize: 12, opacity: 0.8 }}>Optional review</div>
         <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Optional</div>
       </div>
 
       <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 10 }}>
-        Want to review {Math.min(3, items.length)} item
-        {Math.min(3, items.length) === 1 ? "" : "s"} you struggled with last time?
+        Optional review ready ({items.length} item{items.length === 1 ? "" : "s"}). Continue when
+        you're ready.
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
         {items.slice(0, 3).map((it, idx) => (
           <div
-            key={`${it.lessonId}-${it.questionId}-${idx}`}
+            key={`${it.id ?? it.lessonId}-${idx}`}
             style={{
               padding: "6px 10px",
               borderRadius: 999,

@@ -93,6 +93,27 @@ describe("pickSuggestedReviewItems", () => {
     expect(items[0].conceptTag).toBe("word_order");
   });
 
+  it("skips items with very high confidence", () => {
+    const now = new Date("2026-02-01T10:00:00.000Z");
+
+    const items = pickSuggestedReviewItems(
+      [
+        {
+          lessonId: "basic-1",
+          questionId: "1",
+          conceptTag: "articles",
+          lastSeenAt: new Date("2026-01-20T10:00:00.000Z"),
+          mistakeCount: 2,
+          confidence: 0.95,
+        },
+      ],
+      now,
+      2
+    );
+
+    expect(items).toHaveLength(0);
+  });
+
   it("falls back to cooldown items when they are the only candidates", () => {
     const now = new Date("2026-02-01T10:00:00.000Z");
 

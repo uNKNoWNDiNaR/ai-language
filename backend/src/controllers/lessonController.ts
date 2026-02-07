@@ -21,9 +21,11 @@ import {
 
 import { LessonProgressModel } from "../state/progressState";
 import { generatePracticeItem } from "../services/practiceGenerator";
+import { buildReviewPrompt } from "../services/reviewPrompt";
 import { PracticeMetaType } from "../types";
 import type { SupportedLanguage } from "../types";
 import { isTutorMessageAcceptable, buildTutorFallback } from "../ai/tutorOutputGuard";
+import { randomUUID } from "crypto";
 
 import {
   recordLessonAttempt,
@@ -34,6 +36,8 @@ import {
   updateTeachingProfilePrefs,
   getInstructionLanguage,
   setInstructionLanguage,
+  enqueueReviewQueueItems,
+  type ReviewQueueItemRecord,
 } from "../storage/learnerProfileStore";
 
 import { isPracticeGenEnabled, isInstructionLanguageEnabled } from "../config/featureFlags";
@@ -54,6 +58,77 @@ import { sendError } from "../http/sendError";
 import { logServerError } from "../utils/logger";
 
 const FORCED_ADVANCE_PRACTICE_THRESHOLD = 2;
+
+function toMapLike(map: any): Map<string, number> {
+  if (map instanceof Map) return map;
+  const out = new Map<string, number>();
+  if (map && typeof map === "object") {
+    Object.entries(map).forEach(([key, value]) => {
+      const num = typeof value === "number" ? value : Number(value);
+      if (Number.isFinite(num)) out.set(key, num);
+    });
+  }
+  return out;
+}
+
+function pickWeakQuestionIds(
+  lesson: Lesson,
+  attemptCounts: Map<string, number>,
+  maxItems = 5
+): string[] {
+  const scored = lesson.questions.map((q, idx) => {
+    const qid = String(q.id);
+    const attempts = attemptCounts.get(qid) ?? 0;
+    return { qid, attempts, idx };
+  });
+
+  const weak = scored.filter((s) => s.attempts >= 2);
+  if (weak.length === 0) return [];
+
+  weak.sort((a, b) => {
+    if (b.attempts !== a.attempts) return b.attempts - a.attempts;
+    return a.idx - b.idx;
+  });
+
+  return weak.slice(0, maxItems).map((c) => c.qid);
+}
+
+async function buildReviewQueueItems(
+  lesson: Lesson,
+  lessonId: string,
+  questionIds: string[],
+  now: Date,
+  language: SupportedLanguage
+): Promise<ReviewQueueItemRecord[]> {
+  const items: ReviewQueueItemRecord[] = [];
+  for (const qid of questionIds) {
+    const q = lesson.questions.find((x) => String(x.id) === qid);
+    if (!q) continue;
+    const conceptTag = q.conceptTag || `lesson-${lessonId}-q${qid}`;
+    const expected = String(q.answer ?? "");
+
+    const prompt = await buildReviewPrompt({
+      language,
+      lessonId,
+      sourceQuestionText: q.question,
+      expectedAnswerRaw: expected,
+      examples: q.examples,
+      conceptTag,
+    });
+
+    items.push({
+      id: randomUUID(),
+      lessonId,
+      conceptTag,
+      prompt,
+      expected,
+      createdAt: now,
+      dueAt: now,
+      attempts: 0,
+    });
+  }
+  return items;
+}
 
 async function ensureTutorPromptOnResume(
   session: any,
@@ -379,8 +454,6 @@ export const submitAnswer = async (req: Request, res: Response) => {
     let markNeedsReview = false;
 
     if (isCorrect) {
-      attemptMap.set(qid, 0);
-
       if (currentIndex + 1 >= lesson.questions.length) {
         session.state = "COMPLETE";
       } else {
@@ -446,6 +519,34 @@ export const submitAnswer = async (req: Request, res: Response) => {
       });
     } catch {
       // ignore
+    }
+
+    if (baseStatus === "completed" || baseStatus === "needs_review") {
+      try {
+        const attemptCounts = toMapLike(session.attemptCountByQuestionId);
+        const weakIds = pickWeakQuestionIds(lesson, attemptCounts);
+        const now = new Date();
+        const items = await buildReviewQueueItems(
+          lesson,
+          session.lessonId,
+          weakIds,
+          now,
+          session.language as SupportedLanguage
+        );
+        await enqueueReviewQueueItems({
+          userId: session.userId,
+          language: session.language,
+          items,
+          summary: {
+            lessonId: session.lessonId,
+            completedAt: now,
+            didWell: "You completed the lesson.",
+            focusNext: items.map((i) => i.conceptTag).slice(0, 3),
+          },
+        });
+      } catch {
+        // best-effort: never block lesson completion
+      }
     }
 
     const intent = getTutorIntent(session.state, isCorrect, markNeedsReview);
@@ -656,7 +757,8 @@ export const submitAnswer = async (req: Request, res: Response) => {
             conceptTag: practiceConceptTag,
             type: practiceType,
           },
-          aiClient
+          aiClient,
+          { forceEnabled: true }
         );
       
         // Persist practice item

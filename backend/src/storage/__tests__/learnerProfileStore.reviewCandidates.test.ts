@@ -123,4 +123,39 @@ describe("recordLessonAttempt review candidates", () => {
     const updatedConfidence = (call?.[1] as any)?.$set?.[`reviewItems.${reviewKey}.confidence`];
     expect(updatedConfidence).toBeCloseTo(0.65, 2);
   });
+
+  it("removes review item when confidence reaches mastery", async () => {
+    const { recordReviewPracticeOutcome } = await import("../learnerProfileStore");
+
+    const reviewKey = "basic-1__q3";
+    findOneMock.mockReturnValueOnce({
+      lean: vi.fn(async () => ({
+        reviewItems: {
+          [reviewKey]: {
+            lessonId: "basic-1",
+            questionId: "3",
+            conceptTag: "articles",
+            lastSeenAt: new Date("2026-01-20T10:00:00.000Z"),
+            lastOutcome: "wrong",
+            mistakeCount: 2,
+            confidence: 0.85,
+          },
+        },
+      })),
+    });
+
+    await recordReviewPracticeOutcome({
+      userId: "u1",
+      language: "en",
+      lessonId: "basic-1",
+      questionId: "3",
+      result: "correct",
+      conceptTag: "articles",
+    });
+
+    const call = updateOneMock.mock.calls.find(([, update]) =>
+      update?.$unset?.[`reviewItems.${reviewKey}`] !== undefined
+    );
+    expect(call).toBeTruthy();
+  });
 });

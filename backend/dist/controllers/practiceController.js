@@ -81,7 +81,7 @@ const generatePractice = async (req, res) => {
         examples: q.examples,
         conceptTag: tag,
         type: practiceType,
-    }, aiClient);
+    }, aiClient, { forceEnabled: true });
     const session = await (0, sessionStore_1.getSession)(userId);
     if (!session) {
         return (0, sendError_1.sendError)(res, 404, "Session not found. Start a lesson first.", "NOT_FOUND");
@@ -180,7 +180,7 @@ const generateReview = async (req, res) => {
                 examples: q.examples,
                 conceptTag,
                 type: "variation",
-            }, aiClient);
+            }, aiClient, { forceEnabled: true });
             practiceItem.meta = {
                 ...practiceItem.meta,
                 reviewRef: { lessonId: reqItem.lessonId, questionId: reqItem.questionId },

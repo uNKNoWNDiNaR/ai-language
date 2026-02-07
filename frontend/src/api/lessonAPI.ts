@@ -69,6 +69,25 @@ export type LessonProgressPayload = {
     totalQuestions: number;
 };
 
+export type LessonCatalogItem = {
+  lessonId: string;
+  title: string;
+  description: string;
+  totalQuestions: number;
+};
+
+export type LessonCatalogResponse = {
+  lessons: LessonCatalogItem[];
+};
+
+export type ProgressDoc = {
+  userId: string;
+  language: string;
+  lessonId: string;
+  status: string;
+  lastActiveAt?: string;
+};
+
 export type StartLessonResponse = {
   session: LessonSession;
   tutorMessage?: string;
@@ -155,6 +174,26 @@ export async function getSession(userId: string): Promise<GetSessionResponse> {
   return data;
 }
 
+export async function getLessonCatalog(
+  language: SupportedLanguage
+): Promise<LessonCatalogResponse> {
+  const { data } = await http.get<LessonCatalogResponse>("/lesson/catalog", {
+    params: { language },
+  });
+  return data;
+}
+
+export async function getUserProgress(
+  userId: string,
+  language: SupportedLanguage
+): Promise<{ progress: ProgressDoc[] }> {
+  const { data } = await http.get<{ progress: ProgressDoc[] }>(
+    `/progress/${encodeURIComponent(userId)}`,
+    { params: { language } }
+  );
+  return data;
+}
+
 export async function submitPractice(params: {
   userId: string;
   practiceId: string;
@@ -164,19 +203,42 @@ export async function submitPractice(params: {
   return data;
 }
 
+export type ReviewSummary = {
+  lessonId?: string;
+  completedAt?: string;
+  didWell?: string;
+  focusNext?: string[];
+};
+
 export type SuggestedReviewItem = {
+  id: string;
   lessonId: string;
-  questionId: string;
-  conceptTag?: string;
-  reason?: string;
-  lastSeenAt?: string;
-  mistakeCount?: number;
-  confidence?: number;
-  score?: number;
+  conceptTag: string;
+  prompt: string;
+  expected?: string;
+  createdAt?: string;
+  dueAt?: string;
+  attempts: number;
+  lastResult?: EvaluationResult;
 };
 
 export type SuggestedReviewResponse = {
+  summary: ReviewSummary | null;
   items: SuggestedReviewItem[];
+};
+
+export type ReviewCandidateItem = {
+  lessonId: string;
+  questionId: string;
+  conceptTag?: string;
+  confidence?: number;
+  reason?: string;
+  lastSeenAt?: string;
+  mistakeCount?: number;
+};
+
+export type ReviewCandidatesResponse = {
+  items: ReviewCandidateItem[];
   message?: string;
 };
 
@@ -187,13 +249,45 @@ export async function getSuggestedReview(params: {
   limit?: number;
 }): Promise<SuggestedReviewResponse> {
   const maxItems = params.maxItems ?? params.limit;
-  const { data } = await http.get<SuggestedReviewResponse>("/practice/suggested", {
+  const { data } = await http.get<SuggestedReviewResponse>("/review/suggested", {
     params: {
       userId: params.userId,
       language: params.language,
       ...(typeof maxItems === "number" ? { maxItems } : {}),
     },
   });
+  return data;
+}
+
+export async function getReviewCandidates(params: {
+  userId: string;
+  language: SupportedLanguage;
+  maxItems?: number;
+  limit?: number;
+}): Promise<ReviewCandidatesResponse> {
+  const maxItems = params.maxItems ?? params.limit;
+  const { data } = await http.post<ReviewCandidatesResponse>("/review/suggest", {
+    userId: params.userId,
+    language: params.language,
+    ...(typeof maxItems === "number" ? { maxItems } : {}),
+  });
+  return data;
+}
+
+export type SubmitReviewResponse = {
+  result: EvaluationResult;
+  tutorMessage: string;
+  nextItem: SuggestedReviewItem | null;
+  remaining: number;
+};
+
+export async function submitReview(params: {
+  userId: string;
+  language: SupportedLanguage;
+  itemId: string;
+  answer: string;
+}): Promise<SubmitReviewResponse> {
+  const { data } = await http.post<SubmitReviewResponse>("/review/submit", params);
   return data;
 }
 

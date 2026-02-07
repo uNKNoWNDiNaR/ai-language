@@ -19,6 +19,17 @@ const ReviewItemSchema = new mongoose_1.default.Schema({
     wrongCount: { type: Number, default: 0 },
     forcedAdvanceCount: { type: Number, default: 0 },
 }, { _id: false });
+const ReviewQueueItemSchema = new mongoose_1.default.Schema({
+    id: { type: String, required: true },
+    lessonId: { type: String, required: true },
+    conceptTag: { type: String, default: "" },
+    prompt: { type: String, required: true },
+    expected: { type: String, required: false },
+    createdAt: { type: Date, required: true },
+    dueAt: { type: Date, required: true },
+    attempts: { type: Number, default: 0 },
+    lastResult: { type: String, required: false },
+}, { _id: false });
 const LearnerProfileSchema = new mongoose_1.default.Schema({
     userId: { type: String, required: true },
     language: { type: String, required: true },
@@ -44,6 +55,13 @@ const LearnerProfileSchema = new mongoose_1.default.Schema({
         default: [],
     },
     reviewItems: { type: Map, of: ReviewItemSchema, default: {} },
+    reviewQueue: { type: [ReviewQueueItemSchema], default: [] },
+    lastSummary: {
+        lessonId: { type: String, required: false },
+        completedAt: { type: Date, required: false },
+        didWell: { type: String, required: false },
+        focusNext: { type: [String], default: [] },
+    },
 }, { timestamps: true });
 LearnerProfileSchema.index({ userId: 1, language: 1 }, { unique: true });
 exports.LearnerProfileModel = mongoose_1.default.models?.LearnerProfile ??

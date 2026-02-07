@@ -1,13 +1,24 @@
 // backend/src/routes/review.ts
 
 import { Router } from "express";
-import { suggestReview, debugReview } from "../controllers/reviewController";
+import {
+  suggestReview,
+  debugReview,
+  getReviewSuggested,
+  submitReview,
+  generateReview,
+} from "../controllers/reviewController";
 
 const router = Router();
 
-// Calm, optional review suggestions (no gamification)
+// Existing suggested review (lesson review items)
 router.post("/suggest", suggestReview);
-router.get("/suggested", suggestReview);
+
+// New review queue endpoints
+router.get("/suggested", getReviewSuggested);
+router.post("/submit", submitReview);
+router.post("/generate", generateReview);
+
 router.get("/debug", debugReview);
 
 export default router;

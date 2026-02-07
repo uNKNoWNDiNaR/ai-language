@@ -10,7 +10,7 @@ type PracticeCardProps = {
   reviewQueueLength: number;
   onStopReview: () => void;
   loading: boolean;
-  pending: null | "start" | "resume" | "answer" | "practice";
+  pending: null | "start" | "resume" | "answer" | "practice" | "review";
   practiceTutorMessage: string | null;
   practiceAnswer: string;
   onPracticeAnswerChange: (value: string) => void;

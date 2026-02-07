@@ -7,19 +7,26 @@ import {
   submitAnswer,
   getSession,
   submitPractice,
-  generateReviewPractice,
   getSuggestedReview,
+  getReviewCandidates,
+  submitReview,
+  getLessonCatalog,
+  getUserProgress,
   toUserSafeErrorMessage,
   getHttpStatus,
   type LessonSession,
   type ChatMessage,
   type SubmitAnswerResponse,
   type SubmitPracticeResponse,
+  type LessonCatalogItem,
+  type ProgressDoc,
   type LessonProgressPayload,
   type TeachingPace,
   type ExplanationDepth,
   type TeachingPrefs,
   type SuggestedReviewItem,
+  type ReviewCandidateItem,
+  type ReviewSummary,
   type SupportedLanguage,
 } from "../api/lessonAPI";
 import {
@@ -36,8 +43,11 @@ import {
   PracticeCard,
   AnswerBar,
 } from "./lesson/index";
+import settingsIcon from "../assets/settings.svg";
 
 const LAST_SESSION_KEY = "ai-language:lastSessionKey";
+const LAST_SESSION_STATUS_KEY = "ai-language:lastSessionStatus";
+const LAST_COMPLETED_LESSON_KEY = "ai-language:lastCompletedLessonId";
 
 const TEACHING_PREFS_PREFIX = "ai-language:teachingPrefs:";
 
@@ -151,7 +161,7 @@ const REVEAL_PREFIX = "__REVEAL__";
 export function Lesson() {
   const [userId] = useState("user-1");
   const [language] = useState<"en" | "de" | "es" | "fr">("en");
-  const [lessonId] = useState("basic-1");
+  const [lessonId, setLessonId] = useState("basic-1");
   const [session, setSession] = useState<LessonSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [answer, setAnswer] = useState("");
@@ -163,7 +173,9 @@ export function Lesson() {
   const [, setPracticeAttemptCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<null | "start" | "resume" | "answer" | "practice">(null);
+  const [pending, setPending] = useState<
+    null | "start" | "resume" | "answer" | "practice" | "review"
+  >(null);
   const [progress, setProgress] = useState<LessonProgressPayload | null>(null);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [practiceScreenOpen, setPracticeScreenOpen] = useState(false);
@@ -172,12 +184,40 @@ export function Lesson() {
   const [instructionLanguage, setInstructionLanguage] = useState<SupportedLanguage>("en");
 
   const [suggestedReviewItems, setSuggestedReviewItems] = useState<SuggestedReviewItem[]>([]);
+  const [reviewSummary, setReviewSummary] = useState<ReviewSummary | null>(null);
   const [reviewDismissed, setReviewDismissed] = useState(false);
-  const [reviewQueue, setReviewQueue] = useState<SuggestedReviewItem[]>([]);
+  const [reviewItems, setReviewItems] = useState<SuggestedReviewItem[]>([]);
+  const [reviewCandidates, setReviewCandidates] = useState<ReviewCandidateItem[]>([]);
   const [reviewIndex, setReviewIndex] = useState(0);
+  const [reviewAnswer, setReviewAnswer] = useState("");
+  const [reviewTutorMessage, setReviewTutorMessage] = useState<string | null>(null);
+  const [reviewComplete, setReviewComplete] = useState(false);
+  const [reviewScreenOpen, setReviewScreenOpen] = useState(false);
   const [reviewBanner, setReviewBanner] = useState<string | null>(null);
-  const [practiceMode, setPracticeMode] = useState<null | "lesson" | "review">(null);
+  const [practiceMode, setPracticeMode] = useState<null | "lesson">(null);
 
+  const [catalog, setCatalog] = useState<LessonCatalogItem[]>([]);
+  const [lastCompletedLessonId, setLastCompletedLessonId] = useState<string>(() => {
+    try {
+      return localStorage.getItem(LAST_COMPLETED_LESSON_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [nextLessonId, setNextLessonId] = useState<string | null>(null);
+  const [progressMap, setProgressMap] = useState<Record<string, ProgressDoc>>({});
+  const [resumeLessonId, setResumeLessonId] = useState<string | null>(null);
+
+  const [lastSessionStatus, setLastSessionStatus] = useState<"in_progress" | "completed" | "">(
+    () => {
+      try {
+        const raw = localStorage.getItem(LAST_SESSION_STATUS_KEY);
+        return raw === "completed" || raw === "in_progress" ? raw : "";
+      } catch {
+        return "";
+      }
+    }
+  );
 
 
   const [lastSessionKey, setLastSessionKey] = useState<string>(() => {
@@ -191,6 +231,7 @@ export function Lesson() {
   const chatRef = useRef<HTMLDivElement | null>(null);
   const answerInputRef = useRef<HTMLInputElement | null>(null);
   const practiceInputRef = useRef<HTMLInputElement | null>(null);
+  const reviewInputRef = useRef<HTMLInputElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const prefsButtonRef = useRef<HTMLButtonElement | null>(null);
   const prefsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -201,28 +242,22 @@ export function Lesson() {
   }, [practiceId, practicePrompt]);
 
   const sessionActive = Boolean(session);
-  const showHome = !sessionActive && !practiceScreenOpen;
-  const showConversation = sessionActive && !practiceScreenOpen;
+  const showHome = !sessionActive && !practiceScreenOpen && !reviewScreenOpen;
+  const showConversation = sessionActive && !practiceScreenOpen && !reviewScreenOpen;
   const lessonCompleted = useMemo(() => {
     const status = (progress?.status ?? "").toLowerCase();
     return status === "completed" || status === "needs_review";
   }, [progress]);
 
-  const showPracticeScreen = practiceMode === "review" && practiceScreenOpen;
-  const reviewAvailable = practiceMode === "review" && practiceActive;
-  const reviewSuggested = suggestedReviewItems.length > 0 && !reviewDismissed;
-  const canOpenReview = reviewAvailable || reviewSuggested;
-  const showReviewBanner =
-    lessonCompleted &&
-    sessionActive &&
-    !practiceScreenOpen &&
-    canOpenReview &&
-    !(practiceActive && practiceMode === "lesson");
+  const showPracticeScreen = practiceScreenOpen;
+  const showReviewScreen = reviewScreenOpen;
+  const reviewItemsAvailable = suggestedReviewItems.length > 0;
+  const showResumePractice = practiceActive && !practiceScreenOpen;
   const disableStartResume = loading || practiceActive || sessionActive;
 
   const inProgressSession = Boolean(session) && !lessonCompleted;
   const showSuggestedReview =
-    !inProgressSession && !practiceActive && suggestedReviewItems.length > 0 && !reviewDismissed;
+    !inProgressSession && !practiceActive && reviewCandidates.length > 0 && !reviewDismissed;
   const isReviewPractice = practiceMode === "review";
   const hintMessage = useMemo(() => {
     if (!hintText) return null;
@@ -244,7 +279,12 @@ export function Lesson() {
 
   const teachingPrefsKey = useMemo(() => {
     return makeTeachingPrefsKey(userId, language);
-  }, [userId, language]);
+  }, [userId, language, lastSessionKey, lastSessionStatus]);
+
+  const currentLessonMeta = useMemo(() => {
+    if (!session?.lessonId) return null;
+    return catalog.find((lesson) => lesson.lessonId === session.lessonId) ?? null;
+  }, [catalog, session?.lessonId]);
 
   useEffect(() => {
     const loaded = readTeachingPrefs(teachingPrefsKey);
@@ -271,6 +311,120 @@ export function Lesson() {
     void refreshSuggestedReview();
   }, [userId, language]);
 
+  useEffect(() => {
+    setReviewDismissed(false);
+  }, [userId, language]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCatalogAndProgress() {
+      try {
+        const [catalogRes, progressRes] = await Promise.all([
+          getLessonCatalog(language),
+          getUserProgress(userId.trim(), language),
+        ]);
+
+        if (cancelled) return;
+
+        const lessons = Array.isArray(catalogRes.lessons) ? catalogRes.lessons : [];
+        setCatalog(lessons);
+
+        const progressDocs: ProgressDoc[] = Array.isArray(progressRes.progress)
+          ? progressRes.progress
+          : [];
+        const nextProgressMap: Record<string, ProgressDoc> = {};
+        progressDocs.forEach((doc) => {
+          if (doc?.lessonId) nextProgressMap[doc.lessonId] = doc;
+        });
+        setProgressMap(nextProgressMap);
+
+        const inProgressDocs = progressDocs.filter((doc) => doc?.status === "in_progress");
+        inProgressDocs.sort((a, b) => {
+          const ta = a.lastActiveAt ? Date.parse(a.lastActiveAt) : 0;
+          const tb = b.lastActiveAt ? Date.parse(b.lastActiveAt) : 0;
+          return tb - ta;
+        });
+        const resumeId = inProgressDocs[0]?.lessonId ?? null;
+        setResumeLessonId(resumeId);
+
+        const completedDocs = progressDocs.filter(
+          (doc) => doc && (doc.status === "completed" || doc.status === "needs_review")
+        );
+        completedDocs.sort((a, b) => {
+          const ta = a.lastActiveAt ? Date.parse(a.lastActiveAt) : 0;
+          const tb = b.lastActiveAt ? Date.parse(b.lastActiveAt) : 0;
+          return tb - ta;
+        });
+        const lastCompleted = completedDocs[0]?.lessonId ?? "";
+        if (lastCompleted) {
+          setLastCompletedLessonId(lastCompleted);
+          try {
+            localStorage.setItem(LAST_COMPLETED_LESSON_KEY, lastCompleted);
+          } catch {
+            // ignore
+          }
+        }
+
+        let selectedLessonId = lessonId;
+
+        const sessionKeyParts = lastSessionKey.split("|");
+        const sessionLessonId =
+          sessionKeyParts.length >= 3 &&
+          sessionKeyParts[0] === userId &&
+          sessionKeyParts[1] === language
+            ? sessionKeyParts[2]
+            : "";
+
+        if (resumeId && lessons.some((l) => l.lessonId === resumeId)) {
+          selectedLessonId = resumeId;
+        } else if (
+          lastSessionStatus !== "completed" &&
+          sessionLessonId &&
+          lessons.some((l) => l.lessonId === sessionLessonId)
+        ) {
+          selectedLessonId = sessionLessonId;
+        } else if (lastCompleted) {
+          const idx = lessons.findIndex((l) => l.lessonId === lastCompleted);
+          const next = idx >= 0 ? lessons[idx + 1]?.lessonId ?? null : null;
+          if (next) selectedLessonId = next;
+          else if (lessons[0]) selectedLessonId = lessons[0].lessonId;
+        } else if (lessons[0]) {
+          selectedLessonId = lessons[0].lessonId;
+        }
+
+        if (selectedLessonId && selectedLessonId !== lessonId) {
+          setLessonId(selectedLessonId);
+        }
+      } catch {
+        if (cancelled) return;
+        setCatalog([]);
+        setProgressMap({});
+        setResumeLessonId(null);
+      }
+    }
+
+    void loadCatalogAndProgress();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, language]);
+
+  useEffect(() => {
+    if (!catalog.length) {
+      setNextLessonId(null);
+      return;
+    }
+    const idx = catalog.findIndex((l) => l.lessonId === lessonId);
+    setNextLessonId(idx >= 0 ? catalog[idx + 1]?.lessonId ?? null : null);
+  }, [catalog, lessonId]);
+
+  const nextLessonAfterLastCompleted = useMemo(() => {
+    if (!lastCompletedLessonId || !catalog.length) return null;
+    const idx = catalog.findIndex((l) => l.lessonId === lastCompletedLessonId);
+    return idx >= 0 ? catalog[idx + 1]?.lessonId ?? null : null;
+  }, [catalog, lastCompletedLessonId]);
+
   const teachingPrefsPayload = useMemo(
     () =>
       buildTeachingPrefsPayload({
@@ -289,10 +443,25 @@ export function Lesson() {
       !practiceActive &&
       !sessionActive &&
       !lessonCompleted &&
+      lastSessionStatus !== "completed" &&
       Boolean(currentSessionKey) &&
       lastSessionKey === currentSessionKey
     );
-  }, [loading, practiceActive, sessionActive, lessonCompleted, currentSessionKey, lastSessionKey]);
+  }, [
+    loading,
+    practiceActive,
+    sessionActive,
+    lessonCompleted,
+    lastSessionStatus,
+    currentSessionKey,
+    lastSessionKey,
+  ]);
+
+  const selectedProgressStatus =
+    progressMap[lessonId]?.status?.toLowerCase() ?? "not_started";
+  const primaryActionLabel = selectedProgressStatus === "in_progress" ? "Resume" : "Start";
+  const primaryActionDisabled =
+    selectedProgressStatus === "in_progress" ? !canResume : disableStartResume;
 
   const canSubmitAnswer = useMemo(() => {
     return (
@@ -308,6 +477,41 @@ export function Lesson() {
     return Boolean(practiceId) && practiceAnswer.trim().length > 0 && !loading;
   }, [practiceId, practiceAnswer, loading]);
 
+  const currentReviewItem = useMemo(() => {
+    if (reviewComplete) return null;
+    return reviewItems[reviewIndex] ?? null;
+  }, [reviewItems, reviewIndex, reviewComplete]);
+
+  const canSubmitReview = Boolean(currentReviewItem) && reviewAnswer.trim().length > 0 && !loading;
+
+  const reviewFocusNext = useMemo(() => {
+    const raw = reviewSummary?.focusNext ?? [];
+    return raw.filter(Boolean).slice(0, 2);
+  }, [reviewSummary]);
+
+  const completionButtonCount =
+    (reviewItemsAvailable ? 1 : 0) + (nextLessonId ? 1 : 0) + 1;
+  const completionBackButtonClass =
+    completionButtonCount === 1 ? "lessonPrimaryBtn" : "lessonSecondaryBtn";
+
+  const showContinueNextLessonCTA =
+    Boolean(nextLessonAfterLastCompleted) && !canResume && !practiceActive;
+
+  function updateLocalProgress(lessonIdValue: string, status: string) {
+    const now = new Date().toISOString();
+    setProgressMap((prev) => ({
+      ...prev,
+      [lessonIdValue]: {
+        userId,
+        language,
+        lessonId: lessonIdValue,
+        status,
+        lastActiveAt: now,
+      },
+    }));
+  }
+
+
   useEffect(() => {
     if (loading) return;
 
@@ -320,6 +524,11 @@ export function Lesson() {
       answerInputRef.current?.focus();
     }
   }, [session, practiceActive, loading, pending]);
+
+  useEffect(() => {
+    if (!reviewScreenOpen || loading) return;
+    reviewInputRef.current?.focus();
+  }, [reviewScreenOpen, reviewIndex, loading]);
 
   useEffect(() => {
     if (!prefsOpen) return;
@@ -378,109 +587,72 @@ export function Lesson() {
     const lang = (nextLanguage ?? session?.language ?? language) as SupportedLanguage;
     if (!uid || !lang) {
       setSuggestedReviewItems([]);
+      setReviewCandidates([]);
       return;
     }
 
     try {
-      console.log("[review] fetching suggested", { userId: uid, language: lang });
-      const res = await getSuggestedReview({
-        userId: uid,
-        language: lang,
-        maxItems: 3,
-      });
+      const [queueRes, candidateRes] = await Promise.all([
+        getSuggestedReview({
+          userId: uid,
+          language: lang,
+          maxItems: 5,
+        }),
+        getReviewCandidates({
+          userId: uid,
+          language: lang,
+          maxItems: 5,
+        }),
+      ]);
 
-      const items = Array.isArray(res.items) ? res.items : [];
+      const items = Array.isArray(queueRes.items) ? queueRes.items : [];
       setSuggestedReviewItems(items);
-      setReviewDismissed(false);
-      console.log("[review] suggested response", {
-        userId: uid,
-        language: lang,
-        suggestedCount: items.length,
-        suggestedKeys: items.map((item) => `${item.lessonId}__${item.questionId}`),
-      });
-    } catch (err) {
-      console.warn("[review] suggested fetch failed", err);
+      setReviewSummary(queueRes.summary ?? null);
+
+      const candidatesRaw = Array.isArray(candidateRes.items) ? candidateRes.items : [];
+      const candidates = candidatesRaw.filter(
+        (item) => typeof item.confidence !== "number" || item.confidence < 0.9
+      );
+      setReviewCandidates(candidates);
+      return { items, candidates };
+    } catch {
       setSuggestedReviewItems([]);
+      setReviewSummary(null);
+      setReviewCandidates([]);
     }
   }
 
   function stopReview(message?: string) {
-    setPracticeId(null);
-    setPracticePrompt(null);
-    setPracticeAnswer("");
-    setPracticeTutorMessage(null);
-    setPracticeAttemptCount(null);
-    setPracticeScreenOpen(false);
-
-    setPracticeMode(null);
-    setReviewQueue([]);
+    setReviewScreenOpen(false);
+    setReviewItems([]);
     setReviewIndex(0);
+    setReviewAnswer("");
+    setReviewTutorMessage(null);
+    setReviewComplete(false);
 
     if (message) setReviewBanner(message);
-  }
-
-  async function loadReviewPractice(item: SuggestedReviewItem) {
-    const effectiveUserId = (session?.userId ?? userId).trim();
-    const effectiveLanguage = (session?.language ?? language) as SupportedLanguage;
-    const effectiveLessonId = (session?.lessonId ?? lessonId).trim();
-    const requestedLessonId = (item.lessonId || effectiveLessonId || "").trim();
-    if (!effectiveUserId || !requestedLessonId) {
-      stopReview("Couldn't load review right now. You can continue the lesson.");
-      return;
-    }
-
-    setReviewBanner(null);
-    setError(null);
-    setLoading(true);
-
-    try {
-      const res = await generateReviewPractice({
-        userId: effectiveUserId,
-        language: effectiveLanguage,
-        items: [
-          {
-            lessonId: requestedLessonId,
-            questionId: item.questionId,
-          },
-        ],
-      });
-      const pi = res.practice?.[0];
-      if (!pi?.practiceId || !pi?.prompt) throw new Error("Invalid practice item");
-
-      setPracticeId(pi.practiceId);
-      setPracticePrompt(pi.prompt);
-      setPracticeAnswer("");
-      setPracticeTutorMessage(null);
-      setPracticeAttemptCount(null);
-      setPracticeMode("review");
-      setPracticeScreenOpen(true);
-    } catch {
-      stopReview("Couldn't load review right now. You can continue the lesson.");
-    } finally {
-      setLoading(false);
-    }
   }
 
   async function beginSuggestedReview() {
     if (practiceActive) return;
     if (!userId.trim()) return;
-    if (suggestedReviewItems.length === 0) return;
+    let reviewQueue = suggestedReviewItems;
+    if (reviewQueue.length === 0) {
+      const refreshed = await refreshSuggestedReview(userId.trim(), language);
+      reviewQueue = refreshed?.items ?? [];
+    }
+    if (reviewQueue.length === 0) return;
 
     setReviewDismissed(true);
-    setReviewQueue(suggestedReviewItems);
+    setReviewItems(reviewQueue);
     setReviewIndex(0);
-    await loadReviewPractice(suggestedReviewItems[0]);
+    setReviewAnswer("");
+    setReviewTutorMessage(null);
+    setReviewComplete(false);
+    setReviewScreenOpen(true);
   }
 
-  function handleOpenReview() {
-    if (reviewAvailable) {
-      setPracticeScreenOpen(true);
-      return;
-    }
-    void beginSuggestedReview();
-  }
-
-  async function handleStart() {
+  async function startLessonFlow(targetLessonId: string, restart: boolean) {
     setError(null);
 
     setSession(null);
@@ -495,34 +667,51 @@ export function Lesson() {
     setPracticeAttemptCount(null);
 
     setSuggestedReviewItems([]);
+    setReviewSummary(null);
+    setReviewCandidates([]);
+    setReviewSummary(null);
     setReviewDismissed(false);
-    setReviewQueue([]);
+    setReviewItems([]);
     setReviewIndex(0);
+    setReviewAnswer("");
+    setReviewTutorMessage(null);
+    setReviewComplete(false);
     setReviewBanner(null);
+    setReviewScreenOpen(false);
     setPracticeMode(null);
+    setPracticeScreenOpen(false);
 
     setLoading(true);
     setPending("start");
     scrollOnEnterRef.current = true;
 
+    const normalizedLessonId = targetLessonId.trim();
+
     try {
       const res = await startLesson({
         userId: userId.trim(),
         language,
-        lessonId: lessonId.trim(),
-        restart: false,
+        lessonId: normalizedLessonId,
+        restart,
         teachingPrefs: teachingPrefsPayload,
       });
 
       setSession(res.session);
+      setLessonId(res.session.lessonId);
       setMessages(res.session.messages ?? []);
       setHintText(null);
       setProgress(res.progress ?? null);
+      if (!restart) {
+        updateLocalProgress(res.session.lessonId, "in_progress");
+        setResumeLessonId(res.session.lessonId);
+      }
 
       const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
       setLastSessionKey(key);
+      setLastSessionStatus("in_progress");
       try {
         localStorage.setItem(LAST_SESSION_KEY, key);
+        localStorage.setItem(LAST_SESSION_STATUS_KEY, "in_progress");
       } catch {
         // ignore
       }
@@ -530,10 +719,10 @@ export function Lesson() {
       setPracticeId(null);
       setPracticePrompt(null);
       setPracticeAnswer("");
-    setPracticeTutorMessage(null);
-    setPracticeAttemptCount(null);
-    setPracticeMode(null);
-    setPracticeScreenOpen(false);
+      setPracticeTutorMessage(null);
+      setPracticeAttemptCount(null);
+      setPracticeMode(null);
+      setPracticeScreenOpen(false);
       void refreshSuggestedReview(res.session.userId, res.session.language);
     } catch (e: unknown) {
       setError(toUserSafeErrorMessage(e));
@@ -541,6 +730,19 @@ export function Lesson() {
       setPending(null);
       setLoading(false);
     }
+  }
+
+  async function handleResumePractice() {
+    if (!sessionActive) {
+      await handleResume();
+    }
+    setPracticeScreenOpen(true);
+  }
+
+  async function handleStart(overrideLessonId?: string) {
+    const effectiveLessonId = (overrideLessonId ?? lessonId).trim();
+    if (!effectiveLessonId) return;
+    await startLessonFlow(effectiveLessonId, false);
   }
 
   async function handleResume() {
@@ -555,15 +757,20 @@ export function Lesson() {
     try {
       const res = await getSession(userId.trim());
       setSession(res.session);
+      setLessonId(res.session.lessonId);
       setMessages(res.session.messages ?? []);
       setProgress(res.progress ?? null);
       setHintText(null);
       setPracticeScreenOpen(false);
+      updateLocalProgress(res.session.lessonId, "in_progress");
+      setResumeLessonId(res.session.lessonId);
 
       const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
       setLastSessionKey(key);
+      setLastSessionStatus("in_progress");
       try {
         localStorage.setItem(LAST_SESSION_KEY, key);
+        localStorage.setItem(LAST_SESSION_STATUS_KEY, "in_progress");
       } catch {
         // ignore
       }
@@ -574,8 +781,10 @@ export function Lesson() {
       if (status === 404) {
         if (lastSessionKey === currentSessionKey) {
           setLastSessionKey("");
+          setLastSessionStatus("");
           try {
             localStorage.removeItem(LAST_SESSION_KEY);
+            localStorage.removeItem(LAST_SESSION_STATUS_KEY);
           } catch {
             // ignore
           }
@@ -594,59 +803,10 @@ export function Lesson() {
   async function handleRestart() {
     if (!window.confirm("Restart this lesson? Your current progress will be reset.")) return;
 
-    setError(null);
-    setSession(null);
-    setMessages([]);
-    setProgress(null);
-    setHintText(null);
-    setAnswer("");
-    setPracticeId(null);
-    setPracticePrompt(null);
-    setPracticeAnswer("");
-    setPracticeTutorMessage(null);
-    setPracticeAttemptCount(null);
+    updateLocalProgress(lessonId, "not_started");
+    setResumeLessonId(null);
 
-    setSuggestedReviewItems([]);
-    setReviewDismissed(false);
-    setReviewQueue([]);
-    setReviewIndex(0);
-    setReviewBanner(null);
-    setPracticeMode(null);
-    setPracticeScreenOpen(false);
-
-    setLoading(true);
-    setPending("start");
-    scrollOnEnterRef.current = true;
-
-    try {
-      const res = await startLesson({
-        userId: userId.trim(),
-        language,
-        lessonId: lessonId.trim(),
-        restart: true,
-        teachingPrefs: teachingPrefsPayload,
-      });
-
-      setSession(res.session);
-      setMessages(res.session.messages ?? []);
-      setHintText(null);
-      setProgress(res.progress ?? null);
-
-      const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
-      setLastSessionKey(key);
-      try {
-        localStorage.setItem(LAST_SESSION_KEY, key);
-      } catch {
-        // ignore
-      }
-
-      void refreshSuggestedReview(res.session.userId, res.session.language);
-    } catch (e: unknown) {
-      setError(toUserSafeErrorMessage(e));
-    } finally {
-      setPending(null);
-      setLoading(false);
-    }
+    await startLessonFlow(lessonId, true);
   }
 
   function resetToHome({
@@ -678,17 +838,18 @@ export function Lesson() {
     }
 
     setSuggestedReviewItems([]);
+    setReviewCandidates([]);
     setReviewDismissed(false);
-    setReviewQueue([]);
+    setReviewItems([]);
     setReviewIndex(0);
+    setReviewAnswer("");
+    setReviewTutorMessage(null);
+    setReviewComplete(false);
     setReviewBanner(null);
+    setReviewScreenOpen(false);
 
     setPending(null);
     void refreshSuggestedReview();
-  }
-
-  function handleExit() {
-    resetToHome({ confirm: true, preservePractice: false });
   }
 
   function handleBack() {
@@ -760,7 +921,7 @@ export function Lesson() {
     setMessages(nextMessages);
 
 
-      const evalResult = res.evaluation?.result;
+    const evalResult = res.evaluation?.result;
 
       const lastMsg = (res.session.messages ?? []).slice(-1)[0];
       const tutorText =
@@ -812,6 +973,23 @@ export function Lesson() {
 
       if (res.progress?.status === "completed" || res.progress?.status === "needs_review") {
         void refreshSuggestedReview(res.session.userId, res.session.language);
+        updateLocalProgress(res.session.lessonId, res.progress.status);
+        if (resumeLessonId === res.session.lessonId) {
+          setResumeLessonId(null);
+        }
+        setLastSessionStatus("completed");
+        setLastCompletedLessonId(res.session.lessonId);
+        setLastSessionKey("");
+        try {
+          localStorage.setItem(LAST_SESSION_STATUS_KEY, "completed");
+          localStorage.setItem(LAST_COMPLETED_LESSON_KEY, res.session.lessonId);
+          localStorage.removeItem(LAST_SESSION_KEY);
+        } catch {
+          // ignore
+        }
+      } else if (res.progress?.status === "in_progress") {
+        updateLocalProgress(res.session.lessonId, "in_progress");
+        setResumeLessonId(res.session.lessonId);
       }
     } catch (e: unknown) {
       setError(toUserSafeErrorMessage(e));
@@ -840,26 +1018,11 @@ export function Lesson() {
       setPracticeAttemptCount(res.attemptCount);
 
       if (res.result === "correct") {
-        if (practiceMode === "review") {
-          const nextIdx = reviewIndex + 1;
-          if (nextIdx < reviewQueue.length) {
-            setReviewIndex(nextIdx);
-            setPracticeId(null);
-            setPracticePrompt(null);
-            setPracticeAnswer("");
-            setPracticeTutorMessage(null);
-            setPracticeAttemptCount(null);
-            await loadReviewPractice(reviewQueue[nextIdx]);
-          } else {
-            stopReview("Review complete. Continue when you're ready.");
-          }
-        } else {
-          setPracticeId(null);
-          setPracticePrompt(null);
-          setPracticeAnswer("");
-          setPracticeMode(null);
-          setPracticeScreenOpen(false);
-        }
+        setPracticeId(null);
+        setPracticePrompt(null);
+        setPracticeAnswer("");
+        setPracticeMode(null);
+        setPracticeScreenOpen(false);
       } else {
         setPracticeAnswer("");
       }
@@ -871,10 +1034,65 @@ export function Lesson() {
     }
   }
 
+  async function handleSubmitReview() {
+    const uid = userId.trim();
+    if (!uid || !currentReviewItem) return;
+
+    setError(null);
+    setLoading(true);
+    setPending("review");
+
+    const toSend = reviewAnswer;
+    setReviewAnswer("");
+
+    try {
+      const res = await submitReview({
+        userId: uid,
+        language,
+        itemId: currentReviewItem.id,
+        answer: toSend,
+      });
+
+      setReviewTutorMessage(res.tutorMessage);
+
+      if (res.result === "correct") {
+        const nextIdx = reviewIndex + 1;
+        if (nextIdx < reviewItems.length) {
+          setReviewIndex(nextIdx);
+          setReviewTutorMessage(null);
+        } else {
+          setReviewComplete(true);
+          setReviewTutorMessage(null);
+          void refreshSuggestedReview(uid, language);
+        }
+      } else {
+        if (res.nextItem && res.nextItem.id === currentReviewItem.id) {
+          setReviewItems((prev) => {
+            const next = [...prev];
+            next[reviewIndex] = res.nextItem!;
+            return next;
+          });
+        }
+      }
+    } catch (e: unknown) {
+      setError(toUserSafeErrorMessage(e));
+      setReviewAnswer(toSend);
+    } finally {
+      setPending(null);
+      setLoading(false);
+    }
+  }
+
+
   return (
     <LessonShell>
       {showHome ? (
-        <div className="lessonHome">
+        <div
+          className="lessonHome"
+          data-last-completed={lastCompletedLessonId || undefined}
+          data-resume-lesson={resumeLessonId || undefined}
+          data-next-lesson={nextLessonId || undefined}
+        >
           {error && <div className="lessonError">{error}</div>}
 
           {reviewBanner && (
@@ -894,7 +1112,14 @@ export function Lesson() {
 
           <div className="lessonHomeCard">
             <div className="lessonHomeRow">
-              <LessonSetupPanel userId={userId} language={language} lessonId={lessonId} />
+              <LessonSetupPanel
+                userId={userId}
+                language={language}
+                lessonId={lessonId}
+                lessons={catalog}
+                onLessonChange={setLessonId}
+                disabled={loading || practiceActive}
+              />
 
               <div className="lessonPrefsArea">
                 <button
@@ -906,17 +1131,7 @@ export function Lesson() {
                   aria-haspopup="true"
                   title="Teaching preferences"
                 >
-                  <svg
-                    className="lessonPrefsIcon"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <circle cx="12" cy="12" r="11" fill="#E0F2FE" />
-                    <path
-                      d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Zm8.1 3.8c0-.5-.1-1-.2-1.5l2-1.6-1.9-3.3-2.4 1a8.5 8.5 0 0 0-2.6-1.5l-.4-2.6H9.4L9 5.1c-.9.3-1.8.8-2.6 1.5l-2.4-1-1.9 3.3 2 1.6c-.1.5-.2 1-.2 1.5s.1 1 .2 1.5l-2 1.6 1.9 3.3 2.4-1c.8.7 1.7 1.2 2.6 1.5l.4 2.6h3.8l.4-2.6c.9-.3 1.8-.8 2.6-1.5l2.4 1 1.9-3.3-2-1.6c.1-.5.2-1 .2-1.5Z"
-                      fill="#334155"
-                    />
-                  </svg>
+                  <img className="lessonPrefsIcon" src={settingsIcon} alt="Settings" />
                 </button>
                 {prefsOpen && (
                   <div className="lessonPrefsMenu" ref={prefsMenuRef}>
@@ -981,27 +1196,102 @@ export function Lesson() {
               </div>
             </div>
 
+            <div className="lessonCatalogHeader">
+              <div className="lessonCatalogTitle">Lessons</div>
+              <div className="lessonCatalogSubtitle">Continue when you're ready.</div>
+            </div>
+
+            <div className="lessonCatalogList">
+              {catalog.map((lesson) => {
+                const status = progressMap[lesson.lessonId]?.status?.toLowerCase() ?? "not_started";
+                const selected = lesson.lessonId === lessonId;
+                return (
+                  <button
+                    key={lesson.lessonId}
+                    type="button"
+                    className={`lessonCatalogItem ${selected ? "isSelected" : ""}`}
+                    onClick={() => setLessonId(lesson.lessonId)}
+                  >
+                    <div className="lessonCatalogContent">
+                      <div className="lessonCatalogTitleRow">
+                        <div className="lessonCatalogLessonTitle">
+                          {lesson.title || lesson.lessonId}
+                        </div>
+                        <span className={`lessonStatusPill status-${status}`}>
+                          {status === "in_progress"
+                            ? "In progress"
+                            : status === "completed"
+                              ? "Completed"
+                              : status === "needs_review"
+                                ? "Needs review"
+                                : "Not started"}
+                        </span>
+                      </div>
+                      <div className="lessonCatalogDescription">
+                        {lesson.description || "Continue when you're ready."}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              {catalog.length === 0 && (
+                <div className="lessonCatalogEmpty">No lessons available yet.</div>
+              )}
+            </div>
+
             <div className="lessonHomeRow lessonHomeActionsRow">
               <div className="lessonActionRow lessonActionCenter">
                 <div className="lessonActionArea">
                   <div className="lessonActionStack">
+                    {showResumePractice && (
+                      <div className="lessonHomePracticeCard">
+                        <div className="lessonResumePracticeText">Finish practice to continue.</div>
+                        <PracticeCard
+                          practicePrompt={practicePrompt}
+                          practiceId={practiceId}
+                          practiceMode={practiceMode}
+                          reviewIndex={reviewIndex}
+                          reviewQueueLength={reviewItems.length}
+                          onStopReview={() => stopReview("Review paused. Continue when you're ready.")}
+                          loading={loading}
+                          pending={pending}
+                          practiceTutorMessage={practiceTutorMessage}
+                          practiceAnswer={practiceAnswer}
+                          onPracticeAnswerChange={setPracticeAnswer}
+                          practiceInputRef={practiceInputRef}
+                          canSubmitPractice={canSubmitPractice}
+                          onSendPractice={handleSendPractice}
+                        />
+                        <button
+                          className="lessonPrimaryBtn lessonResumeBtn"
+                          onClick={() => void handleResumePractice()}
+                          disabled={loading}
+                        >
+                          Resume practice
+                        </button>
+                      </div>
+                    )}
                     <button
                       className="lessonPrimaryBtn lessonActionBtn"
-                      onClick={() => void handleStart()}
-                      disabled={disableStartResume}
+                      onClick={() =>
+                        selectedProgressStatus === "in_progress"
+                          ? void handleResume()
+                          : void handleStart()
+                      }
+                      disabled={primaryActionDisabled}
                     >
-                      Start
+                      {primaryActionLabel}
                     </button>
-                  {canResume && (
-                      <button
-                        className="lessonSecondaryBtn lessonActionBtn"
-                        onClick={() => void handleResume()}
-                        disabled={!canResume}
-                        title="Continue last session"
-                      >
-                        Continue last session
-                      </button>
-                    )}
+                  {showContinueNextLessonCTA && nextLessonAfterLastCompleted && (
+                    <button
+                      className="lessonSecondaryBtn lessonActionBtn"
+                      onClick={() => void handleStart(nextLessonAfterLastCompleted)}
+                      disabled={loading}
+                      title={`Continue to ${nextLessonAfterLastCompleted}`}
+                    >
+                      Continue to next lesson
+                    </button>
+                  )}
                   </div>
                 </div>
               </div>
@@ -1010,12 +1300,107 @@ export function Lesson() {
 
           <SuggestedReviewCard
             visible={showSuggestedReview}
-            items={suggestedReviewItems}
+            items={reviewCandidates.length > 0 ? reviewCandidates : suggestedReviewItems}
             loading={loading}
             onReviewNow={() => void beginSuggestedReview()}
             onDismiss={() => setReviewDismissed(true)}
           />
 
+        </div>
+      ) : showReviewScreen ? (
+        <div className="lessonPracticeScreen">
+          {error && <div className="lessonError">{error}</div>}
+          <div className="lessonPracticeHeader">
+            <button className="lessonSecondaryBtn" onClick={handleBack}>
+              Back to lessons
+            </button>
+            <div className="lessonPracticeTitle">Review</div>
+          </div>
+          <div className="lessonPracticeCue review">Optional review</div>
+          <div className="lessonPracticePanel">
+            <div className="lessonReviewCard">
+              {!reviewComplete && currentReviewItem ? (
+                <>
+                  <div className="lessonReviewHeader">
+                    <div className="lessonReviewStep">
+                      Review {Math.min(reviewIndex + 1, Math.max(1, reviewItems.length))}/
+                      {Math.max(1, reviewItems.length)}
+                    </div>
+                    <button
+                      type="button"
+                      className="lessonSecondaryBtn"
+                      onClick={() => stopReview("Review paused. Continue when you're ready.")}
+                      disabled={loading}
+                    >
+                      Stop
+                    </button>
+                  </div>
+
+                  <div className="lessonReviewPrompt">
+                    <div className="lessonReviewLabel">Tutor</div>
+                    <div className="lessonReviewPromptBubble">
+                      {currentReviewItem.prompt}
+                    </div>
+                  </div>
+
+                  {pending === "review" && (
+                    <div className="lessonReviewTyping">
+                      <div className="lessonReviewDots">
+                        <span className="typingDot" />
+                        <span className="typingDot" />
+                        <span className="typingDot" />
+                      </div>
+                    </div>
+                  )}
+
+                  {reviewTutorMessage && (
+                    <div className="lessonReviewFeedback">
+                      <div className="lessonReviewMessage">{reviewTutorMessage}</div>
+                    </div>
+                  )}
+
+                  <div className="lessonReviewInputRow">
+                    <input
+                      ref={reviewInputRef}
+                      value={reviewAnswer}
+                      onChange={(e) => setReviewAnswer(e.target.value)}
+                      placeholder="Type your answer..."
+                      className="lessonReviewInput"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && canSubmitReview) void handleSubmitReview();
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="lessonPrimaryBtn"
+                      onClick={() => void handleSubmitReview()}
+                      disabled={!canSubmitReview}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </>
+            ) : reviewItems.length === 0 ? (
+              <div className="lessonReviewComplete">
+                <div className="lessonReviewCompleteTitle">
+                  No review items are available yet.
+                </div>
+                <button type="button" className="lessonPrimaryBtn" onClick={handleBack}>
+                  Back to lessons
+                </button>
+              </div>
+            ) : (
+                <div className="lessonReviewComplete">
+                  <div className="lessonReviewCompleteTitle">
+                    Review complete. Continue when you're ready.
+                  </div>
+                  <button type="button" className="lessonPrimaryBtn" onClick={handleBack}>
+                    Back to lessons
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         <>
@@ -1024,6 +1409,8 @@ export function Lesson() {
               session={session}
               progress={progress}
               loading={loading}
+              lessonTitle={currentLessonMeta?.title}
+              lessonDescription={currentLessonMeta?.description}
               onBack={showPracticeScreen ? () => setPracticeScreenOpen(false) : handleBack}
             />
           )}
@@ -1060,7 +1447,7 @@ export function Lesson() {
                   practiceId={practiceId}
                   practiceMode={practiceMode}
                   reviewIndex={reviewIndex}
-                  reviewQueueLength={reviewQueue.length}
+                  reviewQueueLength={reviewItems.length}
                   onStopReview={() => stopReview("Review paused. Continue the lesson when you're ready.")}
                   loading={loading}
                   pending={pending}
@@ -1085,21 +1472,6 @@ export function Lesson() {
                 pending={pending}
                 showEmptyState={!practiceActive}
               >
-                {showReviewBanner && (
-                  <div className="lessonPracticeBanner">
-                    <div className="lessonPracticeBannerText">
-                      Optional review is ready. Want to take a quick look?
-                    </div>
-                    <button
-                      type="button"
-                      className="lessonSecondaryBtn lessonReviewBtn"
-                      onClick={handleOpenReview}
-                      disabled={loading}
-                    >
-                      Let's review
-                    </button>
-                  </div>
-                )}
                 {practiceActive && practiceMode === "lesson" && (
                   <div className="lessonPracticeInline">
                     <PracticeCard
@@ -1107,7 +1479,7 @@ export function Lesson() {
                       practiceId={practiceId}
                       practiceMode={practiceMode}
                       reviewIndex={reviewIndex}
-                      reviewQueueLength={reviewQueue.length}
+                      reviewQueueLength={reviewItems.length}
                       onStopReview={() => stopReview("Review paused. Continue the lesson when you're ready.")}
                       loading={loading}
                       pending={pending}
@@ -1122,47 +1494,56 @@ export function Lesson() {
                 )}
                 {lessonCompleted && !practiceActive && (
                   <>
-                    <div
-                    style={{
-                      alignSelf: "center",
-                      maxWidth: 520,
-                      background: "rgba(0,0,0,0.04)",
-                      border: "1px solid rgba(0,0,0,0.06)",
-                      borderRadius: 14,
-                      padding: "10px 12px",
-                      textAlign: "center",
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, marginBottom: 2 }}>Lesson Complete.</div>
-                    <div style={{ fontSize: 13, opacity: 0.78 }}>
-                      You can exit now, or restart anytime.
+                    <div className="lessonCompletionCard">
+                      <div className="lessonCompletionTitle">Lesson complete</div>
+                      <div className="lessonCompletionSummary">
+                        {reviewFocusNext.length > 0 && (
+                          <div className="lessonCompletionBlock">
+                            <div className="lessonCompletionLabel">Focus next</div>
+                            <ul className="lessonCompletionList">
+                              {reviewFocusNext.map((item, idx) => (
+                                <li key={`${item}-${idx}`}>{item.replace(/_/g, " ")}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="lessonCompletionActions">
+                        {reviewItemsAvailable && (
+                          <button
+                            className="lessonSecondaryBtn"
+                            onClick={() => beginSuggestedReview()}
+                            disabled={loading}
+                          >
+                            Review (optional)
+                          </button>
+                        )}
+                        {nextLessonId && (
+                          <button
+                            className="lessonPrimaryBtn"
+                            onClick={() => void handleStart(nextLessonId)}
+                            disabled={loading}
+                          >
+                            Continue to next lesson
+                          </button>
+                        )}
+                        <button
+                          className={completionBackButtonClass}
+                          onClick={handleBack}
+                          disabled={loading}
+                        >
+                          Back to lessons
+                        </button>
+                      </div>
+
+                      {!nextLessonId && (
+                        <div className="lessonCompletionNote">
+                          No next lesson yet. You can restart or exit.
+                        </div>
+                      )}
                     </div>
 
-                    <div style={{ marginTop: 10, display: "flex", justifyContent: "center" }}>
-                      <button
-                        onClick={handleExit}
-                        disabled={loading}
-                        style={{
-                          padding: "10px 12px",
-                          borderRadius: 12,
-                          border: "1px solid var(--border)",
-                          background: loading ? "var(--surface-muted)" : "white",
-                          cursor: loading ? "not-allowed" : "pointer",
-                          fontSize: 13,
-                        }}
-                      >
-                        Exit Lesson
-                      </button>
-                    </div>
-                  </div>
-
-                  <FeedbackCard
-                    userId={userId.trim()}
-                    language={language}
-                    lessonId={lessonId.trim()}
-                    sessionKey={currentSessionKey}
-                    disabled={loading}
-                  />
                 </>
                 )}
               </ChatPane>

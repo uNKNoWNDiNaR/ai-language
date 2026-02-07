@@ -1,15 +1,21 @@
-import type { SupportedLanguage } from "../../api/lessonAPI";
+import type { LessonCatalogItem, SupportedLanguage } from "../../api/lessonAPI";
 
 type LessonSetupPanelProps = {
   userId: string;
   language: SupportedLanguage;
   lessonId: string;
+  lessons?: LessonCatalogItem[];
+  onLessonChange?: (lessonId: string) => void;
+  disabled?: boolean;
 };
 
 export function LessonSetupPanel({
   userId,
   language,
   lessonId,
+  lessons = [],
+  onLessonChange,
+  disabled = false,
 }: LessonSetupPanelProps) {
   const trimmedUserId = userId.trim() || "user-1";
   const trimmedLessonId = lessonId.trim() || "basic-1";
@@ -62,7 +68,23 @@ export function LessonSetupPanel({
         <span className="lessonInfoIcon" aria-hidden="true">
           📘
         </span>
-        <span className="lessonInfoText">{trimmedLessonId}</span>
+        {lessons.length > 0 && onLessonChange ? (
+          <select
+            className="lessonSelect"
+            value={trimmedLessonId}
+            onChange={(e) => onLessonChange(e.target.value)}
+            disabled={disabled}
+            aria-label="Lesson"
+          >
+            {lessons.map((lesson) => (
+              <option key={lesson.lessonId} value={lesson.lessonId}>
+                {lesson.title || lesson.lessonId}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="lessonInfoText">{trimmedLessonId}</span>
+        )}
       </div>
     </div>
   );
