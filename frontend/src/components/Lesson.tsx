@@ -1,7 +1,6 @@
 // frontend/src/components/Lesson.tsx
 
 import { useEffect, useRef, useMemo, useState } from "react";
-import { FeedbackCard } from "./FeedbackCard";
 import {
   startLesson,
   submitAnswer,
@@ -194,7 +193,7 @@ export function Lesson() {
   const [reviewComplete, setReviewComplete] = useState(false);
   const [reviewScreenOpen, setReviewScreenOpen] = useState(false);
   const [reviewBanner, setReviewBanner] = useState<string | null>(null);
-  const [practiceMode, setPracticeMode] = useState<null | "lesson">(null);
+  const [practiceMode, setPracticeMode] = useState<null | "lesson" | "review">(null);
 
   const [catalog, setCatalog] = useState<LessonCatalogItem[]>([]);
   const [lastCompletedLessonId, setLastCompletedLessonId] = useState<string>(() => {
