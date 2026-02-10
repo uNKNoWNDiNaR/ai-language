@@ -60,7 +60,8 @@ ${p.hint ? `Hint to focus on (for you): "${p.hint}"` : ""}`
             maxOutputTokens: 120,
             language: instructionLanguage,
         });
-        return typeof reply === "string" ? sanitizeExplanation(reply) : null;
+        const text = typeof reply === "string" ? reply : reply?.primaryText;
+        return text ? sanitizeExplanation(text) : null;
     }
     catch {
         return null;

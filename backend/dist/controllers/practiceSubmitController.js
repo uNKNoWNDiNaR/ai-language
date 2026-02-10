@@ -9,6 +9,7 @@ const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 const mapLike_1 = require("../utils/mapLike");
 const sendError_1 = require("../http/sendError");
 const featureFlags_1 = require("../config/featureFlags");
+const supportPolicy_1 = require("../services/supportPolicy");
 function parseQuestionIdFromConceptTag(tag) {
     if (typeof tag !== "string")
         return null;
@@ -97,6 +98,7 @@ const submitPractice = async (req, res) => {
     const q = {
         id: 0,
         question: item.prompt,
+        prompt: item.prompt,
         answer: item.expectedAnswerRaw,
         hint: typeof item.hint === "string" ? item.hint : undefined,
         examples: item.examples,
@@ -106,6 +108,8 @@ const submitPractice = async (req, res) => {
     const baseMessage = buildTutorMessage(evalRes.result, hint);
     let explanation = null;
     let instructionLanguage = null;
+    let includeSupport = false;
+    let supportLevel = 0.85;
     if ((0, featureFlags_1.isInstructionLanguageEnabled)()) {
         try {
             const lang = (typeof session.language === "string" && session.language.trim()
@@ -117,6 +121,28 @@ const submitPractice = async (req, res) => {
             instructionLanguage = null;
         }
     }
+    if (instructionLanguage) {
+        const eventType = evalRes.result === "correct"
+            ? "CORRECT_FEEDBACK"
+            : evalRes.result === "almost"
+                ? "ALMOST_FEEDBACK"
+                : "WRONG_FEEDBACK";
+        try {
+            const supportProfile = await (0, learnerProfileStore_1.getSupportProfile)(session.userId, item.language);
+            supportLevel = (0, supportPolicy_1.clampSupportLevel)(supportProfile.supportLevel);
+        }
+        catch {
+            supportLevel = 0.85;
+        }
+        includeSupport = (0, supportPolicy_1.shouldIncludeSupportPolicy)({
+            eventType,
+            supportLevel,
+            questionIndex: 0,
+            repeatedConfusion: false,
+            explicitRequest: false,
+            forceNoSupport: Boolean(session.forceNoSupport),
+        });
+    }
     // Only add an explanation when it helps learning without overpacking:
     // - correct: short "why it works"
     // - almost/wrong: only after attempt 2/3 (attempt 1 stays "try again"; attempt 4+ reveals answer)
@@ -124,7 +150,7 @@ const submitPractice = async (req, res) => {
         ((evalRes.result === "almost" || evalRes.result === "wrong") &&
             attemptCount >= 2 &&
             attemptCount <= 3);
-    if (shouldExplain) {
+    if (shouldExplain && (!instructionLanguage || includeSupport)) {
         try {
             explanation = await (0, practiceTutorEplainer_1.explainPracticeResult)({
                 language: item.language,

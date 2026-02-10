@@ -28,6 +28,20 @@ const LessonSessionSchema = new mongoose.Schema(
       of: String,
       default: () => new Map(),
     },
+    mistakeCountByConceptTag: {
+      type: Map,
+      of: Number,
+      default: () => new Map(),
+    },
+    seenConceptTags: {
+      type: Map,
+      of: Number,
+      default: () => new Map(),
+    },
+    wrongCount: { type: Number, default: 0 },
+    almostCount: { type: Number, default: 0 },
+    forcedAdvanceCount: { type: Number, default: 0 },
+    hintsUsedCount: { type: Number, default: 0 },
 
     messages: { type: [ChatMessageSchema], default: [] },
 
@@ -47,6 +61,19 @@ const LessonSessionSchema = new mongoose.Schema(
       of: Number,
       default: () => new Map(),
     },
+
+    recentConfusions: {
+      type: [
+        {
+          conceptTag: { type: String, required: true },
+          timestamp: { type: Date, required: true },
+        },
+      ],
+      default: [],
+    },
+    manualSupportTurnsLeft: { type: Number, default: 0 },
+    lastSupportModeFromProfile: { type: String, default: "auto" },
+    forceNoSupport: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

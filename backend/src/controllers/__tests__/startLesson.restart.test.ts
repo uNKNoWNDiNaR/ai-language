@@ -29,12 +29,13 @@ vi.mock("../../ai/promptBuilder", () => ({
 }));
 
 vi.mock("../../ai/openaiClient", () => ({
-  generateTutorResponse: vi.fn(async () => "Let's begin.\nQ1"),
+  generateTutorResponse: vi.fn(async () => ({ primaryText: "Let's begin.\nQ1" })),
 }));
 
 // Import after mocks
 import { startLesson } from "../lessonController";
 import { LessonSessionModel } from "../../state/sessionState";
+import { LessonProgressModel } from "../../state/progressState";
 
 function mockRes() {
   const res: any = {};
@@ -75,6 +76,11 @@ describe("startLesson restart/continue behavior", () => {
 
     await startLesson(req, res);
 
+    expect(LessonProgressModel.deleteOne).toHaveBeenCalledWith({
+      userId: "u1",
+      language: "en",
+      lessonId: "basic-1",
+    });
     expect(LessonSessionModel.deleteOne).toHaveBeenCalledWith({ userId: "u1" });
     expect(LessonSessionModel.create).toHaveBeenCalled();
     // new session path in your handler returns 201
@@ -99,6 +105,31 @@ describe("startLesson restart/continue behavior", () => {
 
     expect(LessonSessionModel.deleteOne).not.toHaveBeenCalled();
     expect(LessonSessionModel.create).not.toHaveBeenCalled();
+    expect(LessonProgressModel.deleteOne).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("creates progress for the selected lesson only", async () => {
+    (LessonSessionModel.findOne as any).mockResolvedValue(null);
+
+    (LessonSessionModel.create as any).mockResolvedValue({
+      userId: "u1",
+      lessonId: "basic-2",
+      language: "en",
+      state: "USER_INPUT",
+      currentQuestionIndex: 0,
+      messages: [{ role: "assistant", content: "Let's begin.\nQ1" }],
+    });
+
+    const req: any = { body: { userId: "u1", language: "en", lessonId: "basic-2" } };
+    const res = mockRes();
+
+    await startLesson(req, res);
+
+    expect(LessonProgressModel.updateOne).toHaveBeenCalledWith(
+      { userId: "u1", language: "en", lessonId: "basic-2" },
+      expect.any(Object),
+      { upsert: true }
+    );
   });
 });

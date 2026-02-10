@@ -1,4 +1,5 @@
 import type { LessonSession, LessonProgressPayload } from "../../api/lessonAPI";
+import type { UiStrings } from "../../utils/instructionLanguage";
 
 function prettyLanguage(lang: string | undefined): string {
   switch (lang) {
@@ -15,11 +16,11 @@ function prettyLanguage(lang: string | undefined): string {
   }
 }
 
-function prettyStatus(s: string | undefined): string {
+function prettyStatus(s: string | undefined, uiStrings?: UiStrings): string {
   const t = (s ?? "").toLowerCase();
-  if (t.includes("needs")) return "Needs review";
-  if (t.includes("complete")) return "Completed";
-  if (t.includes("progress")) return "In progress";
+  if (t.includes("needs")) return uiStrings?.statusNeedsReview ?? "Needs review";
+  if (t.includes("complete")) return uiStrings?.statusCompleted ?? "Completed";
+  if (t.includes("progress")) return uiStrings?.statusInProgress ?? "In progress";
   return s ? s.replace(/_/g, " ") : "—";
 }
 
@@ -30,6 +31,7 @@ type SessionHeaderProps = {
   lessonTitle?: string;
   lessonDescription?: string;
   onBack: () => void;
+  uiStrings?: UiStrings;
 };
 
 export function SessionHeader({
@@ -39,6 +41,7 @@ export function SessionHeader({
   lessonTitle,
   lessonDescription,
   onBack,
+  uiStrings,
 }: SessionHeaderProps) {
   const title = lessonTitle?.trim() || session.lessonId;
   const description = lessonDescription?.trim();
@@ -81,7 +84,7 @@ export function SessionHeader({
             fontSize: 12,
           }}
         >
-          ← Back
+          ← {uiStrings?.backLabel ?? "Back"}
         </button>
         <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
           <span className="lessonTitle" style={{ fontWeight: 600 }}>
@@ -145,7 +148,7 @@ export function SessionHeader({
               opacity: 0.9,
             }}
           />
-          <div>{prettyStatus(progress?.status ?? session.state)}</div>
+          <div>{prettyStatus(progress?.status ?? session.state, uiStrings)}</div>
         </div>
 
       </div>

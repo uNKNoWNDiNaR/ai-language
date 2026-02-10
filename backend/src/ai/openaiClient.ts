@@ -3,6 +3,7 @@
 import OpenAI from "openai";
 import { TutorIntent } from "./tutorIntent";
 import { SupportedLanguage } from "../types";
+import type { TutorResponseStruct } from "./tutorResponseTypes";
 
 let client: OpenAI | null = null;
 
@@ -51,7 +52,7 @@ export async function generateTutorResponse(
   prompt: string,
   intent: TutorIntent,
   opts?: TutorResponseOptions
-): Promise<string> {
+): Promise<TutorResponseStruct> {
   try {
     const baseSystem =
       `You are a friendly, patient native-speaker language tutor.
@@ -79,11 +80,49 @@ Never ask multiple questions at once.`;
       max_output_tokens,
     });
 
-    return response.output_text || "Sorry, I couldn't generate a response.";
+    const raw = response.output_text || "";
+    return parseTutorResponse(raw);
   } catch (error) {
     console.error("OpenAI error:", error);
-    return "I'm having trouble responding right now. Please try again.";
+    return { primaryText: "I'm having trouble responding right now. Please try again." };
   }
+}
+
+function extractJsonBlock(text: string): string | null {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  if (raw.startsWith("{") && raw.endsWith("}")) return raw;
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return raw.slice(start, end + 1);
+  }
+  return null;
+}
+
+function parseTutorResponse(text: string): TutorResponseStruct {
+  const raw = String(text || "").trim();
+  if (!raw) return { primaryText: "" };
+
+  const jsonCandidate = extractJsonBlock(raw);
+  if (jsonCandidate) {
+    try {
+      const parsed = JSON.parse(jsonCandidate) as Record<string, unknown>;
+      const primaryText = typeof parsed.primaryText === "string" ? parsed.primaryText : "";
+      const hasSupportKey = Object.prototype.hasOwnProperty.call(parsed, "supportText");
+      const supportText = typeof parsed.supportText === "string" ? parsed.supportText : undefined;
+      if (primaryText || hasSupportKey) {
+        return {
+          primaryText: primaryText || "",
+          ...(hasSupportKey && supportText !== undefined ? { supportText } : {}),
+        };
+      }
+    } catch {
+      // fall through to raw
+    }
+  }
+
+  return { primaryText: raw };
 }
 
 // AI call for the practice response JSON to be created

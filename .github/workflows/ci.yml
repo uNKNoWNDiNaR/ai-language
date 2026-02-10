@@ -25,8 +25,8 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Validate lessons
-        run: npm run validate:lessons
+      - name: Generate + validate lessons
+        run: npm run check:lessons
 
       - name: Test
         run: npm test

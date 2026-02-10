@@ -19,7 +19,9 @@ function isSupportedLanguage(v: unknown): v is SupportedLanguage {
 
 function getLessonsDir(language: string): string | null {
   const lang = (language || "").trim().toLowerCase();
+  const moduleRelative = path.resolve(__dirname, "..", "lessons", lang);
   const candidates = [
+    moduleRelative,
     path.join(process.cwd(), "dist", "lessons", lang),
     path.join(process.cwd(), "src", "lessons", lang),
     path.join(process.cwd(), "backend", "dist", "lessons", lang),

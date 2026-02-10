@@ -13,14 +13,78 @@ export type AnswerEvaluation = {
 const GERMAN_ARTICLES = new Set(["der", "die", "das", "ein", "eine", "einen", "einem", "einer", "den", "dem", "des"]);
 const ENGLISH_MARKERS = new Set(["the", "a", "an", "my", "is", "are", "i", "you", "we", "they"]);
 const GERMAN_MARKERS = new Set(["ich", "bin", "du", "wir", "sie", "nicht", "mein", "meine", "und", "aber"]);
+const SMART_APOSTROPHES = /[’‘]/g;
 
 function normalize(text: string): string {
   return (text || "")
     .toLowerCase()
+    .replace(SMART_APOSTROPHES, "'")
     .trim()
     .replace(/\s+/g, " ")
     .replace(/[.,!?;:"'()\[\]{}]/g, "")
     .trim();
+}
+
+function getPromptText(question: LessonQuestion): string {
+  const promptRaw = typeof question.prompt === "string" ? question.prompt.trim() : "";
+  if (promptRaw) return promptRaw;
+  const questionRaw = typeof question.question === "string" ? question.question.trim() : "";
+  return questionRaw;
+}
+
+function getExpectedInput(question: LessonQuestion): "" | "blank" | "sentence" {
+  const raw = typeof question.expectedInput === "string" ? question.expectedInput.trim().toLowerCase() : "";
+  if (raw === "blank" || raw === "sentence") return raw as "blank" | "sentence";
+  return "";
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripPromptPrefix(prompt: string): string {
+  const raw = (prompt || "").trim();
+  if (!raw) return raw;
+  const colonIdx = raw.lastIndexOf(":");
+  if (colonIdx !== -1) {
+    const after = raw.slice(colonIdx + 1).trim();
+    if (after.includes("___")) return after;
+  }
+  return raw;
+}
+
+function deriveBlankAnswers(prompt: string, answer: string): string[] {
+  if (!prompt.includes("___")) return [];
+  const template = stripPromptPrefix(prompt);
+  if (!template.includes("___")) return [];
+  const pattern = escapeRegExp(template).replace(/_+/g, "(.+?)");
+  const re = new RegExp(`^${pattern}$`, "i");
+  const match = (answer || "").trim().match(re);
+  if (!match || match.length < 2) return [];
+  const candidate = match[1]?.trim() ?? "";
+  return candidate ? [candidate] : [];
+}
+
+function getBlankAnswers(
+  question: LessonQuestion,
+  promptText: string,
+  expectedInput: "" | "blank" | "sentence"
+): string[] {
+  const raw = Array.isArray(question.blankAnswers) ? question.blankAnswers : [];
+  const cleaned = raw
+    .filter((x) => typeof x === "string" && x.trim().length > 0)
+    .map((s) => (typeof s === "string" ? s.trim() : ""))
+    .filter(Boolean);
+  if (cleaned.length > 0) return cleaned;
+  const answerText =
+    typeof question.answer === "string" || typeof question.answer === "number"
+      ? String(question.answer)
+      : "";
+  if (!answerText) return [];
+  if (expectedInput === "blank" || promptText.includes("___")) {
+    return deriveBlankAnswers(promptText, answerText);
+  }
+  return [];
 }
 
 function tokenize(text: string): string[] {
@@ -258,20 +322,32 @@ export function evaluateAnswer(
   language: string
 ): AnswerEvaluation {
   const userNorm = normalize(userAnswer);
-const expectedNorm = normalize(question.answer);
+  const expectedNorm = normalize(question.answer);
+  const promptText = getPromptText(question);
+  const expectedInput = getExpectedInput(question);
+  const isBlank = expectedInput === "blank" || promptText.includes("___");
 
-if (matchesAnyExact(question, userNorm)) {
-  return { result: "correct" };
-}
+  if (isBlank) {
+    const blankAnswers = getBlankAnswers(question, promptText, expectedInput);
+    for (const blank of blankAnswers) {
+      if (userNorm === normalize(blank)) {
+        return { result: "correct" };
+      }
+    }
+  }
 
-const templateMatch = matchPlaceholderTemplate(question.answer, userNorm);
-if (templateMatch === "correct") return { result: "correct" };
-if (templateMatch === "almost") return { result: "almost", reasonCode: "MISSING_SLOT" };
+  if (matchesAnyExact(question, userNorm)) {
+    return { result: "correct" };
+  }
 
-for (const rule of SPECIAL_EQUIVALENCE_RULES) {
-  const out = rule(question, userAnswer, language, userNorm, expectedNorm);
-  if (out) return out;
-}
+  const templateMatch = matchPlaceholderTemplate(question.answer, userNorm);
+  if (templateMatch === "correct") return { result: "correct" };
+  if (templateMatch === "almost") return { result: "almost", reasonCode: "MISSING_SLOT" };
+
+  for (const rule of SPECIAL_EQUIVALENCE_RULES) {
+    const out = rule(question, userAnswer, language, userNorm, expectedNorm);
+    if (out) return out;
+  }
 
   // Wrong language (deterministic heuristic)
   if (isWrongLanguageHeuristic(language, userAnswer)) {

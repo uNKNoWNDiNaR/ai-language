@@ -5,25 +5,37 @@
   "questions": [
     {
       "id": 1,
-      "question": "How do you say 'Hello' in Spanish?",
+      "question": "¿Cómo se dice \"Hello\" en español?",
+      "prompt": "¿Cómo se dice \"Hello\" en español?",
       "answer": "Hola",
       "conceptTag": "greetings_hello",
+      "acceptedAnswers": ["Hola", "Buenos días"],
+      "hintTarget": "Un saludo común.",
+      "explanationTarget": "Un saludo habitual es \"Hola\".",
       "hint": "Common greeting.",
       "examples": ["Hola", "Buenos días"]
     },
     {
       "id": 2,
-      "question": "How do you ask someone's name?",
+      "question": "¿Cómo le preguntas a alguien su nombre?",
+      "prompt": "¿Cómo le preguntas a alguien su nombre?",
       "answer": "¿Cómo te llamas?",
       "conceptTag": "asking_name",
+      "acceptedAnswers": ["¿Cómo te llamas?", "¿Cuál es tu nombre?"],
+      "hintTarget": "Empieza con \"Cómo\".",
+      "explanationTarget": "Puedes decir: \"¿Cómo te llamas?\".",
       "hint": "Starts with 'Cómo'.",
       "examples": ["¿Cómo te llamas?", "¿Cuál es tu nombre?"]
     },
     {
       "id": 3,
-      "question": "Respond to '¿Cómo estás?' in Spanish.",
+      "question": "Responde a \"¿Cómo estás?\".",
+      "prompt": "Responde a \"¿Cómo estás?\".",
       "answer": "Bien",
       "conceptTag": "how_are_you_reply",
+      "acceptedAnswers": ["Bien", "Muy bien", "Todo bien"],
+      "hintTarget": "Una respuesta corta.",
+      "explanationTarget": "Una respuesta simple es \"Bien\".",
       "hint": "Means 'Good'.",
       "examples": ["Bien", "Muy bien", "Todo bien"]
     }

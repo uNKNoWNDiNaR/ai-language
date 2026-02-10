@@ -1,0 +1,7 @@
+# Prevent .env files from being copied into Docker build context
+.env
+.env.*
+!.env.example
+!.env.sample
+.env.keys
+.env.vault

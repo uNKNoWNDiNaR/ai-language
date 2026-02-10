@@ -68,7 +68,7 @@ vi.mock("../../ai/staticTutorMessages", () => ({
 }));
 
 vi.mock("../../ai/openaiClient", () => ({
-  generateTutorResponse: vi.fn(async () => "Let's begin.\nQ1?"),
+  generateTutorResponse: vi.fn(async () => ({ primaryText: "Let's begin.\nQ1?" })),
   generatePracticeJSON: vi.fn(async () => "{}"),
 }));
 
@@ -80,6 +80,7 @@ vi.mock("../../storage/learnerProfileStore", () => ({
   updateTeachingProfilePrefs: updateTeachingProfilePrefsMock,
   setInstructionLanguage: setInstructionLanguageMock,
   getInstructionLanguage: getInstructionLanguageMock,
+  getSupportProfile: vi.fn(async () => ({ supportLevel: 0.85, supportMode: "auto" })),
   recordLessonAttempt: vi.fn(async () => undefined),
   recordReviewPracticeOutcome: vi.fn(async () => undefined),
   getLearnerProfileSummary: vi.fn(async () => null),

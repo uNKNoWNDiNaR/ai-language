@@ -1,0 +1,244 @@
+{
+  "lessonId": "basic-9",
+  "title": "Can and can't",
+  "description": "Talk about ability and make simple requests.",
+  "questions": [
+    {
+      "id": 1,
+      "conceptTag": "a1.can.ability_i",
+      "question": "Complete: I ___ swim.",
+      "prompt": "Complete: I ___ swim.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "can"
+      ],
+      "answer": "I can swim.",
+      "acceptedAnswers": [
+        "I can swim.",
+        "I can swim"
+      ],
+      "hintTarget": "Use: can + verb.",
+      "explanationTarget": "“Can” shows ability.",
+      "hints": [
+        "I can + verb …"
+      ],
+      "examples": [
+        "I can swim.",
+        "I can run."
+      ]
+    },
+    {
+      "id": 2,
+      "conceptTag": "a1.can.ability_you",
+      "question": "Turn into a question: You can swim.",
+      "prompt": "Turn into a question: You can swim.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Can you swim?",
+      "acceptedAnswers": [
+        "Can you swim?",
+        "Can you swim"
+      ],
+      "hintTarget": "Start with: Can you …?",
+      "explanationTarget": "Use “Can you …?” to ask about ability.",
+      "hints": [
+        "Can + you + verb …?"
+      ],
+      "examples": [
+        "Can you swim?",
+        "Can you cook?"
+      ]
+    },
+    {
+      "id": 3,
+      "conceptTag": "a1.can.short_yes",
+      "question": "Reply: Can you swim? (yes)",
+      "prompt": "Reply: Can you swim? (yes)",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Yes, I can.",
+      "acceptedAnswers": [
+        "Yes, I can.",
+        "Yes, I can"
+      ],
+      "hintTarget": "Short answer: Yes, I can.",
+      "explanationTarget": "Short answers use can/can't.",
+      "hints": [
+        "Start with “Yes …”"
+      ],
+      "examples": [
+        "Yes, I can.",
+        "No, I can't."
+      ]
+    },
+    {
+      "id": 4,
+      "conceptTag": "a1.can.short_no",
+      "question": "Reply: Can you drive? (no)",
+      "prompt": "Reply: Can you drive? (no)",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "No, I can't.",
+      "acceptedAnswers": [
+        "No, I can't.",
+        "No, I can't",
+        "No, I cannot.",
+        "No, I cannot",
+        "No, I can’t.",
+        "No, I can’t"
+      ],
+      "hintTarget": "Short answer: No, I can't.",
+      "explanationTarget": "“Can't” means “cannot”.",
+      "hints": [
+        "Use “can't” for no."
+      ],
+      "examples": [
+        "No, I can't.",
+        "Yes, I can."
+      ]
+    },
+    {
+      "id": 5,
+      "conceptTag": "a1.can.negative",
+      "question": "Complete: I ___ cook.",
+      "prompt": "Complete: I ___ cook.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "can't",
+        "cannot"
+      ],
+      "answer": "I can't cook.",
+      "acceptedAnswers": [
+        "I can't cook.",
+        "I can't cook",
+        "I cannot cook.",
+        "I cannot cook",
+        "I can’t cook.",
+        "I can’t cook"
+      ],
+      "hintTarget": "Use: can't + verb.",
+      "explanationTarget": "Use “can't” for not able.",
+      "hints": [
+        "I can't + verb …"
+      ],
+      "examples": [
+        "I can't cook.",
+        "I can't drive."
+      ]
+    },
+    {
+      "id": 6,
+      "conceptTag": "a1.request.can_you",
+      "question": "Turn into a question: You can help me.",
+      "prompt": "Turn into a question: You can help me.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Can you help me?",
+      "acceptedAnswers": [
+        "Can you help me?",
+        "Can you help me"
+      ],
+      "hintTarget": "Start with: Can you …?",
+      "explanationTarget": "“Can you …?” can be a request.",
+      "hints": [
+        "Can you + verb + me?"
+      ],
+      "examples": [
+        "Can you help me?",
+        "Can you call me?"
+      ]
+    },
+    {
+      "id": 7,
+      "conceptTag": "a1.request.please",
+      "question": "You need help. Ask politely.",
+      "prompt": "You need help. Ask politely.",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Please help me.",
+      "acceptedAnswers": [
+        "Please help me.",
+        "Please help me"
+      ],
+      "hintTarget": "Start with: Please …",
+      "explanationTarget": "“Please” makes it polite.",
+      "hints": [
+        "Use “Please” first."
+      ],
+      "examples": [
+        "Please help me.",
+        "Please wait."
+      ]
+    },
+    {
+      "id": 8,
+      "conceptTag": "a1.request.can_i",
+      "question": "Turn into a question: I can use your phone.",
+      "prompt": "Turn into a question: I can use your phone.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Can I use your phone?",
+      "acceptedAnswers": [
+        "Can I use your phone?",
+        "Can I use your phone"
+      ],
+      "hintTarget": "Start with: Can I …?",
+      "explanationTarget": "Use “Can I …?” to ask permission.",
+      "hints": [
+        "Can I + verb …?"
+      ],
+      "examples": [
+        "Can I use your phone?",
+        "Can I sit here?"
+      ]
+    },
+    {
+      "id": 9,
+      "conceptTag": "a1.can.ability_he",
+      "question": "Change “I can drive.” to “he”.",
+      "prompt": "Change “I can drive.” to “he”.",
+      "taskType": "typing",
+      "promptStyle": "TRANSFORM_SUBJECT",
+      "answer": "He can drive.",
+      "acceptedAnswers": [
+        "He can drive.",
+        "He can drive"
+      ],
+      "hintTarget": "Use: can + verb.",
+      "explanationTarget": "“Can” stays the same for he/she/it.",
+      "hints": [
+        "He can + verb …"
+      ],
+      "examples": [
+        "He can drive.",
+        "She can swim."
+      ]
+    },
+    {
+      "id": 10,
+      "conceptTag": "a1.can.question_can_she",
+      "question": "Turn into a question: She can cook.",
+      "prompt": "Turn into a question: She can cook.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Can she cook?",
+      "acceptedAnswers": [
+        "Can she cook?",
+        "Can she cook"
+      ],
+      "hintTarget": "Start with: Can she …?",
+      "explanationTarget": "Use “Can” + subject + verb.",
+      "hints": [
+        "Can + she + verb …?"
+      ],
+      "examples": [
+        "Can she cook?",
+        "Can he swim?"
+      ]
+    }
+  ]
+}

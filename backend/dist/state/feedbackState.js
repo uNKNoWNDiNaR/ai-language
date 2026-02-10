@@ -21,6 +21,16 @@ const FeedbackSchema = new mongoose_1.default.Schema({
     feltRushed: { type: Boolean },
     helpedUnderstand: { type: Number, min: 1, max: 5 },
     confusedText: { type: String },
+    screen: { type: String },
+    intent: { type: String },
+    crowdedRating: { type: String },
+    feltBest: [{ type: String }],
+    improveText: { type: String },
+    targetLanguage: { type: String },
+    instructionLanguage: { type: String },
+    sessionKey: { type: String },
+    appVersion: { type: String },
+    clientTimestamp: { type: String },
 }, { timestamps: true });
 FeedbackSchema.index({ userAnonId: 1, createdAt: -1 });
 FeedbackSchema.index({ lessonId: 1, conceptTag: 1, createdAt: -1 });

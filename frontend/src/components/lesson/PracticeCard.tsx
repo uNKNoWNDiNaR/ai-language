@@ -17,6 +17,15 @@ type PracticeCardProps = {
   practiceInputRef: RefObject<HTMLInputElement | null>;
   canSubmitPractice: boolean;
   onSendPractice: () => void | Promise<void>;
+  uiStrings?: {
+    reviewLabel?: string;
+    practiceLabel?: string;
+    stopLabel?: string;
+    optionalReviewLabel?: string;
+    practiceCompleteToContinue?: string;
+    practicePlaceholder?: string;
+    sendLabel?: string;
+  };
 };
 
 export function PracticeCard({
@@ -34,8 +43,18 @@ export function PracticeCard({
   practiceInputRef,
   canSubmitPractice,
   onSendPractice,
+  uiStrings,
 }: PracticeCardProps) {
   if (!practicePrompt || !practiceId) return null;
+
+  const reviewLabel = uiStrings?.reviewLabel ?? "Review";
+  const practiceLabel = uiStrings?.practiceLabel ?? "Practice";
+  const stopLabel = uiStrings?.stopLabel ?? "Stop";
+  const optionalReviewLabel = uiStrings?.optionalReviewLabel ?? "Optional review";
+  const practiceCompleteToContinue =
+    uiStrings?.practiceCompleteToContinue ?? "Complete this to continue";
+  const practicePlaceholder = uiStrings?.practicePlaceholder ?? "Answer the practice...";
+  const sendLabel = uiStrings?.sendLabel ?? "Send";
 
   return (
     <div
@@ -53,8 +72,8 @@ export function PracticeCard({
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ fontSize: 12, opacity: 0.75 }}>
             {practiceMode === "review"
-              ? `Review ${reviewIndex + 1}/${Math.max(1, reviewQueueLength)}`
-              : "Practice"}
+              ? `${reviewLabel} ${reviewIndex + 1}/${Math.max(1, reviewQueueLength)}`
+              : practiceLabel}
           </div>
 
           {practiceMode === "review" && (
@@ -71,13 +90,13 @@ export function PracticeCard({
                 opacity: loading ? 0.7 : 1,
               }}
             >
-              Stop
+              {stopLabel}
             </button>
           )}
         </div>
 
         <div style={{ fontSize: 12, opacity: 0.7 }}>
-          {practiceMode === "review" ? "Optional review" : "Complete this to continue"}
+          {practiceMode === "review" ? optionalReviewLabel : practiceCompleteToContinue}
         </div>
       </div>
       <div style={{ whiteSpace: "pre-wrap", marginBottom: 10 }}>{practicePrompt}</div>
@@ -105,7 +124,7 @@ export function PracticeCard({
           ref={practiceInputRef}
           value={practiceAnswer}
           onChange={(e) => onPracticeAnswerChange(e.target.value)}
-          placeholder="Answer the practice..."
+          placeholder={practicePlaceholder}
           style={{
             flex: 1,
             padding: 10,
@@ -129,7 +148,7 @@ export function PracticeCard({
             cursor: canSubmitPractice ? "pointer" : "not-allowed",
           }}
         >
-          Send
+          {sendLabel}
         </button>
       </div>
     </div>

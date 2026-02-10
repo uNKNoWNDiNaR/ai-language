@@ -24,7 +24,7 @@ vi.mock("../../ai/promptBuilder", () => ({
 }));
 
 vi.mock("../../ai/openaiClient", () => ({
-  generateTutorResponse: vi.fn(async () => ""),
+  generateTutorResponse: vi.fn(async () => ({ primaryText: "" })),
   generatePracticeJSON: vi.fn(),
 }));
 
@@ -39,6 +39,7 @@ vi.mock("../../storage/learnerProfileStore", () => ({
   getLearnerTopFocusReason: vi.fn(async () => null),
   getConceptMistakeCount: vi.fn(async () => 0),
   getTeachingProfilePrefs: vi.fn(async () => null),
+  getSupportProfile: vi.fn(async () => ({ supportLevel: 0.85, supportMode: "auto" })),
   getInstructionLanguage: vi.fn(async () => "en"),
   setInstructionLanguage: vi.fn(async () => undefined),
 }));

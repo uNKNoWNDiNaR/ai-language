@@ -10,10 +10,12 @@ import {
   recordPracticeAttempt,
   recordReviewPracticeOutcome,
   getInstructionLanguage,
+  getSupportProfile,
 } from "../storage/learnerProfileStore";
 import { mapLikeGet, mapLikeSet, mapLikeGetNumber } from "../utils/mapLike";
 import { sendError } from "../http/sendError";
 import { isInstructionLanguageEnabled } from "../config/featureFlags";
+import { clampSupportLevel, shouldIncludeSupportPolicy, type SupportEventType } from "../services/supportPolicy";
 
 function parseQuestionIdFromConceptTag(tag: unknown): string | null {
   if (typeof tag !== "string") return null;
@@ -114,6 +116,7 @@ export const submitPractice = async (req: Request, res: Response) => {
   const q: LessonQuestion = {
     id: 0,
     question: item.prompt,
+    prompt: item.prompt,
     answer: item.expectedAnswerRaw,
     hint: typeof item.hint === "string" ? item.hint : undefined,
     examples: item.examples,
@@ -127,6 +130,8 @@ export const submitPractice = async (req: Request, res: Response) => {
 
   let explanation: string | null = null;
   let instructionLanguage: string | null = null;
+  let includeSupport = false;
+  let supportLevel = 0.85;
 
   if (isInstructionLanguageEnabled()) {
     try {
@@ -140,6 +145,29 @@ export const submitPractice = async (req: Request, res: Response) => {
     }
   }
 
+  if (instructionLanguage) {
+    const eventType: SupportEventType =
+      evalRes.result === "correct"
+        ? "CORRECT_FEEDBACK"
+        : evalRes.result === "almost"
+          ? "ALMOST_FEEDBACK"
+          : "WRONG_FEEDBACK";
+    try {
+      const supportProfile = await getSupportProfile(session.userId, item.language);
+      supportLevel = clampSupportLevel(supportProfile.supportLevel);
+    } catch {
+      supportLevel = 0.85;
+    }
+    includeSupport = shouldIncludeSupportPolicy({
+      eventType,
+      supportLevel,
+      questionIndex: 0,
+      repeatedConfusion: false,
+      explicitRequest: false,
+      forceNoSupport: Boolean((session as any).forceNoSupport),
+    });
+  }
+
   // Only add an explanation when it helps learning without overpacking:
   // - correct: short "why it works"
   // - almost/wrong: only after attempt 2/3 (attempt 1 stays "try again"; attempt 4+ reveals answer)
@@ -149,7 +177,7 @@ export const submitPractice = async (req: Request, res: Response) => {
       attemptCount >= 2 &&
       attemptCount <= 3);
 
-  if (shouldExplain) {
+  if (shouldExplain && (!instructionLanguage || includeSupport)) {
     try {
       explanation = await explainPracticeResult({
         language: item.language,

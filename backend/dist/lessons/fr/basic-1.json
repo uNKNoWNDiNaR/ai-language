@@ -5,25 +5,37 @@
   "questions": [
     {
       "id": 1,
-      "question": "How do you say 'Hello' in French?",
+      "question": "Comment dit-on \"Hello\" en français ?",
+      "prompt": "Comment dit-on \"Hello\" en français ?",
       "answer": "Bonjour",
       "conceptTag": "greetings_hello",
+      "acceptedAnswers": ["Bonjour", "Salut"],
+      "hintTarget": "Un salut courant.",
+      "explanationTarget": "Un salut courant est \"Bonjour\".",
       "hint": "Common greeting.",
       "examples": ["Bonjour", "Salut"]
     },
     {
       "id": 2,
-      "question": "How do you ask someone's name?",
+      "question": "Comment demandes-tu le nom de quelqu'un ?",
+      "prompt": "Comment demandes-tu le nom de quelqu'un ?",
       "answer": "Comment tu t'appelles?",
       "conceptTag": "asking_name",
+      "acceptedAnswers": ["Comment tu t'appelles?", "Comment t'appelles-tu?", "Quel est ton nom?"],
+      "hintTarget": "Commence par \"Comment\".",
+      "explanationTarget": "Tu peux dire : \"Comment tu t'appelles ?\".",
       "hint": "Starts with 'Comment'.",
       "examples": ["Comment tu t'appelles?", "Quel est ton nom?"]
     },
     {
       "id": 3,
-      "question": "Respond to 'Ça va?' in French.",
+      "question": "Réponds à \"Ça va ?\".",
+      "prompt": "Réponds à \"Ça va ?\".",
       "answer": "Ça va bien",
       "conceptTag": "how_are_you_reply",
+      "acceptedAnswers": ["Ça va bien", "Bien", "Très bien"],
+      "hintTarget": "Une réponse courte.",
+      "explanationTarget": "Une réponse simple est \"Ça va bien\".",
       "hint": "Means 'I am fine'.",
       "examples": ["Ça va bien", "Bien", "Très bien"]
     }

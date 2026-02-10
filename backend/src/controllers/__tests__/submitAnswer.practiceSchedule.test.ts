@@ -78,6 +78,7 @@ vi.mock("../../storage/learnerProfileStore", () => {
     recordReviewPracticeOutcome: vi.fn(async () => undefined),
     getLearnerProfileSummary: getLearnerProfileSummaryMock,
     getLearnerTopFocusReason: getLearnerTopFocusReasonMock,
+    getSupportProfile: vi.fn(async () => ({ supportLevel: 0.85, supportMode: "auto" })),
     getConceptMistakeCount: getConceptMistakeCountMock,
     getInstructionLanguage: vi.fn(async () => "en"),
     setInstructionLanguage: vi.fn(async () => undefined),
@@ -111,7 +112,7 @@ vi.mock("../../ai/staticTutorMessages", () => {
 
 vi.mock("../../ai/openaiClient", () => {
   return {
-    generateTutorResponse: vi.fn(async () => "Tutor message"),
+    generateTutorResponse: vi.fn(async () => ({ primaryText: "Tutor message" })),
     generatePracticeJSON: vi.fn(async () => "{}"),
   };
 });

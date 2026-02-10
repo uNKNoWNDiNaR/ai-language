@@ -1,64 +1,251 @@
 {
-    "lessonId": "basic-1",
-    "title": "Greetings and Introductions",
-    "description": "Learn how to greet someone, and ask simple questions",
-    "questions": [
-        {
-            "id": 1,
-            "question": "How do you say 'Hello' in English?",
-            "answer": "Hello",
-            "conceptTag": "greetings_hello",
-            "hint": "It's a common greeting used to start a conversation",
-            "examples": ["Hello", "Hi", "Hey"]
-        },
-        {
-            "id": 2,
-            "question": "How do you ask someone their name?",
-            "answer": "What is your name?",
-            "conceptTag": "asking_name",
-            "acceptedAnswers": [
-              "What is your name?",
-              "What's your name?",
-              "What’s your name?",
-              "May I know your name?",
-              "Can I know your name?"
-            ],
-            "hint": "It starts with 'what'.",
-            "examples": ["What is your name", "May i know your name"],
-            "explanation": "Use the pattern: What is + possessive pronoun + name? In casual speech, “What’s your name?” is the same meaning."
-
-        },
-        {
-            "id": 3,
-            "question": "Reply to 'How are you' in English",
-            "answer": "I am fine",
-            "conceptTag": "how_are_you_reply",
-            "hint": "It starts with 'I am'.",
-            "examples": ["I am fine", "I am good", "I'm doing well", "I'm fine"]
-        },
-        {
-            "id": 4,
-            "question": "How do you say 'Good Morning'?",
-            "answer": "Good Morning",
-            "conceptTag": "good_morning",
-            "hint": "Used before noon as a greeting",
-            "examples": ["Good Morning"]
-        },
-        {
-            "id": 5,
-            "question": "How do you introduce youself?",
-            "answer": "My name is [Your name]",
-            "conceptTag": "introduce_self",
-            "hint": "Starts with 'My name is ....'",
-            "examples": ["My name is John", "My name is Sarah"]
-        },
-        {
-            "id": 6,
-            "question": "How do you say 'Nice to meet you.'?",
-            "answer": "Nice to meet you",
-            "conceptTag": "nice_to_meet_you",
-            "hint": "Say this after being introduced to someone",
-            "examples": ["Nice to meet you"]
-        }
-    ]
+  "lessonId": "basic-1",
+  "title": "Greetings and Introductions",
+  "description": "Greet people, ask simple questions, and introduce yourself.",
+  "questions": [
+    {
+      "id": 1,
+      "conceptTag": "greetings_hello",
+      "question": "You meet someone. What do you say?",
+      "prompt": "You meet someone. What do you say?",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Hello.",
+      "acceptedAnswers": [
+        "Hello.",
+        "Hello",
+        "Hi.",
+        "Hi",
+        "Hey.",
+        "Hey"
+      ],
+      "hintTarget": "Use a common greeting.",
+      "explanationTarget": "“Hello” is a standard greeting. “Hi/Hey” are informal.",
+      "hints": [
+        "Use a common greeting like “Hello”."
+      ],
+      "examples": [
+        "Hello.",
+        "Hi.",
+        "Hey."
+      ]
+    },
+    {
+      "id": 2,
+      "conceptTag": "good_morning",
+      "question": "It is morning. Greet someone.",
+      "prompt": "It is morning. Greet someone.",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Good morning.",
+      "acceptedAnswers": [
+        "Good morning.",
+        "Good morning"
+      ],
+      "hintTarget": "Use this greeting in the morning.",
+      "explanationTarget": "Say “Good morning” before noon.",
+      "hints": [
+        "It’s used in the morning."
+      ],
+      "examples": [
+        "Good morning."
+      ]
+    },
+    {
+      "id": 3,
+      "conceptTag": "good_afternoon",
+      "question": "Make a greeting: afternoon / good",
+      "prompt": "Make a greeting: afternoon / good",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "Good afternoon.",
+      "acceptedAnswers": [
+        "Good afternoon.",
+        "Good afternoon"
+      ],
+      "hintTarget": "Use this greeting after noon.",
+      "explanationTarget": "Say “Good afternoon” in the afternoon.",
+      "hints": [
+        "It’s used after noon."
+      ],
+      "examples": [
+        "Good afternoon."
+      ]
+    },
+    {
+      "id": 4,
+      "conceptTag": "good_evening",
+      "question": "Make a greeting: evening / good",
+      "prompt": "Make a greeting: evening / good",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "Good evening.",
+      "acceptedAnswers": [
+        "Good evening.",
+        "Good evening"
+      ],
+      "hintTarget": "Use this greeting in the evening.",
+      "explanationTarget": "Say “Good evening” in the evening.",
+      "hints": [
+        "It’s used in the evening."
+      ],
+      "examples": [
+        "Good evening."
+      ]
+    },
+    {
+      "id": 5,
+      "conceptTag": "asking_name",
+      "question": "Make a question about someone's name.",
+      "prompt": "Make a question about someone's name.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "What is your name?",
+      "acceptedAnswers": [
+        "What is your name?",
+        "What is your name",
+        "What's your name?",
+        "What's your name",
+        "What’s your name?",
+        "What’s your name"
+      ],
+      "hintTarget": "Start with “What is …”",
+      "explanationTarget": "“What is your name?” and “What’s your name?” mean the same.",
+      "hints": [
+        "It starts with “What is …”"
+      ],
+      "examples": [
+        "What is your name?",
+        "What's your name?"
+      ]
+    },
+    {
+      "id": 6,
+      "conceptTag": "introduce_self",
+      "question": "Complete: My name ___ Alex.",
+      "prompt": "Complete: My name ___ Alex.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "is"
+      ],
+      "answer": "My name is Alex.",
+      "acceptedAnswers": [
+        "My name is Alex.",
+        "My name is Alex"
+      ],
+      "hintTarget": "Use: My name is + name.",
+      "explanationTarget": "This is a simple way to introduce yourself.",
+      "hints": [
+        "Start with “My name is …”"
+      ],
+      "examples": [
+        "My name is Alex.",
+        "My name is Sara."
+      ]
+    },
+    {
+      "id": 7,
+      "conceptTag": "asking_how_are_you",
+      "question": "Complete: How ___ you?",
+      "prompt": "Complete: How ___ you?",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "are"
+      ],
+      "answer": "How are you?",
+      "acceptedAnswers": [
+        "How are you?",
+        "How are you"
+      ],
+      "hintTarget": "Use this to ask about feelings.",
+      "explanationTarget": "“How are you?” is a common friendly question.",
+      "hints": [
+        "It starts with “How …”"
+      ],
+      "examples": [
+        "How are you?"
+      ]
+    },
+    {
+      "id": 8,
+      "conceptTag": "how_are_you_reply",
+      "question": "Complete: I ___ fine, thank you.",
+      "prompt": "Complete: I ___ fine, thank you.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "am"
+      ],
+      "answer": "I'm fine, thank you.",
+      "acceptedAnswers": [
+        "I'm fine, thank you.",
+        "I'm fine, thank you",
+        "I am fine, thank you.",
+        "I am fine, thank you",
+        "I’m fine, thank you.",
+        "I’m fine, thank you"
+      ],
+      "hintTarget": "Start with “I’m …”",
+      "explanationTarget": "A polite reply is “I’m fine, thank you.”",
+      "hints": [
+        "Start with “I’m …”"
+      ],
+      "examples": [
+        "I'm fine, thank you.",
+        "I'm good, thank you."
+      ]
+    },
+    {
+      "id": 9,
+      "conceptTag": "nice_to_meet_you",
+      "question": "You are introduced to someone. What do you say?",
+      "prompt": "You are introduced to someone. What do you say?",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Nice to meet you.",
+      "acceptedAnswers": [
+        "Nice to meet you.",
+        "Nice to meet you"
+      ],
+      "hintTarget": "Say this after introductions.",
+      "explanationTarget": "It’s polite after you learn someone’s name.",
+      "hints": [
+        "Say it after you learn a name."
+      ],
+      "examples": [
+        "Nice to meet you."
+      ]
+    },
+    {
+      "id": 10,
+      "conceptTag": "goodbye",
+      "question": "You are leaving. What do you say?",
+      "prompt": "You are leaving. What do you say?",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Goodbye.",
+      "acceptedAnswers": [
+        "Goodbye.",
+        "Goodbye",
+        "Bye.",
+        "Bye",
+        "See you.",
+        "See you"
+      ],
+      "hintTarget": "Use a common goodbye.",
+      "explanationTarget": "“Goodbye” is standard. “Bye” is informal.",
+      "hints": [
+        "Try “Goodbye” or “Bye”."
+      ],
+      "examples": [
+        "Goodbye.",
+        "Bye."
+      ]
+    }
+  ]
 }

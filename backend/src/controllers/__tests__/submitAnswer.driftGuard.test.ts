@@ -78,7 +78,9 @@ vi.mock("../../ai/staticTutorMessages", () => {
 
 vi.mock("../../ai/openaiClient", () => {
   return {
-    generateTutorResponse: vi.fn(async () => "In French, you say Bonjour. What is your name?"),
+    generateTutorResponse: vi.fn(async () => ({
+      primaryText: "In French, you say Bonjour. What is your name?",
+    })),
     generatePracticeJSON: vi.fn(async () => "{}"),
   };
 });

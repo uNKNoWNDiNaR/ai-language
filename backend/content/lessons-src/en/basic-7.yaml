@@ -1,0 +1,139 @@
+lessonId: basic-7
+title: "Possessives and family"
+description: "Use my/your/his/her and talk about family."
+questions:
+  - id: 1
+    conceptTag: a1.poss.my
+    question: "Change “This is your book.” to “my”."
+    prompt: "Change “This is your book.” to “my”."
+    taskType: typing
+    promptStyle: TRANSFORM_SUBJECT
+    answer: "This is my book."
+    acceptedAnswers: ["This is my book.", "This is my book"]
+    hintTarget: "Use: my + noun."
+    explanationTarget: "“My” shows something belongs to me."
+    hints: ["Put “my” before the noun."]
+    examples: ["my book", "my phone"]
+
+  - id: 2
+    conceptTag: a1.poss.your
+    question: "Change “This is my phone.” to “your”."
+    prompt: "Change “This is my phone.” to “your”."
+    taskType: typing
+    promptStyle: TRANSFORM_SUBJECT
+    answer: "This is your phone."
+    acceptedAnswers: ["This is your phone.", "This is your phone"]
+    hintTarget: "Use: your + noun."
+    explanationTarget: "“Your” shows something belongs to you."
+    hints: ["Put “your” before the noun."]
+    examples: ["your phone", "your bag"]
+
+  - id: 3
+    conceptTag: a1.poss.his
+    question: "Change “This is her car.” to “his”."
+    prompt: "Change “This is her car.” to “his”."
+    taskType: typing
+    promptStyle: TRANSFORM_SUBJECT
+    answer: "This is his car."
+    acceptedAnswers: ["This is his car.", "This is his car"]
+    hintTarget: "Use: his + noun."
+    explanationTarget: "“His” is for a man or boy."
+    hints: ["Put “his” before the noun."]
+    examples: ["his car", "his name"]
+
+  - id: 4
+    conceptTag: a1.poss.her
+    question: "Change “This is his chair.” to “her”."
+    prompt: "Change “This is his chair.” to “her”."
+    taskType: typing
+    promptStyle: TRANSFORM_SUBJECT
+    answer: "This is her chair."
+    acceptedAnswers: ["This is her chair.", "This is her chair"]
+    hintTarget: "Use: her + noun."
+    explanationTarget: "“Her” is for a woman or girl."
+    hints: ["Put “her” before the noun."]
+    examples: ["her chair", "her bag"]
+
+  - id: 5
+    conceptTag: a1.family.mother
+    question: "Introduce your mother."
+    prompt: "Introduce your mother."
+    taskType: typing
+    promptStyle: SITUATION_CUE
+    answer: "This is my mother."
+    acceptedAnswers: ["This is my mother.", "This is my mother"]
+    hintTarget: "Use: This is my …"
+    explanationTarget: "“Mother” is a parent (female)."
+    hints: ["Start with “This is …”"]
+    examples: ["This is my mother.", "This is my father."]
+
+  - id: 6
+    conceptTag: a1.family.father
+    question: "Introduce your father."
+    prompt: "Introduce your father."
+    taskType: typing
+    promptStyle: SITUATION_CUE
+    answer: "This is my father."
+    acceptedAnswers: ["This is my father.", "This is my father"]
+    hintTarget: "Use: This is my …"
+    explanationTarget: "“Father” is a parent (male)."
+    hints: ["Start with “This is …”"]
+    examples: ["This is my father.", "This is my mother."]
+
+  - id: 7
+    conceptTag: a1.family.sister
+    question: "Complete: I have ___ sister."
+    prompt: "Complete: I have ___ sister."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["a"]
+    answer: "I have a sister."
+    acceptedAnswers: ["I have a sister.", "I have a sister"]
+    hintTarget: "Use: I have a …"
+    explanationTarget: "Use “a” before sister."
+    hints: ["Start with “I have …”"]
+    examples: ["I have a sister.", "I have a brother."]
+
+  - id: 8
+    conceptTag: a1.family.brother
+    question: "Complete: I have ___ brother."
+    prompt: "Complete: I have ___ brother."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["a"]
+    answer: "I have a brother."
+    acceptedAnswers: ["I have a brother.", "I have a brother"]
+    hintTarget: "Use: I have a …"
+    explanationTarget: "Use “a” before brother."
+    hints: ["Start with “I have …”"]
+    examples: ["I have a brother.", "I have a sister."]
+
+  - id: 9
+    conceptTag: a1.desc.simple_age
+    question: "Complete: My mother ___ 40."
+    prompt: "Complete: My mother ___ 40."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["is"]
+    answer: "My mother is 40."
+    acceptedAnswers: ["My mother is 40.", "My mother is 40"]
+    hintTarget: "Use: is + number."
+    explanationTarget: "Use “is” + number for age."
+    hints: ["Use “is” before the number."]
+    examples: ["He is 20.", "She is 30."]
+
+  - id: 10
+    conceptTag: a1.q.whose
+    question: "Ask about ownership: this book."
+    prompt: "Ask about ownership: this book."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Whose book is this?"
+    acceptedAnswers: ["Whose book is this?", "Whose book is this"]
+    hintTarget: "Start with: Whose …?"
+    explanationTarget: "“Whose” asks about ownership."
+    hints: ["Whose + noun + is this?"]
+    examples: ["Whose phone is this?", "Whose bag is this?"]

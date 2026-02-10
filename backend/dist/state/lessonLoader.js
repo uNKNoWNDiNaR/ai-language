@@ -32,6 +32,10 @@ const loadLesson = (language, lessonId) => {
         if (raw && Array.isArray(raw.questions)) {
             raw.questions = raw.questions.map((q) => {
                 const aaRaw = q?.acceptedAnswers;
+                const promptRaw = q?.prompt;
+                const prompt = typeof promptRaw === "string" && promptRaw.trim().length > 0
+                    ? promptRaw.trim()
+                    : "";
                 const acceptedAnswers = Array.isArray(aaRaw)
                     ? aaRaw
                         .filter((x) => typeof x === "string" && x.trim().length > 0)
@@ -50,13 +54,43 @@ const loadLesson = (language, lessonId) => {
                         .replace(/\s+/g, "_")
                         .slice(0, 48)
                     : undefined;
+                const taskTypeRaw = typeof q?.taskType === "string" ? q.taskType.trim().toLowerCase() : "";
+                const inferredSpeaking = /\b(say|ask|reply)\s*:/i.test(prompt);
+                const taskType = taskTypeRaw === "speaking"
+                    ? "speaking"
+                    : taskTypeRaw === "typing"
+                        ? "typing"
+                        : inferredSpeaking
+                            ? "speaking"
+                            : "typing";
+                const expectedInputRaw = typeof q?.expectedInput === "string" ? q.expectedInput.trim().toLowerCase() : "";
+                const expectedInput = expectedInputRaw === "blank" || expectedInputRaw === "sentence"
+                    ? expectedInputRaw
+                    : undefined;
+                const blankAnswersRaw = Array.isArray(q?.blankAnswers) ? q.blankAnswers : [];
+                const blankAnswers = blankAnswersRaw
+                    .filter((x) => typeof x === "string" && x.trim().length > 0)
+                    .map((s) => s.trim());
                 const out = { ...q };
+                if (prompt) {
+                    out.prompt = prompt;
+                    out.question = prompt;
+                }
                 if (acceptedAnswers && acceptedAnswers.length > 0)
                     out.acceptedAnswers = acceptedAnswers;
                 else
                     out.acceptedAnswers = undefined;
                 out.conceptTag = conceptTag;
                 out.explanation = explanation;
+                out.taskType = taskType;
+                if (expectedInput)
+                    out.expectedInput = expectedInput;
+                else
+                    out.expectedInput = undefined;
+                if (blankAnswers.length > 0)
+                    out.blankAnswers = blankAnswers;
+                else
+                    out.blankAnswers = undefined;
                 return out;
             });
         }

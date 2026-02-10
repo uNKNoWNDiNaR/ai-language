@@ -16,7 +16,7 @@ describe("explanaPracticeResult", () => {
 
 
   it("returns null if model output is too long", async () => {
-    (generateTutorResponse as any).mockResolvedValueOnce("x".repeat(400));
+    (generateTutorResponse as any).mockResolvedValueOnce({ primaryText: "x".repeat(400) });
     const res = await explainPracticeResult({
       language: "en",
       result: "correct",
@@ -27,7 +27,9 @@ describe("explanaPracticeResult", () => {
   });
 
   it("returns null if model output contains grading contamination", async () => {
-    (generateTutorResponse as any).mockResolvedValueOnce("Acceptable answers include: Hello, Hi.");
+    (generateTutorResponse as any).mockResolvedValueOnce({
+      primaryText: "Acceptable answers include: Hello, Hi.",
+    });
     const res = await explainPracticeResult({
       language: "en",
       result: "wrong",
@@ -38,7 +40,9 @@ describe("explanaPracticeResult", () => {
   });
 
   it("returns cleaned short explanation", async () => {
-    (generateTutorResponse as any).mockResolvedValueOnce("Good — ‘Hello’ is the standard greeting.");
+    (generateTutorResponse as any).mockResolvedValueOnce({
+      primaryText: "Good — ‘Hello’ is the standard greeting.",
+    });
     const res = await explainPracticeResult({
       language: "en",
       result: "correct",
@@ -49,9 +53,9 @@ describe("explanaPracticeResult", () => {
   });
 
   it("returns null if model leaks debug labels like Result/Reason", async () => {
-    (generateTutorResponse as any).mockResolvedValueOnce(
-      "Result: correct\nReason: some internal code\nGood job."
-    );
+    (generateTutorResponse as any).mockResolvedValueOnce({
+      primaryText: "Result: correct\nReason: some internal code\nGood job.",
+    });
 
     const res = await explainPracticeResult({
       language: "en",
@@ -65,7 +69,7 @@ describe("explanaPracticeResult", () => {
 
 
   it("calls generateTutorResponse with EXPLAIN_PRACTICE_RESULT intent and low-cost opts", async () => {
-    (generateTutorResponse as any).mockResolvedValueOnce("Short explanation.");
+    (generateTutorResponse as any).mockResolvedValueOnce({ primaryText: "Short explanation." });
 
     await explainPracticeResult({
         language: "en",
@@ -83,7 +87,7 @@ describe("explanaPracticeResult", () => {
     });
 
   it("uses instructionLanguage when provided", async () => {
-    (generateTutorResponse as any).mockResolvedValueOnce("Short explanation.");
+    (generateTutorResponse as any).mockResolvedValueOnce({ primaryText: "Short explanation." });
 
     await explainPracticeResult({
       language: "de",

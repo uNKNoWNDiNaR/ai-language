@@ -32,6 +32,52 @@ function toConfusedTextOrUndefined(v: unknown): string | undefined {
     return t.slice(0, 800);
 }
 
+function toShortTextOrUndefined(v: unknown, max = 120): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  if (!t) return undefined;
+  return t.slice(0, max);
+}
+
+function toEnumOrUndefined<T extends string>(
+  v: unknown,
+  allowed: ReadonlySet<T>,
+): T | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim() as T;
+  return allowed.has(t) ? t : undefined;
+}
+
+function toStringArrayOrUndefined<T extends string>(
+  v: unknown,
+  allowed: ReadonlySet<T>,
+  maxItems = 6,
+  maxLen = 40,
+): T[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const next: T[] = [];
+  for (const entry of v) {
+    if (typeof entry !== "string") continue;
+    const t = entry.trim() as T;
+    if (!t || t.length > maxLen) continue;
+    if (!allowed.has(t)) continue;
+    if (!next.includes(t)) next.push(t);
+    if (next.length >= maxItems) break;
+  }
+  return next.length ? next : undefined;
+}
+
+const SCREEN_OPTIONS = new Set(["home", "lesson", "review", "other"]);
+const INTENT_OPTIONS = new Set(["start", "continue", "review", "change_settings", "exploring"]);
+const CROWD_OPTIONS = new Set(["not_at_all", "a_little", "yes_a_lot"]);
+const FELT_BEST_OPTIONS = new Set([
+  "continue_card",
+  "units",
+  "optional_review",
+  "calm_tone",
+  "other",
+]);
+
 function toAnonSessionIdOrGenerated(v: unknown): string {
   if (typeof v === "string") {
     const t = v.trim();
@@ -51,11 +97,21 @@ export async function submitFeedback(req: Request, res: Response) {
   const feltRushed = toBooleanOrUndefined(body.feltRushed);
   const helpedUnderstand = toHelpedUnderstandOrUndefined(body.helpedUnderstand);
   const confusedText = toConfusedTextOrUndefined(body.confusedText);
+  const improveText = toConfusedTextOrUndefined(body.improveText);
+
+  const screen = toEnumOrUndefined(body.screen, SCREEN_OPTIONS);
+  const intent = toEnumOrUndefined(body.intent, INTENT_OPTIONS);
+  const crowdedRating = toEnumOrUndefined(body.crowdedRating, CROWD_OPTIONS);
+  const feltBest = toStringArrayOrUndefined(body.feltBest, FELT_BEST_OPTIONS);
 
   const hasAnyField =
     typeof feltRushed === "boolean" ||
     typeof helpedUnderstand === "number" ||
-    typeof confusedText === "string";
+    typeof confusedText === "string" ||
+    typeof improveText === "string" ||
+    typeof intent === "string" ||
+    typeof crowdedRating === "string" ||
+    (Array.isArray(feltBest) && feltBest.length > 0);
 
   if (!hasAnyField) {
     return sendError(res, 400, "Please fill at least one feedback field.", "EMPTY_FEEDBACK");
@@ -98,6 +154,12 @@ export async function submitFeedback(req: Request, res: Response) {
     }
   }
 
+  const instructionLanguage = toShortTextOrUndefined(body.instructionLanguage, 12);
+  const sessionKey = toShortTextOrUndefined(body.sessionKey, 120);
+  const appVersion = toShortTextOrUndefined(body.appVersion, 80);
+  const clientTimestamp = toShortTextOrUndefined(body.timestamp, 40);
+  const targetLanguage = toShortTextOrUndefined(body.targetLanguage, 12);
+
   await LessonFeedbackModel.create({
     userAnonId,
     anonSessionId,
@@ -109,6 +171,16 @@ export async function submitFeedback(req: Request, res: Response) {
     feltRushed,
     helpedUnderstand,
     confusedText,
+    improveText,
+    screen,
+    intent,
+    crowdedRating,
+    feltBest,
+    targetLanguage,
+    instructionLanguage,
+    sessionKey,
+    appVersion,
+    clientTimestamp,
   });
 
   return res.status(201).json({ ok: true });

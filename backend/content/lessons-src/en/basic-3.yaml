@@ -1,0 +1,139 @@
+lessonId: basic-3
+title: "Simple present: like, have, want"
+description: "Say short present simple sentences with common verbs."
+questions:
+  - id: 1
+    conceptTag: a1.present.like_i
+    question: "Make a sentence: coffee / I / like"
+    prompt: "Make a sentence: coffee / I / like"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "I like coffee."
+    acceptedAnswers: ["I like coffee.", "I like coffee"]
+    hintTarget: "Start with: I like …"
+    explanationTarget: "Use “I like …” to say what you enjoy."
+    hints: ["Start with “I like …”"]
+    examples: ["I like coffee.", "I like tea."]
+
+  - id: 2
+    conceptTag: a1.present.like_you
+    question: "Change “I like tea.” to “you”."
+    prompt: "Change “I like tea.” to “you”."
+    taskType: typing
+    promptStyle: TRANSFORM_SUBJECT
+    answer: "You like tea."
+    acceptedAnswers: ["You like tea.", "You like tea"]
+    hintTarget: "Start with: You like …"
+    explanationTarget: "Use “You like …” when speaking to someone."
+    hints: ["Start with “You like …”"]
+    examples: ["You like tea.", "You like music."]
+
+  - id: 3
+    conceptTag: a1.present.have_i
+    question: "Complete: I have ___ phone."
+    prompt: "Complete: I have ___ phone."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["a"]
+    answer: "I have a phone."
+    acceptedAnswers: ["I have a phone.", "I have a phone"]
+    hintTarget: "Use: I have + a/an + noun."
+    explanationTarget: "Use “I have …” to say what you own or have with you."
+    hints: ["Start with “I have …”"]
+    examples: ["I have a phone.", "I have a bag."]
+
+  - id: 4
+    conceptTag: a1.present.have_we
+    question: "Change “I have a plan.” to “we”."
+    prompt: "Change “I have a plan.” to “we”."
+    taskType: typing
+    promptStyle: TRANSFORM_SUBJECT
+    answer: "We have a plan."
+    acceptedAnswers: ["We have a plan.", "We have a plan"]
+    hintTarget: "Start with: We have …"
+    explanationTarget: "Use “We have …” for you + other people."
+    hints: ["Start with “We have …”"]
+    examples: ["We have a plan.", "We have time."]
+
+  - id: 5
+    conceptTag: a1.present.want_i
+    question: "You need water. What do you say?"
+    prompt: "You need water. What do you say?"
+    taskType: typing
+    promptStyle: SITUATION_CUE
+    answer: "I want water."
+    acceptedAnswers: ["I want water.", "I want water"]
+    hintTarget: "Start with: I want …"
+    explanationTarget: "Use “I want …” to say what you need or would like."
+    hints: ["Start with “I want …”"]
+    examples: ["I want water.", "I want help."]
+
+  - id: 6
+    conceptTag: a1.present.want_they
+    question: "Change “I want help.” to “they”."
+    prompt: "Change “I want help.” to “they”."
+    taskType: typing
+    promptStyle: TRANSFORM_SUBJECT
+    answer: "They want help."
+    acceptedAnswers: ["They want help.", "They want help"]
+    hintTarget: "Start with: They want …"
+    explanationTarget: "Use “They want …” for people (plural)."
+    hints: ["Start with “They want …”"]
+    examples: ["They want help.", "They want food."]
+
+  - id: 7
+    conceptTag: a1.present.and_objects
+    question: "Make a sentence: bananas / I / like / apples / and"
+    prompt: "Make a sentence: bananas / I / like / apples / and"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "I like apples and bananas."
+    acceptedAnswers: ["I like apples and bananas.", "I like apples and bananas"]
+    hintTarget: "Join two items with: and"
+    explanationTarget: "Use “and” to connect two things."
+    hints: ["Put “and” between the two items."]
+    examples: ["apples and bananas", "tea and coffee"]
+
+  - id: 8
+    conceptTag: a1.present.have_number
+    question: "Change “I have two chairs.” to “we”."
+    prompt: "Change “I have two chairs.” to “we”."
+    taskType: typing
+    promptStyle: TRANSFORM_SUBJECT
+    answer: "We have two chairs."
+    acceptedAnswers: ["We have two chairs.", "We have two chairs"]
+    hintTarget: "Number comes before the noun."
+    explanationTarget: "Use: two chairs / three books."
+    hints: ["Put the number before the noun."]
+    examples: ["two chairs", "three books"]
+
+  - id: 9
+    conceptTag: a1.present.want_to
+    question: "Complete: I want ___ go."
+    prompt: "Complete: I want ___ go."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["to"]
+    answer: "I want to go."
+    acceptedAnswers: ["I want to go.", "I want to go"]
+    hintTarget: "Use: want to + verb"
+    explanationTarget: "Use “want to” before a verb: want to go."
+    hints: ["Use “want to” + verb."]
+    examples: ["I want to go.", "I want to eat."]
+
+  - id: 10
+    conceptTag: a1.present.here_it
+    question: "Complete: I have it ___."
+    prompt: "Complete: I have it ___."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["here"]
+    answer: "I have it here."
+    acceptedAnswers: ["I have it here.", "I have it here"]
+    hintTarget: "Put “here” at the end."
+    explanationTarget: "“Here” shows location."
+    hints: ["End with “here”."]
+    examples: ["I have it here.", "It is here."]

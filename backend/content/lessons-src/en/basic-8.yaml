@@ -1,0 +1,141 @@
+lessonId: basic-8
+title: "Time and routines"
+description: "Talk about your day with simple time phrases."
+questions:
+  - id: 1
+    conceptTag: a1.time.what_time_is_it
+    question: "You want the current time. Ask."
+    prompt: "You want the current time. Ask."
+    taskType: typing
+    promptStyle: SITUATION_CUE
+    answer: "What time is it?"
+    acceptedAnswers: ["What time is it?", "What time is it"]
+    hintTarget: "Start with: What time …?"
+    explanationTarget: "Use this to ask the current time."
+    hints: ["What time is it?"]
+    examples: ["What time is it?"]
+
+  - id: 2
+    conceptTag: a1.time.oclock
+    question: "Make a time sentence: three / o'clock / it / is"
+    prompt: "Make a time sentence: three / o'clock / it / is"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "It is three o'clock."
+    acceptedAnswers: ["It is three o'clock.", "It is three o'clock", "It's three o'clock.", "It's three o'clock", "It’s three o’clock.", "It’s three o’clock"]
+    hintTarget: "Use: It is / It's … o'clock."
+    explanationTarget: "Use “o'clock” for exact hours."
+    hints: ["Start with “It is …”"]
+    examples: ["It's one o'clock.", "It's three o'clock."]
+
+  - id: 3
+    conceptTag: a1.routine.wake_up
+    question: "Complete: I wake up ___ 7."
+    prompt: "Complete: I wake up ___ 7."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["at"]
+    answer: "I wake up at 7."
+    acceptedAnswers: ["I wake up at 7.", "I wake up at 7"]
+    hintTarget: "Use: at + time."
+    explanationTarget: "Use “at” with times: at 7."
+    hints: ["Use “at 7” at the end."]
+    examples: ["I wake up at 7.", "I work at 9."]
+
+  - id: 4
+    conceptTag: a1.routine.go_to_work
+    question: "Complete: I go ___ work at 9."
+    prompt: "Complete: I go ___ work at 9."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["to"]
+    answer: "I go to work at 9."
+    acceptedAnswers: ["I go to work at 9.", "I go to work at 9"]
+    hintTarget: "Use: go to work."
+    explanationTarget: "Use “go to work” for your routine."
+    hints: ["Start with “I go …”"]
+    examples: ["I go to work at 9.", "I go home at 5."]
+
+  - id: 5
+    conceptTag: a1.routine.go_home
+    question: "Complete: I go home ___ 5."
+    prompt: "Complete: I go home ___ 5."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["at"]
+    answer: "I go home at 5."
+    acceptedAnswers: ["I go home at 5.", "I go home at 5"]
+    hintTarget: "Use: go home."
+    explanationTarget: "Use “go home” to say you return home."
+    hints: ["Start with “I go …”"]
+    examples: ["I go home at 5.", "I go home at 6."]
+
+  - id: 6
+    conceptTag: a1.days.on_monday
+    question: "Complete: I work ___ Monday."
+    prompt: "Complete: I work ___ Monday."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["on"]
+    answer: "I work on Monday."
+    acceptedAnswers: ["I work on Monday.", "I work on Monday"]
+    hintTarget: "Use: on + day."
+    explanationTarget: "Use “on” with days: on Monday."
+    hints: ["Put “on Monday” at the end."]
+    examples: ["I work on Monday.", "I study on Tuesday."]
+
+  - id: 7
+    conceptTag: a1.frequency.always
+    question: "Make a sentence: always / drink / water / I"
+    prompt: "Make a sentence: always / drink / water / I"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "I always drink water."
+    acceptedAnswers: ["I always drink water.", "I always drink water"]
+    hintTarget: "Put “always” before the verb."
+    explanationTarget: "Frequency words often go before the main verb."
+    hints: ["I always + verb …"]
+    examples: ["I always drink water.", "I always eat breakfast."]
+
+  - id: 8
+    conceptTag: a1.frequency.sometimes
+    question: "Make a sentence: pizza / sometimes / I / eat"
+    prompt: "Make a sentence: pizza / sometimes / I / eat"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "I sometimes eat pizza."
+    acceptedAnswers: ["I sometimes eat pizza.", "I sometimes eat pizza"]
+    hintTarget: "Put “sometimes” before the verb."
+    explanationTarget: "“Sometimes” shows it happens not every day."
+    hints: ["I sometimes + verb …"]
+    examples: ["I sometimes eat pizza.", "I sometimes work at home."]
+
+  - id: 9
+    conceptTag: a1.frequency.never
+    question: "Make a sentence: never / smoke / I"
+    prompt: "Make a sentence: never / smoke / I"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "I never smoke."
+    acceptedAnswers: ["I never smoke.", "I never smoke"]
+    hintTarget: "Put “never” before the verb."
+    explanationTarget: "“Never” means 0% of the time."
+    hints: ["I never + verb …"]
+    examples: ["I never smoke.", "I never drink coffee."]
+
+  - id: 10
+    conceptTag: a1.q.when
+    question: "Ask about time: you wake up."
+    prompt: "Ask about time: you wake up."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "When do you wake up?"
+    acceptedAnswers: ["When do you wake up?", "When do you wake up"]
+    hintTarget: "Start with: When do you …?"
+    explanationTarget: "Use “When do you …?” to ask about time."
+    hints: ["When + do + you + verb …?"]
+    examples: ["When do you wake up?", "When do you go home?"]

@@ -1,31 +1,252 @@
 {
   "lessonId": "basic-2",
-  "title": "Numbers and Colors",
-  "description": "Learn numbers and colors in English.",
+  "title": "Pronouns and 'to be'",
+  "description": "Short sentences with I am, you are, he is, and she is.",
   "questions": [
     {
       "id": 1,
-      "question": "What is the number after one?",
-      "answer": "two",
-      "conceptTag": "number_after_one",
-      "hint": "It comes after one.",
-      "examples": ["two", "2"]
+      "conceptTag": "a1.be.i_am",
+      "question": "Complete: I ___ Alex.",
+      "prompt": "Complete: I ___ Alex.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "am"
+      ],
+      "answer": "I am Alex.",
+      "acceptedAnswers": [
+        "I am Alex.",
+        "I am Alex"
+      ],
+      "hintTarget": "Start with: I am …",
+      "explanationTarget": "Use “I am” to talk about yourself.",
+      "hints": [
+        "Start with “I am …”"
+      ],
+      "examples": [
+        "I am Alex.",
+        "I am Sam."
+      ]
     },
     {
       "id": 2,
-      "question": "What color is the sky on a clear day?",
-      "answer": "blue",
-      "conceptTag": "color_sky",
-      "hint": "Think of the ocean.",
-      "examples": ["blue", "light blue"]
+      "conceptTag": "a1.be.you_are",
+      "question": "Change “I am here.” to “you”.",
+      "prompt": "Change “I am here.” to “you”.",
+      "taskType": "typing",
+      "promptStyle": "TRANSFORM_SUBJECT",
+      "answer": "You are here.",
+      "acceptedAnswers": [
+        "You are here.",
+        "You are here"
+      ],
+      "hintTarget": "Start with: You are …",
+      "explanationTarget": "Use “you are” to talk to someone.",
+      "hints": [
+        "Start with “You are …”"
+      ],
+      "examples": [
+        "You are here.",
+        "You are ready."
+      ]
     },
     {
       "id": 3,
-      "question": "What color is an apple usually?",
-      "answer": "red",
-      "conceptTag": "color_apple",
-      "hint": "Common fruit color.",
-      "examples": ["red", "green"]
+      "conceptTag": "a1.be.he_is",
+      "question": "Change “I am a teacher.” to “he”.",
+      "prompt": "Change “I am a teacher.” to “he”.",
+      "taskType": "typing",
+      "promptStyle": "TRANSFORM_SUBJECT",
+      "answer": "He is a teacher.",
+      "acceptedAnswers": [
+        "He is a teacher.",
+        "He is a teacher"
+      ],
+      "hintTarget": "Start with: He is …",
+      "explanationTarget": "Use “he is” for a man or boy.",
+      "hints": [
+        "Start with “He is …”"
+      ],
+      "examples": [
+        "He is a teacher.",
+        "He is happy."
+      ]
+    },
+    {
+      "id": 4,
+      "conceptTag": "a1.be.she_is",
+      "question": "Change “He is a student.” to “she”.",
+      "prompt": "Change “He is a student.” to “she”.",
+      "taskType": "typing",
+      "promptStyle": "TRANSFORM_SUBJECT",
+      "answer": "She is a student.",
+      "acceptedAnswers": [
+        "She is a student.",
+        "She is a student"
+      ],
+      "hintTarget": "Start with: She is …",
+      "explanationTarget": "Use “she is” for a woman or girl.",
+      "hints": [
+        "Start with “She is …”"
+      ],
+      "examples": [
+        "She is a student.",
+        "She is here."
+      ]
+    },
+    {
+      "id": 5,
+      "conceptTag": "a1.be.we_are",
+      "question": "Complete: We ___ ready.",
+      "prompt": "Complete: We ___ ready.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "are"
+      ],
+      "answer": "We are ready.",
+      "acceptedAnswers": [
+        "We are ready.",
+        "We are ready"
+      ],
+      "hintTarget": "Start with: We are …",
+      "explanationTarget": "Use “we are” for you + other people.",
+      "hints": [
+        "Start with “We are …”"
+      ],
+      "examples": [
+        "We are ready.",
+        "We are friends."
+      ]
+    },
+    {
+      "id": 6,
+      "conceptTag": "a1.be.they_are",
+      "question": "Complete: They ___ friends.",
+      "prompt": "Complete: They ___ friends.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "are"
+      ],
+      "answer": "They are friends.",
+      "acceptedAnswers": [
+        "They are friends.",
+        "They are friends"
+      ],
+      "hintTarget": "Start with: They are …",
+      "explanationTarget": "Use “they are” for people/things (plural).",
+      "hints": [
+        "Start with “They are …”"
+      ],
+      "examples": [
+        "They are friends.",
+        "They are here."
+      ]
+    },
+    {
+      "id": 7,
+      "conceptTag": "a1.be.contraction_im",
+      "question": "Make a sentence: tired / I'm",
+      "prompt": "Make a sentence: tired / I'm",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "I'm tired.",
+      "acceptedAnswers": [
+        "I'm tired.",
+        "I'm tired",
+        "I’m tired.",
+        "I’m tired"
+      ],
+      "hintTarget": "Use the short form of I am.",
+      "explanationTarget": "“I’m” = “I am”.",
+      "hints": [
+        "Use “I’m …”"
+      ],
+      "examples": [
+        "I'm tired.",
+        "I'm okay."
+      ]
+    },
+    {
+      "id": 8,
+      "conceptTag": "a1.be.contraction_youre",
+      "question": "Make a sentence: right / you're",
+      "prompt": "Make a sentence: right / you're",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "You're right.",
+      "acceptedAnswers": [
+        "You're right.",
+        "You're right",
+        "You’re right.",
+        "You’re right"
+      ],
+      "hintTarget": "Use the short form of you are.",
+      "explanationTarget": "“You’re” = “You are”.",
+      "hints": [
+        "Use “You’re …”"
+      ],
+      "examples": [
+        "You're right.",
+        "You're here."
+      ]
+    },
+    {
+      "id": 9,
+      "conceptTag": "a1.be.negative_isnt",
+      "question": "Complete: He ___ here.",
+      "prompt": "Complete: He ___ here.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "isn't",
+        "is not"
+      ],
+      "answer": "He isn't here.",
+      "acceptedAnswers": [
+        "He isn't here.",
+        "He isn't here",
+        "He isn’t here.",
+        "He isn’t here",
+        "He is not here.",
+        "He is not here"
+      ],
+      "hintTarget": "Use “isn't” or “is not”.",
+      "explanationTarget": "“Isn’t” means “is not”.",
+      "hints": [
+        "Try “He isn’t …”"
+      ],
+      "examples": [
+        "He isn't here.",
+        "She isn't late."
+      ]
+    },
+    {
+      "id": 10,
+      "conceptTag": "a1.be.question_are_you",
+      "question": "Turn into a question: You are okay.",
+      "prompt": "Turn into a question: You are okay.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Are you okay?",
+      "acceptedAnswers": [
+        "Are you okay?",
+        "Are you okay"
+      ],
+      "hintTarget": "Start with: Are you …?",
+      "explanationTarget": "Use “Are you …?” to ask a yes/no question.",
+      "hints": [
+        "It starts with “Are you …?”"
+      ],
+      "examples": [
+        "Are you okay?",
+        "Are you ready?"
+      ]
     }
   ]
 }

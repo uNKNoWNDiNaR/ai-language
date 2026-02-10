@@ -17,6 +17,10 @@ export type TutorGuardInput = {
   revealAnswer?: string;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function norm(s: string): string {
   return String(s || "").trim();
 }
@@ -36,11 +40,11 @@ function buildAllowedContext(i: TutorGuardInput): string {
     .join("\n");
 }
 
-function hasOtherLanguageDrift(i: TutorGuardInput): boolean {
-  const msg = norm(i.message);
+function hasLanguageDrift(message: string, language: SupportedLanguage, context?: string): boolean {
+  const msg = norm(message);
   if (!msg) return true;
 
-  const ctx = buildAllowedContext(i);
+  const ctx = norm(context || "");
 
   const forbiddenByLang: Record<SupportedLanguage, RegExp[]> = {
     en: [/german/i, /deutsch/i, /french/i, /fran[çc]ais/i, /spanish/i, /espa[ñn]ol/i],
@@ -49,7 +53,7 @@ function hasOtherLanguageDrift(i: TutorGuardInput): boolean {
     es: [/english/i, /german/i, /deutsch/i, /french/i, /fran[çc]ais/i],
   };
 
-  const forbidden = forbiddenByLang[i.language] || [];
+  const forbidden = forbiddenByLang[language] || [];
   for (const re of forbidden) {
     if (re.test(msg) && !re.test(ctx)) return true;
   }
@@ -61,27 +65,33 @@ export function isTutorMessageAcceptable(i: TutorGuardInput): boolean {
   if (!msg) return false;
 
   if (msg.length > 1200) return false;
-  if (hasOtherLanguageDrift(i)) return false;
+  if (hasLanguageDrift(msg, i.language, buildAllowedContext(i))) return false;
   if (violatesCalmTone(msg)) return false;
   if (violatesContinuityPrivacy(msg)) return false;
 
   if (i.intent === "ASK_QUESTION") {
-    return contains(msg, "let's begin") && contains(msg, i.questionText);
+    if (i.language === "en") {
+      return contains(msg, "let's begin") && contains(msg, i.questionText);
+    }
+    return contains(msg, i.questionText);
   }
 
   if (i.intent === "ADVANCE_LESSON") {
-    return contains(msg, "next question") && contains(msg, i.questionText);
+    if (i.language === "en") {
+      return contains(msg, "next question") && contains(msg, i.questionText);
+    }
+    return contains(msg, i.questionText);
   }
 
   if (i.intent === "ENCOURAGE_RETRY") {
     const retry = norm(i.retryMessage || "");
-    if (retry && !contains(msg, retry)) return false;
+    if (i.language === "en" && retry && !contains(msg, retry)) return false;
     return contains(msg, i.questionText);
   }
 
   if (i.intent === "FORCED_ADVANCE") {
     const forced = norm(i.forcedAdvanceMessage || "");
-    if (forced && !contains(msg, forced)) return false;
+    if (i.language === "en" && forced && !contains(msg, forced)) return false;
 
     const q = norm(i.questionText);
     if (q && !contains(msg, q)) return false;
@@ -92,29 +102,77 @@ export function isTutorMessageAcceptable(i: TutorGuardInput): boolean {
   return /completed this lesson/i.test(msg) || /great job/i.test(msg);
 }
 
+export function validatePrimaryLanguage(text: string, targetLanguage: SupportedLanguage): boolean {
+  const msg = norm(text);
+  if (!msg) return false;
+  return !hasLanguageDrift(msg, targetLanguage);
+}
+
+export function validateSupportLanguage(
+  text: string,
+  instructionLanguage: SupportedLanguage
+): boolean {
+  const msg = norm(text);
+  if (!msg) return true;
+  return !hasLanguageDrift(msg, instructionLanguage);
+}
+
+export function validateSupportLength(text: string, supportLevel: number): boolean {
+  const msg = norm(text);
+  if (!msg) return true;
+
+  const levelOrCap = Number.isFinite(supportLevel) ? supportLevel : 0.85;
+  const cap =
+    levelOrCap > 1
+      ? Math.floor(levelOrCap)
+      : levelOrCap >= 0.75
+        ? 280
+        : levelOrCap >= 0.4
+          ? 200
+          : 120;
+  return msg.length <= cap;
+}
+
+export function validateJsonShape(
+  value: unknown
+): value is { primaryText: string; supportText: string } {
+  if (!isRecord(value)) return false;
+  return typeof value.primaryText === "string" && typeof value.supportText === "string";
+}
+
 export function buildTutorFallback(i: TutorGuardInput): string {
   const questionText = norm(i.questionText);
+  const isEnglish = i.language === "en";
 
   if (i.intent === "ASK_QUESTION") {
-    return `Let's begin.\n${questionText}`;
+    return isEnglish ? `Let's begin.\n${questionText}` : questionText;
   }
 
   if (i.intent === "ADVANCE_LESSON") {
-    return `Nice work! Next question:\n"${questionText}"`;
+    return isEnglish ? `Nice work! Next question:\n"${questionText}"` : questionText;
   }
 
   if (i.intent === "ENCOURAGE_RETRY") {
     const retryMessage = norm(i.retryMessage || "");
-    return [retryMessage || "Not quite — try again.", questionText].filter(Boolean).join("\n");
+    if (isEnglish) {
+      return [retryMessage || "Not quite — try again.", questionText].filter(Boolean).join("\n");
+    }
+    return questionText || "...";
   }
 
   if (i.intent === "FORCED_ADVANCE") {
     const forcedAdvanceMessage = norm(i.forcedAdvanceMessage || "");
     if (!questionText) return forcedAdvanceMessage || "That one was tricky — let's continue.";
-    return [forcedAdvanceMessage || "That one was tricky — let's continue.", `Next question:\n"${questionText}"`]
-      .filter(Boolean)
-      .join("\n");
+    if (isEnglish) {
+      return [
+        forcedAdvanceMessage || "That one was tricky — let's continue.",
+        `Next question:\n"${questionText}"`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    }
+    return questionText || "...";
   }
 
-  return "Great job! 🎉 You've completed this lesson.";
+  return isEnglish ? "Great job! 🎉 You've completed this lesson." : "...";
 }

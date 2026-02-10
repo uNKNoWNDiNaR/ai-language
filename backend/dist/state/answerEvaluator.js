@@ -5,13 +5,75 @@ exports.evaluateAnswer = evaluateAnswer;
 const GERMAN_ARTICLES = new Set(["der", "die", "das", "ein", "eine", "einen", "einem", "einer", "den", "dem", "des"]);
 const ENGLISH_MARKERS = new Set(["the", "a", "an", "my", "is", "are", "i", "you", "we", "they"]);
 const GERMAN_MARKERS = new Set(["ich", "bin", "du", "wir", "sie", "nicht", "mein", "meine", "und", "aber"]);
+const SMART_APOSTROPHES = /[’‘]/g;
 function normalize(text) {
     return (text || "")
         .toLowerCase()
+        .replace(SMART_APOSTROPHES, "'")
         .trim()
         .replace(/\s+/g, " ")
         .replace(/[.,!?;:"'()\[\]{}]/g, "")
         .trim();
+}
+function getPromptText(question) {
+    const promptRaw = typeof question.prompt === "string" ? question.prompt.trim() : "";
+    if (promptRaw)
+        return promptRaw;
+    const questionRaw = typeof question.question === "string" ? question.question.trim() : "";
+    return questionRaw;
+}
+function getExpectedInput(question) {
+    const raw = typeof question.expectedInput === "string" ? question.expectedInput.trim().toLowerCase() : "";
+    if (raw === "blank" || raw === "sentence")
+        return raw;
+    return "";
+}
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function stripPromptPrefix(prompt) {
+    const raw = (prompt || "").trim();
+    if (!raw)
+        return raw;
+    const colonIdx = raw.lastIndexOf(":");
+    if (colonIdx !== -1) {
+        const after = raw.slice(colonIdx + 1).trim();
+        if (after.includes("___"))
+            return after;
+    }
+    return raw;
+}
+function deriveBlankAnswers(prompt, answer) {
+    if (!prompt.includes("___"))
+        return [];
+    const template = stripPromptPrefix(prompt);
+    if (!template.includes("___"))
+        return [];
+    const pattern = escapeRegExp(template).replace(/_+/g, "(.+?)");
+    const re = new RegExp(`^${pattern}$`, "i");
+    const match = (answer || "").trim().match(re);
+    if (!match || match.length < 2)
+        return [];
+    const candidate = match[1]?.trim() ?? "";
+    return candidate ? [candidate] : [];
+}
+function getBlankAnswers(question, promptText, expectedInput) {
+    const raw = Array.isArray(question.blankAnswers) ? question.blankAnswers : [];
+    const cleaned = raw
+        .filter((x) => typeof x === "string" && x.trim().length > 0)
+        .map((s) => (typeof s === "string" ? s.trim() : ""))
+        .filter(Boolean);
+    if (cleaned.length > 0)
+        return cleaned;
+    const answerText = typeof question.answer === "string" || typeof question.answer === "number"
+        ? String(question.answer)
+        : "";
+    if (!answerText)
+        return [];
+    if (expectedInput === "blank" || promptText.includes("___")) {
+        return deriveBlankAnswers(promptText, answerText);
+    }
+    return [];
 }
 function tokenize(text) {
     const norm = normalize(text);
@@ -205,6 +267,17 @@ const SPECIAL_EQUIVALENCE_RULES = [
 function evaluateAnswer(question, userAnswer, language) {
     const userNorm = normalize(userAnswer);
     const expectedNorm = normalize(question.answer);
+    const promptText = getPromptText(question);
+    const expectedInput = getExpectedInput(question);
+    const isBlank = expectedInput === "blank" || promptText.includes("___");
+    if (isBlank) {
+        const blankAnswers = getBlankAnswers(question, promptText, expectedInput);
+        for (const blank of blankAnswers) {
+            if (userNorm === normalize(blank)) {
+                return { result: "correct" };
+            }
+        }
+    }
     if (matchesAnyExact(question, userNorm)) {
         return { result: "correct" };
     }

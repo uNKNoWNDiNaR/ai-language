@@ -26,7 +26,7 @@ describe("buildTutorPrompt language guard", () => {
 
     expect(prompt).toMatch(/LANGUAGE GUARD:/i);
     expect(prompt).toMatch(/lesson language is "en"/i);
-    expect(prompt).toMatch(/respond ONLY in the lesson language/i);
+    expect(prompt).toMatch(/primaryText MUST be in the lesson language/i);
     expect(prompt).toMatch(/do NOT introduce other languages/i);
     expect(prompt).toMatch(/ONLY quote foreign words/i);
     expect(prompt).toMatch(/do NOT turn the prompt into a translation task/i);
@@ -53,6 +53,6 @@ describe("buildTutorPrompt language guard", () => {
 
     expect(prompt).toMatch(/INSTRUCTION LANGUAGE:/i);
     expect(prompt).toMatch(/"de"/i);
-    expect(prompt).toMatch(/Do NOT use it for tutor messages/i);
+    expect(prompt).toMatch(/supportText must use the instruction language/i);
   });
 });

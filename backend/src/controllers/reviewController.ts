@@ -266,9 +266,10 @@ export async function getReviewSuggested(req: Request, res: Response) {
         if (!lessonCache.has(item.lessonId)) lessonCache.set(item.lessonId, lesson);
 
         if (lesson) {
-          const match = lesson.questions.find(
-            (q: LessonQuestion) =>
-              normalizeQuestionText(q.question) === normalizeQuestionText(prompt)
+        const match = lesson.questions.find(
+          (q: LessonQuestion) =>
+            normalizeQuestionText((q as any).prompt || q.question) ===
+            normalizeQuestionText(prompt)
           );
           if (match) {
             const expected = String(match.answer ?? "");
@@ -276,10 +277,11 @@ export async function getReviewSuggested(req: Request, res: Response) {
             prompt = await buildReviewPrompt({
               language: language as SupportedLanguage,
               lessonId: item.lessonId,
-              sourceQuestionText: match.question,
+              sourceQuestionText: (match as any).prompt || match.question,
               expectedAnswerRaw: expected,
               examples: match.examples,
               conceptTag,
+              promptStyle: (match as any).promptStyle,
             });
 
             if (prompt && prompt !== item.prompt) {
@@ -363,6 +365,7 @@ export async function submitReview(req: Request, res: Response) {
       {
         id: 0,
         question: item.prompt,
+        prompt: item.prompt,
         answer: expected,
         acceptedAnswers: [],
       } as any,
@@ -401,13 +404,27 @@ export async function submitReview(req: Request, res: Response) {
       repeatedSameWrong: false,
     });
 
-    const hint = evaluation.result === "correct" ? null : buildReviewHint(expected, attempts, evaluation.reasonCode);
+    let hint: string | null = null;
+    if (evaluation.result !== "correct") {
+      try {
+        const lesson = loadLesson(language, item.lessonId);
+        const match = lesson?.questions?.find(
+          (q: LessonQuestion) => q.conceptTag && q.conceptTag === item.conceptTag
+        );
+        const hintTarget =
+          typeof (match as any)?.hintTarget === "string" ? (match as any).hintTarget.trim() : "";
+        const legacyHint = typeof match?.hint === "string" ? match.hint.trim() : "";
+        hint = hintTarget || legacyHint || buildReviewHint(expected, attempts, evaluation.reasonCode);
+      } catch {
+        hint = buildReviewHint(expected, attempts, evaluation.reasonCode);
+      }
+    }
 
     const tutorMessage =
       evaluation.result === "correct"
         ? "Nice work. Let's keep going."
         : hint
-          ? `${retryMessage} ${hint}`.trim()
+          ? `${retryMessage}\nHint: ${hint}`.trim()
           : retryMessage;
 
     return res.status(200).json({
@@ -471,10 +488,11 @@ export async function generateReview(req: Request, res: Response) {
       const prompt = await buildReviewPrompt({
         language,
         lessonId,
-        sourceQuestionText: q.question,
+        sourceQuestionText: (q as any).prompt || q.question,
         expectedAnswerRaw: expected,
         examples: q.examples,
         conceptTag,
+        promptStyle: (q as any).promptStyle,
       });
 
       items.push({

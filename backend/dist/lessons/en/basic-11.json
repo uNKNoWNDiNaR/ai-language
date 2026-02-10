@@ -1,0 +1,245 @@
+{
+  "lessonId": "basic-11",
+  "title": "Food and drink",
+  "description": "Order food and speak politely.",
+  "questions": [
+    {
+      "id": 1,
+      "conceptTag": "a1.food.id_like",
+      "question": "You want to order water politely. What do you say?",
+      "prompt": "You want to order water politely. What do you say?",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "I'd like water, please.",
+      "acceptedAnswers": [
+        "I'd like water, please.",
+        "I'd like water, please",
+        "I would like water, please.",
+        "I would like water, please",
+        "I’d like water, please.",
+        "I’d like water, please"
+      ],
+      "hintTarget": "Use: I'd like + noun.",
+      "explanationTarget": "“I'd like” is polite for ordering.",
+      "hints": [
+        "Start with “I'd like …”"
+      ],
+      "examples": [
+        "I'd like water, please.",
+        "I'd like coffee, please."
+      ]
+    },
+    {
+      "id": 2,
+      "conceptTag": "a1.food.id_like",
+      "question": "Complete: I'd like ___ coffee.",
+      "prompt": "Complete: I'd like ___ coffee.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "a"
+      ],
+      "answer": "I'd like a coffee.",
+      "acceptedAnswers": [
+        "I'd like a coffee.",
+        "I'd like a coffee",
+        "I would like a coffee.",
+        "I would like a coffee",
+        "I’d like a coffee.",
+        "I’d like a coffee"
+      ],
+      "hintTarget": "Use: I'd like + a/an + noun.",
+      "explanationTarget": "Use “a” before coffee (a coffee).",
+      "hints": [
+        "I'd like + a + noun"
+      ],
+      "examples": [
+        "I'd like a coffee.",
+        "I'd like a tea."
+      ]
+    },
+    {
+      "id": 3,
+      "conceptTag": "a1.food.please",
+      "question": "You want to be polite. What one word do you say?",
+      "prompt": "You want to be polite. What one word do you say?",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Please.",
+      "acceptedAnswers": [
+        "Please.",
+        "Please"
+      ],
+      "hintTarget": "One polite word.",
+      "explanationTarget": "“Please” makes requests polite.",
+      "hints": [
+        "Just write “Please.”"
+      ],
+      "examples": [
+        "Please.",
+        "Please help me."
+      ]
+    },
+    {
+      "id": 4,
+      "conceptTag": "a1.food.thank_you",
+      "question": "Someone helps you. What do you say?",
+      "prompt": "Someone helps you. What do you say?",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Thank you.",
+      "acceptedAnswers": [
+        "Thank you.",
+        "Thank you",
+        "Thanks.",
+        "Thanks"
+      ],
+      "hintTarget": "A polite reply.",
+      "explanationTarget": "Use “Thank you” or “Thanks”.",
+      "hints": [
+        "Start with “Thank …”"
+      ],
+      "examples": [
+        "Thank you.",
+        "Thanks."
+      ]
+    },
+    {
+      "id": 5,
+      "conceptTag": "a1.food.how_much",
+      "question": "Ask about the price: this.",
+      "prompt": "Ask about the price: this.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "How much is this?",
+      "acceptedAnswers": [
+        "How much is this?",
+        "How much is this"
+      ],
+      "hintTarget": "Start with: How much …?",
+      "explanationTarget": "Use this to ask about price.",
+      "hints": [
+        "How much is this?"
+      ],
+      "examples": [
+        "How much is this?",
+        "How much is the coffee?"
+      ]
+    },
+    {
+      "id": 6,
+      "conceptTag": "a1.food.how_much_item",
+      "question": "Ask about the price: the coffee.",
+      "prompt": "Ask about the price: the coffee.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "How much is the coffee?",
+      "acceptedAnswers": [
+        "How much is the coffee?",
+        "How much is the coffee"
+      ],
+      "hintTarget": "Use: How much is the …?",
+      "explanationTarget": "Use “the” for a specific item.",
+      "hints": [
+        "How much is the + item?"
+      ],
+      "examples": [
+        "How much is the coffee?",
+        "How much is the tea?"
+      ]
+    },
+    {
+      "id": 7,
+      "conceptTag": "a1.food.i_want",
+      "question": "Make a sentence: sandwich / I / want / a",
+      "prompt": "Make a sentence: sandwich / I / want / a",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "I want a sandwich.",
+      "acceptedAnswers": [
+        "I want a sandwich.",
+        "I want a sandwich"
+      ],
+      "hintTarget": "Use: I want + a/an + noun.",
+      "explanationTarget": "“I want” is direct. “I'd like” is more polite.",
+      "hints": [
+        "Start with “I want …”"
+      ],
+      "examples": [
+        "I want a sandwich.",
+        "I want an apple."
+      ]
+    },
+    {
+      "id": 8,
+      "conceptTag": "a1.food.do_you_have",
+      "question": "Turn into a question: You have water.",
+      "prompt": "Turn into a question: You have water.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Do you have water?",
+      "acceptedAnswers": [
+        "Do you have water?",
+        "Do you have water"
+      ],
+      "hintTarget": "Start with: Do you have …?",
+      "explanationTarget": "Use “Do you have …?” to ask availability.",
+      "hints": [
+        "Do you have + noun?"
+      ],
+      "examples": [
+        "Do you have water?",
+        "Do you have tea?"
+      ]
+    },
+    {
+      "id": 9,
+      "conceptTag": "a1.food.yes_we_do",
+      "question": "Reply: Do you have tea? (yes)",
+      "prompt": "Reply: Do you have tea? (yes)",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Yes, we do.",
+      "acceptedAnswers": [
+        "Yes, we do.",
+        "Yes, we do"
+      ],
+      "hintTarget": "Short answer: Yes, we do.",
+      "explanationTarget": "Short answers use do/don't.",
+      "hints": [
+        "Start with “Yes, we do.”"
+      ],
+      "examples": [
+        "Yes, we do.",
+        "No, we don't."
+      ]
+    },
+    {
+      "id": 10,
+      "conceptTag": "a1.food.no_we_dont",
+      "question": "Reply: Do you have coffee? (no)",
+      "prompt": "Reply: Do you have coffee? (no)",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "No, we don't.",
+      "acceptedAnswers": [
+        "No, we don't.",
+        "No, we don't",
+        "No, we do not.",
+        "No, we do not",
+        "No, we don’t.",
+        "No, we don’t"
+      ],
+      "hintTarget": "Short answer: No, we don't.",
+      "explanationTarget": "“Don't” means “do not”.",
+      "hints": [
+        "Start with “No, we don't.”"
+      ],
+      "examples": [
+        "No, we don't.",
+        "Yes, we do."
+      ]
+    }
+  ]
+}

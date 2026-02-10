@@ -56,7 +56,7 @@ function getDeterministicRetryMessage(args) {
         case "MISSING_SLOT":
             return "Almost - You're missing the name part.";
         default:
-            return attemptCount >= 3 ? "Not quite — try again using the expected structure." : "Not quite — try again.";
+            return "Not quite — try again.";
     }
 }
 function getHintLeadIn(attemptCount) {

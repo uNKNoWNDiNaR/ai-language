@@ -1,0 +1,247 @@
+{
+  "lessonId": "basic-5",
+  "title": "Questions with do/does",
+  "description": "Ask simple yes/no and W-questions in the present simple.",
+  "questions": [
+    {
+      "id": 1,
+      "conceptTag": "a1.q.do_yesno",
+      "question": "You want to know about coffee. Ask.",
+      "prompt": "You want to know about coffee. Ask.",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Do you like coffee?",
+      "acceptedAnswers": [
+        "Do you like coffee?",
+        "Do you like coffee"
+      ],
+      "hintTarget": "Start with: Do you …?",
+      "explanationTarget": "Use “Do” for I/you/we/they + base verb.",
+      "hints": [
+        "Do + you + like …?"
+      ],
+      "examples": [
+        "Do you like coffee?",
+        "Do you like tea?"
+      ]
+    },
+    {
+      "id": 2,
+      "conceptTag": "a1.q.where_do",
+      "question": "Complete: Where ___ you live?",
+      "prompt": "Complete: Where ___ you live?",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "do"
+      ],
+      "answer": "Where do you live?",
+      "acceptedAnswers": [
+        "Where do you live?",
+        "Where do you live"
+      ],
+      "hintTarget": "Start with: Where do you …?",
+      "explanationTarget": "W-question: Where + do + subject + base verb.",
+      "hints": [
+        "Where + do + you + live?"
+      ],
+      "examples": [
+        "Where do you live?",
+        "Where do they work?"
+      ]
+    },
+    {
+      "id": 3,
+      "conceptTag": "a1.q.what_do",
+      "question": "Complete: What ___ you want?",
+      "prompt": "Complete: What ___ you want?",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "do"
+      ],
+      "answer": "What do you want?",
+      "acceptedAnswers": [
+        "What do you want?",
+        "What do you want"
+      ],
+      "hintTarget": "Start with: What do you …?",
+      "explanationTarget": "Use “What do you …?” to ask about things.",
+      "hints": [
+        "What + do + you + want?"
+      ],
+      "examples": [
+        "What do you want?",
+        "What do you like?"
+      ]
+    },
+    {
+      "id": 4,
+      "conceptTag": "a1.q.do_yesno_we",
+      "question": "Turn into a question: We have time.",
+      "prompt": "Turn into a question: We have time.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Do we have time?",
+      "acceptedAnswers": [
+        "Do we have time?",
+        "Do we have time"
+      ],
+      "hintTarget": "Start with: Do we …?",
+      "explanationTarget": "Use “Do” for we/they.",
+      "hints": [
+        "Do + we + have …?"
+      ],
+      "examples": [
+        "Do we have time?",
+        "Do they have a car?"
+      ]
+    },
+    {
+      "id": 5,
+      "conceptTag": "a1.q.does_yesno",
+      "question": "Turn into a question: He likes tea.",
+      "prompt": "Turn into a question: He likes tea.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Does he like tea?",
+      "acceptedAnswers": [
+        "Does he like tea?",
+        "Does he like tea"
+      ],
+      "hintTarget": "Start with: Does he …?",
+      "explanationTarget": "Use “Does” for he/she/it + base verb (no -s).",
+      "hints": [
+        "Does + he + like …?"
+      ],
+      "examples": [
+        "Does he like tea?",
+        "Does she like coffee?"
+      ]
+    },
+    {
+      "id": 6,
+      "conceptTag": "a1.q.where_does",
+      "question": "Complete: Where ___ she live?",
+      "prompt": "Complete: Where ___ she live?",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "does"
+      ],
+      "answer": "Where does she live?",
+      "acceptedAnswers": [
+        "Where does she live?",
+        "Where does she live"
+      ],
+      "hintTarget": "Start with: Where does she …?",
+      "explanationTarget": "After “does”, use base verb: live (not lives).",
+      "hints": [
+        "Where + does + she + live?"
+      ],
+      "examples": [
+        "Where does she live?",
+        "Where does he work?"
+      ]
+    },
+    {
+      "id": 7,
+      "conceptTag": "a1.q.short_answer_do_yes",
+      "question": "Reply: Do you like coffee? (yes)",
+      "prompt": "Reply: Do you like coffee? (yes)",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Yes, I do.",
+      "acceptedAnswers": [
+        "Yes, I do.",
+        "Yes, I do"
+      ],
+      "hintTarget": "Short answer: Yes, I do.",
+      "explanationTarget": "For do-questions, short answers use do/don’t.",
+      "hints": [
+        "Start with: Yes, I do."
+      ],
+      "examples": [
+        "Yes, I do.",
+        "No, I don't."
+      ]
+    },
+    {
+      "id": 8,
+      "conceptTag": "a1.q.short_answer_do_no",
+      "question": "Reply: Do you want tea? (no)",
+      "prompt": "Reply: Do you want tea? (no)",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "No, I don't.",
+      "acceptedAnswers": [
+        "No, I don't.",
+        "No, I don't",
+        "No, I do not.",
+        "No, I do not",
+        "No, I don’t.",
+        "No, I don’t"
+      ],
+      "hintTarget": "Short answer: No, I don't.",
+      "explanationTarget": "Use “don’t” = “do not”.",
+      "hints": [
+        "Start with: No, I don't."
+      ],
+      "examples": [
+        "No, I don't.",
+        "Yes, I do."
+      ]
+    },
+    {
+      "id": 9,
+      "conceptTag": "a1.q.short_answer_does_yes",
+      "question": "Reply: Does he like tea? (yes)",
+      "prompt": "Reply: Does he like tea? (yes)",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Yes, he does.",
+      "acceptedAnswers": [
+        "Yes, he does.",
+        "Yes, he does"
+      ],
+      "hintTarget": "Short answer: Yes, he does.",
+      "explanationTarget": "For does-questions, short answers use does/doesn’t.",
+      "hints": [
+        "Start with: Yes, he does."
+      ],
+      "examples": [
+        "Yes, he does.",
+        "No, he doesn't."
+      ]
+    },
+    {
+      "id": 10,
+      "conceptTag": "a1.q.short_answer_does_no",
+      "question": "Reply: Does she want coffee? (no)",
+      "prompt": "Reply: Does she want coffee? (no)",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "No, she doesn't.",
+      "acceptedAnswers": [
+        "No, she doesn't.",
+        "No, she doesn't",
+        "No, she does not.",
+        "No, she does not",
+        "No, she doesn’t.",
+        "No, she doesn’t"
+      ],
+      "hintTarget": "Short answer: No, she doesn't.",
+      "explanationTarget": "Use “doesn't” = “does not”.",
+      "hints": [
+        "Start with: No, she doesn't."
+      ],
+      "examples": [
+        "No, she doesn't.",
+        "Yes, she does."
+      ]
+    }
+  ]
+}

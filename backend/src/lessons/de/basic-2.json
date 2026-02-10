@@ -5,25 +5,37 @@
   "questions": [
     {
       "id": 1,
-      "question": "How do you say 'one' in German?",
+      "question": "Wie sagt man \"one\" auf Deutsch?",
+      "prompt": "Wie sagt man \"one\" auf Deutsch?",
       "answer": "eins",
       "conceptTag": "number_one",
+      "acceptedAnswers": ["eins", "1"],
+      "hintTarget": "Die Zahl nach null.",
+      "explanationTarget": "„One“ heißt auf Deutsch „eins“.",
       "hint": "The number after zero.",
       "examples": ["eins", "1"]
     },
     {
       "id": 2,
-      "question": "How do you say 'red' in German?",
+      "question": "Wie sagt man \"red\" auf Deutsch?",
+      "prompt": "Wie sagt man \"red\" auf Deutsch?",
       "answer": "rot",
       "conceptTag": "color_red",
+      "acceptedAnswers": ["rot"],
+      "hintTarget": "Eine Farbe.",
+      "explanationTarget": "„Red“ heißt auf Deutsch „rot“.",
       "hint": "A color",
       "examples": ["rot", "Rot"]
     },
     {
       "id": 3,
-      "question": "How do you say 'blue' in German?",
+      "question": "Wie sagt man \"blue\" auf Deutsch?",
+      "prompt": "Wie sagt man \"blue\" auf Deutsch?",
       "answer": "blau",
       "conceptTag": "color_blue",
+      "acceptedAnswers": ["blau"],
+      "hintTarget": "Eine Farbe.",
+      "explanationTarget": "„Blue“ heißt auf Deutsch „blau“.",
       "hint": "A color",
       "examples": ["blau", "Blau"]
     }

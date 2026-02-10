@@ -1,0 +1,243 @@
+{
+  "lessonId": "basic-6",
+  "title": "There is/are and articles",
+  "description": "Say what is in a place using there is/are and a/an/the.",
+  "questions": [
+    {
+      "id": 1,
+      "conceptTag": "a1.thereis.singular",
+      "question": "Complete: There ___ a book.",
+      "prompt": "Complete: There ___ a book.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "is"
+      ],
+      "answer": "There is a book.",
+      "acceptedAnswers": [
+        "There is a book.",
+        "There is a book"
+      ],
+      "hintTarget": "Use: There is + a + noun.",
+      "explanationTarget": "Use “There is” for one thing.",
+      "hints": [
+        "Start with “There is …”"
+      ],
+      "examples": [
+        "There is a book.",
+        "There is a chair."
+      ]
+    },
+    {
+      "id": 2,
+      "conceptTag": "a1.thereare.plural",
+      "question": "Complete: There ___ two chairs.",
+      "prompt": "Complete: There ___ two chairs.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "are"
+      ],
+      "answer": "There are two chairs.",
+      "acceptedAnswers": [
+        "There are two chairs.",
+        "There are two chairs"
+      ],
+      "hintTarget": "Use: There are + number + noun.",
+      "explanationTarget": "Use “There are” for more than one.",
+      "hints": [
+        "Start with “There are …”"
+      ],
+      "examples": [
+        "There are two chairs.",
+        "There are three books."
+      ]
+    },
+    {
+      "id": 3,
+      "conceptTag": "a1.article.a",
+      "question": "Make a sentence: phone / have / I / a",
+      "prompt": "Make a sentence: phone / have / I / a",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "I have a phone.",
+      "acceptedAnswers": [
+        "I have a phone.",
+        "I have a phone"
+      ],
+      "hintTarget": "Use “a” before a consonant sound.",
+      "explanationTarget": "Use “a” with singular nouns: a phone.",
+      "hints": [
+        "Use “a” here."
+      ],
+      "examples": [
+        "a phone",
+        "a book"
+      ]
+    },
+    {
+      "id": 4,
+      "conceptTag": "a1.article.an",
+      "question": "Complete: I have ___ apple.",
+      "prompt": "Complete: I have ___ apple.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "an"
+      ],
+      "answer": "I have an apple.",
+      "acceptedAnswers": [
+        "I have an apple.",
+        "I have an apple"
+      ],
+      "hintTarget": "Use “an” before a vowel sound.",
+      "explanationTarget": "Use “an” with vowel sounds: an apple.",
+      "hints": [
+        "Use “an” here."
+      ],
+      "examples": [
+        "an apple",
+        "an orange"
+      ]
+    },
+    {
+      "id": 5,
+      "conceptTag": "a1.article.the_known",
+      "question": "Make a sentence: here / the / book / is",
+      "prompt": "Make a sentence: here / the / book / is",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "The book is here.",
+      "acceptedAnswers": [
+        "The book is here.",
+        "The book is here"
+      ],
+      "hintTarget": "Use “the” for a specific thing.",
+      "explanationTarget": "Use “the” when both people know which one.",
+      "hints": [
+        "Start with “The …”"
+      ],
+      "examples": [
+        "The book is here.",
+        "The phone is here."
+      ]
+    },
+    {
+      "id": 6,
+      "conceptTag": "a1.thereis.location",
+      "question": "Make a sentence: table / there / is / a / here",
+      "prompt": "Make a sentence: table / there / is / a / here",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "There is a table here.",
+      "acceptedAnswers": [
+        "There is a table here.",
+        "There is a table here"
+      ],
+      "hintTarget": "Add location: here.",
+      "explanationTarget": "Put “here” at the end to show location.",
+      "hints": [
+        "End with “here”."
+      ],
+      "examples": [
+        "There is a table here.",
+        "There is a chair here."
+      ]
+    },
+    {
+      "id": 7,
+      "conceptTag": "a1.thereare.in_room",
+      "question": "Describe a room with three books.",
+      "prompt": "Describe a room with three books.",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "There are three books in the room.",
+      "acceptedAnswers": [
+        "There are three books in the room.",
+        "There are three books in the room"
+      ],
+      "hintTarget": "Use: There are + number + plural.",
+      "explanationTarget": "Use “There are” + number + plural noun.",
+      "hints": [
+        "Start with “There are …”"
+      ],
+      "examples": [
+        "There are three books in the room.",
+        "There are two chairs in the room."
+      ]
+    },
+    {
+      "id": 8,
+      "conceptTag": "a1.article.choice_a_an",
+      "question": "Complete: I have ___ umbrella.",
+      "prompt": "Complete: I have ___ umbrella.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "an"
+      ],
+      "answer": "I have an umbrella.",
+      "acceptedAnswers": [
+        "I have an umbrella.",
+        "I have an umbrella"
+      ],
+      "hintTarget": "Umbrella starts with a vowel sound.",
+      "explanationTarget": "Use “an” before a vowel sound: an umbrella.",
+      "hints": [
+        "Use “an” here."
+      ],
+      "examples": [
+        "an umbrella",
+        "an apple"
+      ]
+    },
+    {
+      "id": 9,
+      "conceptTag": "a1.article.choice_the",
+      "question": "Change “A door is open.” to “the”.",
+      "prompt": "Change “A door is open.” to “the”.",
+      "taskType": "typing",
+      "promptStyle": "TRANSFORM_SUBJECT",
+      "answer": "The door is open.",
+      "acceptedAnswers": [
+        "The door is open.",
+        "The door is open"
+      ],
+      "hintTarget": "Use “the” for a specific door.",
+      "explanationTarget": "Use “the” when it’s clear which one.",
+      "hints": [
+        "Use “the” here."
+      ],
+      "examples": [
+        "The door is open.",
+        "The window is open."
+      ]
+    },
+    {
+      "id": 10,
+      "conceptTag": "a1.thereis.question_is_there",
+      "question": "Turn into a question: There is a chair.",
+      "prompt": "Turn into a question: There is a chair.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Is there a chair?",
+      "acceptedAnswers": [
+        "Is there a chair?",
+        "Is there a chair"
+      ],
+      "hintTarget": "Start with: Is there …?",
+      "explanationTarget": "Use “Is there …?” to ask about one thing.",
+      "hints": [
+        "Is there + a + noun?"
+      ],
+      "examples": [
+        "Is there a chair?",
+        "Is there a book?"
+      ]
+    }
+  ]
+}

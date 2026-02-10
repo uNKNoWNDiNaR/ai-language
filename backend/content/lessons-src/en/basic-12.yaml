@@ -1,0 +1,137 @@
+lessonId: basic-12
+title: "A1 review"
+description: "Review key A1 patterns from the course."
+questions:
+  - id: 1
+    conceptTag: a1.review.greeting
+    question: "It is morning. Greet someone."
+    prompt: "It is morning. Greet someone."
+    taskType: typing
+    promptStyle: SITUATION_CUE
+    answer: "Good morning."
+    acceptedAnswers: ["Good morning.", "Good morning", "Good Morning.", "Good Morning"]
+    hintTarget: "Morning greeting."
+    explanationTarget: "Use this greeting before noon."
+    hints: ["Good morning."]
+    examples: ["Good morning."]
+
+  - id: 2
+    conceptTag: a1.review.name_question
+    question: "Ask someone's name."
+    prompt: "Ask someone's name."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "What's your name?"
+    acceptedAnswers: ["What's your name?", "What's your name", "What is your name?", "What is your name", "What’s your name?", "What’s your name"]
+    hintTarget: "Start with: What is …?"
+    explanationTarget: "“What's” means “What is”."
+    hints: ["What's your name?"]
+    examples: ["What's your name?"]
+
+  - id: 3
+    conceptTag: a1.review.introduce
+    question: "Complete: My name ___ Alex."
+    prompt: "Complete: My name ___ Alex."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["is"]
+    answer: "My name is Alex."
+    acceptedAnswers: ["My name is Alex.", "My name is Alex"]
+    hintTarget: "Use: My name is …"
+    explanationTarget: "This is a simple introduction."
+    hints: ["My name is …"]
+    examples: ["My name is Alex.", "My name is Sara."]
+
+  - id: 4
+    conceptTag: a1.review.do_question
+    question: "Turn into a question: You like tea."
+    prompt: "Turn into a question: You like tea."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Do you like tea?"
+    acceptedAnswers: ["Do you like tea?", "Do you like tea"]
+    hintTarget: "Start with: Do you …?"
+    explanationTarget: "Use “Do” + base verb: like."
+    hints: ["Do you like …?"]
+    examples: ["Do you like tea?"]
+
+  - id: 5
+    conceptTag: a1.review.short_yes
+    question: "Reply: Do you like coffee? (yes)"
+    prompt: "Reply: Do you like coffee? (yes)"
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Yes, I do."
+    acceptedAnswers: ["Yes, I do.", "Yes, I do"]
+    hintTarget: "Short answer."
+    explanationTarget: "Short answers use do/don't."
+    hints: ["Yes, I do."]
+    examples: ["Yes, I do.", "No, I don't."]
+
+  - id: 6
+    conceptTag: a1.review.there_is
+    question: "Complete: There ___ a chair."
+    prompt: "Complete: There ___ a chair."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["is"]
+    answer: "There is a chair."
+    acceptedAnswers: ["There is a chair.", "There is a chair"]
+    hintTarget: "Use: There is + a + noun."
+    explanationTarget: "“There is” is for one thing."
+    hints: ["There is …"]
+    examples: ["There is a chair.", "There is a book."]
+
+  - id: 7
+    conceptTag: a1.review.possessive
+    question: "Change “This is your phone.” to “my”."
+    prompt: "Change “This is your phone.” to “my”."
+    taskType: typing
+    promptStyle: TRANSFORM_SUBJECT
+    answer: "This is my phone."
+    acceptedAnswers: ["This is my phone.", "This is my phone"]
+    hintTarget: "Use: my + noun."
+    explanationTarget: "“My” shows ownership."
+    hints: ["This is my …"]
+    examples: ["This is my phone.", "This is my book."]
+
+  - id: 8
+    conceptTag: a1.review.can
+    question: "Turn into a question: You can help me."
+    prompt: "Turn into a question: You can help me."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Can you help me?"
+    acceptedAnswers: ["Can you help me?", "Can you help me"]
+    hintTarget: "Start with: Can you …?"
+    explanationTarget: "“Can you …?” can be a request."
+    hints: ["Can you + verb …?"]
+    examples: ["Can you help me?", "Can you wait?"]
+
+  - id: 9
+    conceptTag: a1.review.direction
+    question: "Make a direction: left / turn"
+    prompt: "Make a direction: left / turn"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "Turn left."
+    acceptedAnswers: ["Turn left.", "Turn left"]
+    hintTarget: "Direction phrase."
+    explanationTarget: "This is a simple direction."
+    hints: ["Turn + left"]
+    examples: ["Turn left.", "Turn right."]
+
+  - id: 10
+    conceptTag: a1.review.order
+    question: "You want to order coffee politely. What do you say?"
+    prompt: "You want to order coffee politely. What do you say?"
+    taskType: typing
+    promptStyle: SITUATION_CUE
+    answer: "I'd like a coffee, please."
+    acceptedAnswers: ["I'd like a coffee, please.", "I'd like a coffee, please", "I would like a coffee, please.", "I would like a coffee, please", "I’d like a coffee, please.", "I’d like a coffee, please"]
+    hintTarget: "Polite ordering."
+    explanationTarget: "Use “I'd like …, please” to order politely."
+    hints: ["I'd like …, please."]
+    examples: ["I'd like a coffee, please.", "I'd like water, please."]

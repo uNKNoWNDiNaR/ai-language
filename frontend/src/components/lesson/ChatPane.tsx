@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import type { RefObject, CSSProperties, ReactNode } from "react";
 import type { ChatMessage, LessonSession } from "../../api/lessonAPI";
+import type { UiStrings } from "../../utils/instructionLanguage";
 
 type Role = "user" | "assistant";
 
@@ -20,6 +21,49 @@ function parseRevealMessage(content: string): RevealPayload {
   }
 }
 
+function splitSupportText(message: ChatMessage): { primary: string; support?: string } {
+  if (message.primaryText || message.supportText) {
+    return {
+      primary: message.primaryText ?? message.content ?? "",
+      support: message.supportText,
+    };
+  }
+
+  const content = message.content ?? "";
+  const idx = content.indexOf("\n\n");
+  if (idx > -1) {
+    const primary = content.slice(0, idx).trim();
+    const support = content.slice(idx + 2).trim();
+    if (support) {
+      return { primary: primary || content, support };
+    }
+  }
+
+  return { primary: content };
+}
+
+function formatPrimaryText(text: string): string {
+  let out = text || "";
+  if (!out) return out;
+
+  if (out.includes("Hint:") && !out.includes("\nHint:")) {
+    out = out.replace(/\s*Hint:\s*/g, "\nHint: ");
+  }
+
+  if (out.includes("Hint:")) {
+    const match = out.match(/([^\n]*\?)\s*$/);
+    if (match) {
+      const question = match[1];
+      const prefix = out.slice(0, out.length - question.length).trimEnd();
+      if (!prefix.endsWith("\n")) {
+        out = `${prefix}\n${question}`.trim();
+      }
+    }
+  }
+
+  return out;
+}
+
 type ChatPaneProps = {
   chatRef: RefObject<HTMLDivElement | null>;
   chatEndRef: RefObject<HTMLDivElement | null>;
@@ -27,6 +71,17 @@ type ChatPaneProps = {
   session: LessonSession | null;
   pending: null | "start" | "resume" | "answer" | "practice" | "review";
   showEmptyState?: boolean;
+  uiStrings?: UiStrings;
+  instructionLanguage?: string | null;
+  clozeActive?: boolean;
+  clozePrompt?: string;
+  clozeValue?: string;
+  onClozeChange?: (value: string) => void;
+  onClozeSubmit?: () => void | Promise<void>;
+  clozeDisabled?: boolean;
+  clozeInputRef?: RefObject<HTMLInputElement | null>;
+  clozeHelperText?: string;
+  clozeErrorText?: string;
   children?: ReactNode;
 };
 
@@ -46,10 +101,11 @@ function bubbleStyle(role: Role, isLastInGroup: boolean): CSSProperties {
   const bottomRight = !isLastInGroup ? 18 : isUser ? 6 : 18;
 
   return {
-    maxWidth: "74%",
-    padding: "11px 13px",
+    maxWidth: "100%",
+    padding: "9px 10px",
     whiteSpace: "pre-wrap",
-    lineHeight: 1.42,
+    lineHeight: 1.5,
+    fontSize: 14,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     borderBottomLeftRadius: bottomLeft,
@@ -78,8 +134,82 @@ export function ChatPane({
   session,
   pending,
   showEmptyState = true,
+  uiStrings,
+  instructionLanguage,
+  clozeActive,
+  clozePrompt,
+  clozeValue,
+  onClozeChange,
+  onClozeSubmit,
+  clozeDisabled,
+  clozeInputRef,
+  clozeHelperText,
+  clozeErrorText,
   children,
 }: ChatPaneProps) {
+  const explanationLabel = uiStrings?.explanationLabel ?? "Explanation";
+  const answerLabel = uiStrings?.answerLabel ?? "Answer";
+  const supportLabel = uiStrings?.supportLabel ?? "Support";
+  const tutorLabel = uiStrings?.tutorLabel ?? "Tutor";
+  const youLabel = uiStrings?.youLabel ?? "You";
+  const startLessonEmpty = uiStrings?.startLessonEmpty ?? "Start a lesson to begin.";
+  const lastAssistantIndex = [...messages]
+    .map((m, idx) => (m.role === "assistant" ? idx : -1))
+    .filter((idx) => idx >= 0)
+    .slice(-1)[0];
+
+  const renderTextWithBreaks = (text: string) => {
+    if (!text) return null;
+    const lines = text.split(/\r?\n/);
+    return lines.map((line, idx) => (
+      <span key={`${line}-${idx}`}>
+        {line}
+        {idx < lines.length - 1 && <br />}
+      </span>
+    ));
+  };
+
+  const renderClozeInline = (prompt: string) => {
+    const [before, after] = prompt.split("___", 2);
+    return (
+      <span className="inline-flex flex-wrap items-center">
+        <span>{before}</span>
+        <input
+          ref={clozeInputRef}
+          value={clozeValue ?? ""}
+          onChange={(e) => onClozeChange?.(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !clozeDisabled) {
+              e.preventDefault();
+              void onClozeSubmit?.();
+            }
+          }}
+          disabled={clozeDisabled}
+          className="mx-2 inline-block w-28 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+        />
+        <span>{after}</span>
+      </span>
+    );
+  };
+
+  const renderClozeFallback = () => (
+    <div className="mt-2">
+      <input
+        ref={clozeInputRef}
+        value={clozeValue ?? ""}
+        onChange={(e) => onClozeChange?.(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !clozeDisabled) {
+            e.preventDefault();
+            void onClozeSubmit?.();
+          }
+        }}
+        disabled={clozeDisabled}
+        className="w-40 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+      />
+    </div>
+  );
+
   return (
     <div
       ref={chatRef}
@@ -97,7 +227,7 @@ export function ChatPane({
         boxShadow: "var(--shadow-sm)",
       }}
     >
-      {!session && showEmptyState && <div style={{ opacity: 0.7 }}>Start a lesson to begin.</div>}
+      {!session && showEmptyState && <div style={{ opacity: 0.7 }}>{startLessonEmpty}</div>}
 
       {messages.map((m, i) => {
         const prevRole = i > 0 ? messages[i - 1]?.role : null;
@@ -106,7 +236,16 @@ export function ChatPane({
         const isFirstInGroup = prevRole !== m.role;
         const isLastInGroup = nextRole !== m.role;
 
-        const reveal = m.role === "assistant" ? parseRevealMessage(m.content) : null;
+        const revealSource = m.content || m.primaryText || "";
+        const reveal = m.role === "assistant" ? parseRevealMessage(revealSource) : null;
+        const parts = m.role === "assistant" ? splitSupportText(m) : { primary: m.content };
+        const primaryText = m.role === "assistant" ? formatPrimaryText(parts.primary) : parts.primary;
+        const shouldRenderCloze =
+          Boolean(clozeActive && clozePrompt) &&
+          m.role === "assistant" &&
+          i === lastAssistantIndex;
+        const promptText = clozePrompt ?? "";
+        const promptIndex = shouldRenderCloze ? primaryText.indexOf(promptText) : -1;
 
         return (
           <Fragment key={`${m.role}-${i}`}>
@@ -115,25 +254,87 @@ export function ChatPane({
                 <div className="lessonRevealCard">
                   {reveal.explanation && (
                     <div>
-                      <div className="lessonRevealLabel">Explanation</div>
+                      <div className="lessonRevealLabel">{explanationLabel}</div>
                       <div style={{ whiteSpace: "pre-wrap" }}>{reveal.explanation}</div>
                     </div>
                   )}
                   {reveal.answer && (
                     <div className="lessonRevealAnswer">
-                      <div className="lessonRevealLabel">Answer</div>
+                      <div className="lessonRevealLabel">{answerLabel}</div>
                       <div style={{ fontWeight: 700 }}>{reveal.answer}</div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div style={bubbleStyle(m.role, isLastInGroup)}>
-                  {isFirstInGroup && (
-                    <div style={bubbleMetaStyle(m.role)}>
-                      {m.role === "assistant" ? "Tutor" : "You"}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: "70%" }}>
+                  <div style={bubbleStyle(m.role, isLastInGroup)}>
+                    {isFirstInGroup && (
+                      <div style={bubbleMetaStyle(m.role)}>
+                        {m.role === "assistant" ? tutorLabel : youLabel}
+                      </div>
+                    )}
+                    {shouldRenderCloze ? (
+                      <div>
+                        {promptIndex >= 0 ? (
+                          <>
+                            {renderTextWithBreaks(primaryText.slice(0, promptIndex))}
+                            {promptText.includes("___")
+                              ? renderClozeInline(promptText)
+                              : renderTextWithBreaks(promptText)}
+                            {renderTextWithBreaks(primaryText.slice(promptIndex + promptText.length))}
+                            {!promptText.includes("___") && renderClozeFallback()}
+                          </>
+                        ) : (
+                          <>
+                            {renderTextWithBreaks(primaryText)}
+                            {promptText.includes("___")
+                              ? renderClozeInline(promptText)
+                              : renderClozeFallback()}
+                          </>
+                        )}
+                        {clozeHelperText && (
+                          <div className="mt-2 text-sm text-slate-600">{clozeHelperText}</div>
+                        )}
+                        {clozeErrorText && (
+                          <div className="mt-2 text-sm text-rose-600">{clozeErrorText}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>{primaryText}</div>
+                    )}
+                  </div>
+                  {m.role === "assistant" && parts.support && (
+                    <div
+                      style={{
+                        maxWidth: "70%",
+                        borderRadius: 12,
+                        padding: "10px 12px",
+                        background: "var(--surface-muted)",
+                        color: "var(--text-muted)",
+                        fontSize: 13,
+                        lineHeight: 1.4,
+                        border: "1px solid var(--border)",
+                        borderLeft: "3px solid var(--accent-soft)",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.4px",
+                          marginBottom: 6,
+                          color: "var(--text-muted)",
+                          opacity: 0.9,
+                        }}
+                      >
+                        {instructionLanguage
+                          ? `${supportLabel} (${instructionLanguage.toUpperCase()})`
+                          : supportLabel}
+                      </div>
+                      {parts.support}
                     </div>
                   )}
-                  <div>{m.content}</div>
                 </div>
               )}
             </div>

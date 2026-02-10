@@ -42,6 +42,13 @@ export type TeachingProfilePrefs = {
   explanationDepth: TeachingExplanationDepth;
 };
 
+export type SupportMode = "auto" | "manual";
+
+export type SupportProfile = {
+  supportLevel: number;
+  supportMode: SupportMode;
+};
+
 function toPace(v: unknown): TeachingPace | undefined {
   return v === "slow" || v === "normal" ? v : undefined;
 }
@@ -50,24 +57,42 @@ function toExplanationDepth(v: unknown): TeachingExplanationDepth | undefined {
   return v === "short" || v === "normal" || v === "detailed" ? v : undefined;
 }
 
+function toSupportMode(v: unknown): SupportMode | undefined {
+  return v === "auto" || v === "manual" ? v : undefined;
+}
+
+function toSupportLevel(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.max(0, Math.min(1, n));
+}
+
 const DEFAULT_INSTRUCTION_LANGUAGE: SupportedLanguage = "en";
+const DEFAULT_SUPPORT_LEVEL = 0.85;
+const DEFAULT_SUPPORT_MODE: SupportMode = "auto";
 
 export async function updateTeachingProfilePrefs(args: {
   userId: string;
   language: SupportedLanguage;
   pace?: unknown;
   explanationDepth?: unknown;
+  supportLevel?: unknown;
+  supportMode?: unknown;
 }): Promise<void> {
   if (!isMongoReady()) return;
 
   const pace = toPace(args.pace);
   const explanationDepth = toExplanationDepth(args.explanationDepth);
+  const supportLevel = toSupportLevel(args.supportLevel);
+  const supportMode = toSupportMode(args.supportMode);
 
-  if (!pace && !explanationDepth) return;
+  if (!pace && !explanationDepth && supportLevel === undefined && !supportMode) return;
 
   const set: Record<string, unknown> = { lastActiveAt: new Date() };
   if (pace) set.pace = pace;
   if (explanationDepth) set.explanationDepth = explanationDepth;
+  if (supportLevel !== undefined) set.supportLevel = supportLevel;
+  if (supportMode) set.supportMode = supportMode;
 
   await LearnerProfileModel.updateOne(
     { userId: args.userId, language: args.language },
@@ -94,6 +119,65 @@ export async function getInstructionLanguage(
 
   const raw = (doc as any).instructionLanguage;
   return normalizeInstructionLanguage(raw) ?? DEFAULT_INSTRUCTION_LANGUAGE;
+}
+
+export async function getSupportProfile(
+  userId: string,
+  language: SupportedLanguage
+): Promise<SupportProfile> {
+  if (!isMongoReady()) {
+    return { supportLevel: DEFAULT_SUPPORT_LEVEL, supportMode: DEFAULT_SUPPORT_MODE };
+  }
+
+  const doc = (await LearnerProfileModel.findOne(
+    { userId, language },
+    { supportLevel: 1, supportMode: 1 }
+  ).lean()) as Record<string, unknown> | null;
+
+  if (!doc) {
+    return { supportLevel: DEFAULT_SUPPORT_LEVEL, supportMode: DEFAULT_SUPPORT_MODE };
+  }
+
+  const supportLevel = toSupportLevel((doc as any).supportLevel) ?? DEFAULT_SUPPORT_LEVEL;
+  const supportMode = toSupportMode((doc as any).supportMode) ?? DEFAULT_SUPPORT_MODE;
+
+  return { supportLevel, supportMode };
+}
+
+export async function setSupportProfile(args: {
+  userId: string;
+  language: SupportedLanguage;
+  supportLevel?: unknown;
+  supportMode?: unknown;
+}): Promise<SupportProfile> {
+  if (!isMongoReady()) {
+    return { supportLevel: DEFAULT_SUPPORT_LEVEL, supportMode: DEFAULT_SUPPORT_MODE };
+  }
+
+  const supportLevel = toSupportLevel(args.supportLevel);
+  const supportMode = toSupportMode(args.supportMode);
+
+  if (supportLevel === undefined && !supportMode) {
+    return getSupportProfile(args.userId, args.language);
+  }
+
+  const set: Record<string, unknown> = { lastActiveAt: new Date() };
+  if (supportLevel !== undefined) set.supportLevel = supportLevel;
+  if (supportMode) set.supportMode = supportMode;
+
+  await LearnerProfileModel.updateOne(
+    { userId: args.userId, language: args.language },
+    {
+      $setOnInsert: { userId: args.userId, language: args.language },
+      $set: set,
+    },
+    { upsert: true }
+  );
+
+  return {
+    supportLevel: supportLevel ?? DEFAULT_SUPPORT_LEVEL,
+    supportMode: supportMode ?? DEFAULT_SUPPORT_MODE,
+  };
 }
 
 export async function setInstructionLanguage(args: {

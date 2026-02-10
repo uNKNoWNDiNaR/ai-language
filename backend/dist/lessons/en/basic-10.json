@@ -1,0 +1,235 @@
+{
+  "lessonId": "basic-10",
+  "title": "Imperatives and directions",
+  "description": "Use simple commands and directions.",
+  "questions": [
+    {
+      "id": 1,
+      "conceptTag": "a1.imp.sit",
+      "question": "Make a command: down / sit",
+      "prompt": "Make a command: down / sit",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "Sit down.",
+      "acceptedAnswers": [
+        "Sit down.",
+        "Sit down"
+      ],
+      "hintTarget": "Use the verb alone.",
+      "explanationTarget": "Imperatives use the base verb.",
+      "hints": [
+        "Just the verb: sit."
+      ],
+      "examples": [
+        "Sit down.",
+        "Stand up."
+      ]
+    },
+    {
+      "id": 2,
+      "conceptTag": "a1.imp.stand",
+      "question": "Make a command: up / stand",
+      "prompt": "Make a command: up / stand",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "Stand up.",
+      "acceptedAnswers": [
+        "Stand up.",
+        "Stand up"
+      ],
+      "hintTarget": "Use the verb alone.",
+      "explanationTarget": "This is a simple command.",
+      "hints": [
+        "Start with “Stand …”"
+      ],
+      "examples": [
+        "Stand up.",
+        "Sit down."
+      ]
+    },
+    {
+      "id": 3,
+      "conceptTag": "a1.imp.open",
+      "question": "Complete: Open ___ door.",
+      "prompt": "Complete: Open ___ door.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "the"
+      ],
+      "answer": "Open the door.",
+      "acceptedAnswers": [
+        "Open the door.",
+        "Open the door"
+      ],
+      "hintTarget": "Start with: Open …",
+      "explanationTarget": "Use “the” for a specific door.",
+      "hints": [
+        "Open + the + noun"
+      ],
+      "examples": [
+        "Open the door.",
+        "Close the window."
+      ]
+    },
+    {
+      "id": 4,
+      "conceptTag": "a1.imp.close",
+      "question": "Complete: Close ___ window.",
+      "prompt": "Complete: Close ___ window.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "the"
+      ],
+      "answer": "Close the window.",
+      "acceptedAnswers": [
+        "Close the window.",
+        "Close the window"
+      ],
+      "hintTarget": "Start with: Close …",
+      "explanationTarget": "Imperatives can be polite with “please”.",
+      "hints": [
+        "Close + the + noun"
+      ],
+      "examples": [
+        "Close the window.",
+        "Open the door."
+      ]
+    },
+    {
+      "id": 5,
+      "conceptTag": "a1.dir.go_straight",
+      "question": "Make a direction: straight / go",
+      "prompt": "Make a direction: straight / go",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "Go straight.",
+      "acceptedAnswers": [
+        "Go straight.",
+        "Go straight"
+      ],
+      "hintTarget": "Use: Go + direction.",
+      "explanationTarget": "“Go straight” means continue forward.",
+      "hints": [
+        "Start with “Go …”"
+      ],
+      "examples": [
+        "Go straight.",
+        "Go left."
+      ]
+    },
+    {
+      "id": 6,
+      "conceptTag": "a1.dir.turn_left",
+      "question": "Make a direction: left / turn",
+      "prompt": "Make a direction: left / turn",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "Turn left.",
+      "acceptedAnswers": [
+        "Turn left.",
+        "Turn left"
+      ],
+      "hintTarget": "Use: Turn + left.",
+      "explanationTarget": "This is a direction.",
+      "hints": [
+        "Turn + left"
+      ],
+      "examples": [
+        "Turn left.",
+        "Turn right."
+      ]
+    },
+    {
+      "id": 7,
+      "conceptTag": "a1.dir.turn_right",
+      "question": "Someone asks for directions. Tell them to go right.",
+      "prompt": "Someone asks for directions. Tell them to go right.",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Turn right.",
+      "acceptedAnswers": [
+        "Turn right.",
+        "Turn right"
+      ],
+      "hintTarget": "Use: Turn + right.",
+      "explanationTarget": "This is a direction.",
+      "hints": [
+        "Turn + right"
+      ],
+      "examples": [
+        "Turn right.",
+        "Turn left."
+      ]
+    },
+    {
+      "id": 8,
+      "conceptTag": "a1.imp.please",
+      "question": "You need someone to wait. Say it politely.",
+      "prompt": "You need someone to wait. Say it politely.",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Please wait.",
+      "acceptedAnswers": [
+        "Please wait.",
+        "Please wait"
+      ],
+      "hintTarget": "Start with: Please …",
+      "explanationTarget": "“Please” makes a command polite.",
+      "hints": [
+        "Use “Please” first."
+      ],
+      "examples": [
+        "Please wait.",
+        "Please sit down."
+      ]
+    },
+    {
+      "id": 9,
+      "conceptTag": "a1.q.where_is",
+      "question": "Ask about the location: the station.",
+      "prompt": "Ask about the location: the station.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Where is the station?",
+      "acceptedAnswers": [
+        "Where is the station?",
+        "Where is the station"
+      ],
+      "hintTarget": "Start with: Where is …?",
+      "explanationTarget": "Use “Where is …?” to ask for location.",
+      "hints": [
+        "Where is + the + place?"
+      ],
+      "examples": [
+        "Where is the station?",
+        "Where is the hotel?"
+      ]
+    },
+    {
+      "id": 10,
+      "conceptTag": "a1.imp.stop",
+      "question": "You want the driver to stop at this place. What do you say?",
+      "prompt": "You want the driver to stop at this place. What do you say?",
+      "taskType": "typing",
+      "promptStyle": "SITUATION_CUE",
+      "answer": "Stop here.",
+      "acceptedAnswers": [
+        "Stop here.",
+        "Stop here"
+      ],
+      "hintTarget": "Use: Stop + here.",
+      "explanationTarget": "“Stop here” means stop at this place.",
+      "hints": [
+        "End with “here”."
+      ],
+      "examples": [
+        "Stop here.",
+        "Wait here."
+      ]
+    }
+  ]
+}

@@ -110,5 +110,61 @@ describe("evaluateAnswer - regression tests", () => {
     expect(r.result).toBe("wrong");
   });
 
+  it("accepts single-word blank answers for blank prompts", () => {
+    const q = makeQ({
+      prompt: "Complete: I ___ here.",
+      question: "Complete: I ___ here.",
+      expectedInput: "blank",
+      blankAnswers: ["am"],
+      answer: "I am here.",
+    });
+    const r = evaluateAnswer(q as any, "am", "en");
+    expect(r.result).toBe("correct");
+  });
+
+  it("accepts full sentence answers for blank prompts", () => {
+    const q = makeQ({
+      prompt: "Complete: I ___ here.",
+      question: "Complete: I ___ here.",
+      expectedInput: "blank",
+      blankAnswers: ["am"],
+      answer: "I am here.",
+    });
+    const r = evaluateAnswer(q as any, "I am here.", "en");
+    expect(r.result).toBe("correct");
+  });
+
+  it("does not accept single words for non-blank prompts", () => {
+    const q = makeQ({
+      prompt: "Say: I am here.",
+      question: "Say: I am here.",
+      answer: "I am here.",
+      acceptedAnswers: ["I am here."],
+    });
+    const r = evaluateAnswer(q as any, "am", "en");
+    expect(r.result).toBe("wrong");
+  });
+
+  it("derives blank answers when expectedInput is blank and blankAnswers are missing", () => {
+    const q = makeQ({
+      prompt: "Complete: I ___ here.",
+      question: "Complete: I ___ here.",
+      expectedInput: "blank",
+      answer: "I am here.",
+    });
+    const r = evaluateAnswer(q as any, "am", "en");
+    expect(r.result).toBe("correct");
+  });
+
+  it("derives blank answers when prompt has ___ even without expectedInput", () => {
+    const q = makeQ({
+      prompt: "Complete: I ___ here.",
+      question: "Complete: I ___ here.",
+      answer: "I am here.",
+    });
+    const r = evaluateAnswer(q as any, "am", "en");
+    expect(r.result).toBe("correct");
+  });
+
 
 });

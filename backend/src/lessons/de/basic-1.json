@@ -5,17 +5,25 @@
   "questions": [
     {
       "id": 1,
-      "question": "How do you say 'Hello' in German?",
+      "question": "Wie sagt man \"Hello\" auf Deutsch?",
+      "prompt": "Wie sagt man \"Hello\" auf Deutsch?",
       "answer": "Hallo",
       "conceptTag": "greetings_hello",
+      "acceptedAnswers": ["Hallo", "Hi", "Guten Tag", "Hey"],
+      "hintTarget": "Ein einfacher Gruß.",
+      "explanationTarget": "Ein üblicher Gruß ist „Hallo“.",
       "hint": "Common greeting.",
       "examples": ["Hallo", "Hi", "Guten Tag", "Hey"]
     },
     {
       "id": 2,
-      "question": "How do you ask someone's name?",
+      "question": "Wie fragst du nach dem Namen?",
+      "prompt": "Wie fragst du nach dem Namen?",
       "answer": "Wie heißt du?",
       "conceptTag": "asking_name",
+      "acceptedAnswers": ["Wie heißt du?", "Wie ist dein Name?", "Wie heisst du?"],
+      "hintTarget": "Beginnt mit „Wie“.",
+      "explanationTarget": "Du kannst sagen: „Wie heißt du?“.",
       "hint": "Starts with 'Wie'.",
       "examples": [
         "Wie heißt du?", 
@@ -24,9 +32,13 @@
     },
     {
       "id": 3,
-      "question": "Respond to 'Wie geht's?' in German.",
+      "question": "Wie antwortest du auf \"Wie geht's?\"?",
+      "prompt": "Wie antwortest du auf \"Wie geht's?\"?",
       "answer": "Mir geht's gut",
       "conceptTag": "how_are_you_reply",
+      "acceptedAnswers": ["Mir geht's gut", "Mir geht es gut", "Ganz gut", "Gut", "Alles gut"],
+      "hintTarget": "Beginnt mit „Mir geht“.",
+      "explanationTarget": "Eine einfache Antwort ist „Mir geht's gut“.",
       "hint": "Starts with 'Mir geht'.",
       "examples": [
         "Mir geht's gut", 

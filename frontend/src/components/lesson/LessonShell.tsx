@@ -18,9 +18,9 @@ export function LessonShell({ children }: LessonShellProps) {
         }
 
         .lessonShell {
-          max-width: 920px;
+          max-width: 1120px;
           margin: 0 auto;
-          padding: 24px 18px 28px;
+          padding: 32px 24px 36px;
         }
 
         .lessonShell button {
@@ -69,129 +69,9 @@ export function LessonShell({ children }: LessonShellProps) {
         .typingDot:nth-child(2) { animation-delay: .15s; }
         .typingDot:nth-child(3) { animation-delay: .30s; }
 
-        .lessonHome {
-          display: grid;
-          gap: 16px;
-        }
-
-        .lessonHomeCard {
-          background: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 16px;
-          box-shadow: var(--shadow-sm);
-        }
-
-        .lessonCatalogHeader {
-          margin-top: 14px;
-          margin-bottom: 10px;
-        }
-
-        .lessonCatalogTitle {
-          font-weight: 600;
-          font-size: 15px;
-        }
-
-        .lessonCatalogSubtitle {
-          font-size: 12px;
-          color: var(--text-muted);
-          margin-top: 2px;
-        }
-
-        .lessonCatalogList {
-          display: grid;
-          gap: 10px;
-        }
-
-        .lessonCatalogItem {
-          width: 100%;
-          text-align: left;
-          border: 1px solid var(--border);
-          background: var(--surface);
-          border-radius: 14px;
-          padding: 12px 14px;
-          cursor: pointer;
-          display: block;
-        }
-
-        .lessonCatalogItem.isSelected {
-          border-color: var(--accent);
-          box-shadow: 0 0 0 2px rgba(47, 107, 255, 0.12);
-          background: var(--accent-soft);
-        }
-
-        .lessonCatalogContent {
-          display: grid;
-          gap: 6px;
-        }
-
-        .lessonCatalogTitleRow {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-        }
-
-        .lessonCatalogLessonTitle {
-          font-weight: 600;
-          font-size: 14px;
-        }
-
-        .lessonCatalogDescription {
-          font-size: 12px;
-          color: var(--text-muted);
-        }
-
-        .lessonStatusPill {
-          padding: 4px 8px;
-          border-radius: 999px;
-          font-size: 11px;
-          border: 1px solid var(--border);
-          background: var(--surface-muted);
-          color: var(--text-muted);
-          white-space: nowrap;
-        }
-
-        .lessonStatusPill.status-in_progress {
-          background: var(--accent-soft);
-          color: var(--accent);
-          border-color: #C7DAFF;
-        }
-
-        .lessonStatusPill.status-completed {
-          background: #EAF7EF;
-          color: #16A34A;
-          border-color: #C4E7D0;
-        }
-
-        .lessonStatusPill.status-needs_review {
-          background: #FFF3E0;
-          color: #D97706;
-          border-color: #F4C783;
-        }
-
-        .lessonCatalogEmpty {
-          font-size: 12px;
-          color: var(--text-muted);
-          padding: 8px 4px;
-        }
-
-        .lessonHomeRow {
-          display: grid;
-          grid-template-columns: 1fr auto;
-          align-items: center;
-          gap: 16px;
-        }
-
-        .lessonHomeActionsRow {
-          margin-top: 192px;
-          justify-items: end;
-          grid-template-columns: 1fr;
-        }
-
         .lessonInfoGroup {
           display: flex;
-          flex-wrap: nowrap;
+          flex-wrap: wrap;
           gap: 10px;
           align-items: center;
         }
@@ -222,22 +102,6 @@ export function LessonShell({ children }: LessonShellProps) {
           align-items: stretch;
         }
 
-        .lessonResumePracticeBlock {
-          display: grid;
-          gap: 8px;
-          justify-items: center;
-        }
-
-        .lessonResumePracticeText {
-          font-size: 13px;
-          color: var(--text-muted);
-        }
-
-        .lessonHomePracticeCard {
-          display: grid;
-          gap: 10px;
-        }
-
         .lessonPrimaryBtn,
         .lessonSecondaryBtn {
           padding: 12px 20px;
@@ -266,6 +130,11 @@ export function LessonShell({ children }: LessonShellProps) {
           box-shadow: var(--shadow-sm);
         }
 
+        .lessonPrimaryBtn:hover:not(:disabled) {
+          filter: brightness(0.97);
+          box-shadow: var(--shadow-md);
+        }
+
         .lessonPrimaryBtn:disabled {
           opacity: 0.7;
           cursor: not-allowed;
@@ -278,6 +147,11 @@ export function LessonShell({ children }: LessonShellProps) {
         .lessonSecondaryBtn {
           background: white;
           color: var(--text);
+        }
+
+        .lessonSecondaryBtn:hover:not(:disabled) {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 2px rgba(47, 107, 255, 0.08);
         }
 
         .lessonSecondaryBtn:disabled {
@@ -452,12 +326,6 @@ export function LessonShell({ children }: LessonShellProps) {
           color: white !important;
         }
 
-        .lessonResumeBtn {
-          padding: 8px 14px;
-          border-radius: 12px;
-          font-size: 13px;
-        }
-
         .lessonPracticeScreen {
           display: grid;
           gap: 12px;
@@ -553,7 +421,7 @@ export function LessonShell({ children }: LessonShellProps) {
 
         .lessonReviewStep {
           font-size: 13px;
-          color: var(--text-muted);
+          color: #5B6B82;
           font-weight: 600;
         }
 
@@ -581,12 +449,13 @@ export function LessonShell({ children }: LessonShellProps) {
 
         .lessonReviewLabel {
           font-size: 12px;
-          color: var(--text-muted);
+          color: #5B6B82;
         }
 
         .lessonReviewMessage {
           font-size: 14px;
           white-space: pre-wrap;
+          color: #2E3947;
         }
 
         .lessonReviewDots {
@@ -606,6 +475,7 @@ export function LessonShell({ children }: LessonShellProps) {
           padding: 10px 12px;
           border-radius: 12px;
           border: 1px solid var(--border);
+          background: #FFFFFF;
           font-size: 14px;
         }
 

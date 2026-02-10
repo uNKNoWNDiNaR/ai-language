@@ -22,14 +22,26 @@ export type TeachingPrefs = {
   pace: TeachingPace;
   explanationDepth: ExplanationDepth;
   instructionLanguage?: SupportedLanguage;
+  supportLevel?: number;
+  supportMode?: "auto" | "manual";
 };
 
+export type LessonTaskType = "typing" | "speaking";
+
+export type LessonQuestionMeta = {
+  id?: string | number;
+  prompt: string;
+  taskType?: LessonTaskType;
+  expectedInput?: "sentence" | "blank";
+};
 
 export type TutorRole = "user" | "assistant";
 
 export type ChatMessage = {
   role: TutorRole;
   content: string;
+  primaryText?: string;
+  supportText?: string;
   timestamp?: string;
 };
 
@@ -92,6 +104,7 @@ export type StartLessonResponse = {
   session: LessonSession;
   tutorMessage?: string;
   progress?: LessonProgressPayload;
+  question?: LessonQuestionMeta;
 };
 
 export type SubmitAnswerResponse = {
@@ -101,6 +114,7 @@ export type SubmitAnswerResponse = {
   hint?: HintPayload;
   practice?: PracticePayload;
   progress?: LessonProgressPayload;
+  question?: LessonQuestionMeta;
 };
 
 export type SubmitPracticeResponse = {
@@ -114,19 +128,32 @@ export type GetSessionResponse = {
     session: LessonSession;
     tutorMessage?: string;
     progress?: LessonProgressPayload;
+    question?: LessonQuestionMeta;
 };
 
 export type FeedbackRequest = {
   userId: string;
   anonSessionId: string;
-  feltRushed?:boolean;
+  feltRushed?: boolean;
   helpedUnderstand?: number; // 1..5
   confusedText?: string;
+  improveText?: string;
 
-  //Optional fallback context if session is gone
+  screen?: "home" | "lesson" | "review" | "other";
+  intent?: "start" | "continue" | "review" | "change_settings" | "exploring";
+  crowdedRating?: "not_at_all" | "a_little" | "yes_a_lot";
+  feltBest?: Array<"continue_card" | "units" | "optional_review" | "calm_tone" | "other">;
+
+  // Optional fallback context if session is gone
   lessonId?: string;
   language?: SupportedLanguage;
   conceptTag?: string;
+  targetLanguage?: SupportedLanguage;
+  instructionLanguage?: SupportedLanguage;
+  sessionKey?: string;
+  currentQuestionIndex?: number;
+  appVersion?: string;
+  timestamp?: string;
 };
 
 export type FeedbackResponse = {ok: true}
@@ -271,6 +298,19 @@ export async function getReviewCandidates(params: {
     language: params.language,
     ...(typeof maxItems === "number" ? { maxItems } : {}),
   });
+  return data;
+}
+
+export type GenerateReviewQueueResponse = {
+  added: number;
+};
+
+export async function generateReviewQueue(params: {
+  userId: string;
+  language: SupportedLanguage;
+  lessonId: string;
+}): Promise<GenerateReviewQueueResponse> {
+  const { data } = await http.post<GenerateReviewQueueResponse>("/review/generate", params);
   return data;
 }
 

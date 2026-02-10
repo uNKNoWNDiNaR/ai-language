@@ -20,7 +20,119 @@ const lessonHelpers_1 = require("./lessonHelpers");
 const mapLike_1 = require("../utils/mapLike");
 const sendError_1 = require("../http/sendError");
 const logger_1 = require("../utils/logger");
+const supportLevelService_1 = require("../services/supportLevelService");
+const supportResolver_1 = require("../services/supportResolver");
+const supportFallback_1 = require("../services/supportFallback");
+const supportPolicy_1 = require("../services/supportPolicy");
 const FORCED_ADVANCE_PRACTICE_THRESHOLD = 2;
+const DEFAULT_SUPPORT_LEVEL = 0.85;
+function isExplicitSupportRequest(answer) {
+    const t = String(answer || "").trim().toLowerCase();
+    if (!t)
+        return false;
+    return (t.includes("explain") ||
+        t.includes("help") ||
+        t.includes("english") ||
+        t.includes("deutsch") ||
+        t.includes("german") ||
+        t.includes("spanish") ||
+        t.includes("french"));
+}
+function resolveSupportEventType(args) {
+    if (args.intent === "END_LESSON")
+        return "SESSION_SUMMARY";
+    if (args.intent === "FORCED_ADVANCE")
+        return "FORCED_ADVANCE";
+    if (args.explicitSupportRequest)
+        return "USER_REQUESTED_EXPLAIN";
+    if (args.repeatedConfusion)
+        return "USER_CONFUSED";
+    if (args.hintPresent)
+        return "HINT_AUTO";
+    if (args.newConcept && (args.intent === "ASK_QUESTION" || args.intent === "ADVANCE_LESSON")) {
+        return "INTRO_NEW_CONCEPT";
+    }
+    if (args.evaluationResult === "almost")
+        return "ALMOST_FEEDBACK";
+    if (args.evaluationResult === "wrong")
+        return "WRONG_FEEDBACK";
+    if (args.evaluationResult === "correct")
+        return "CORRECT_FEEDBACK";
+    return "SESSION_START";
+}
+function updateRecentConfusions(session, conceptTag, isIncorrect, forcedAdvance) {
+    if (!conceptTag)
+        return false;
+    const list = Array.isArray(session.recentConfusions) ? session.recentConfusions : [];
+    if (isIncorrect || forcedAdvance) {
+        list.push({ conceptTag, timestamp: new Date() });
+    }
+    const trimmed = list.slice(-10);
+    session.recentConfusions = trimmed;
+    const count = trimmed.filter((entry) => entry?.conceptTag === conceptTag).length;
+    return forcedAdvance || count >= 2;
+}
+function resolveManualSupportState(session, supportMode) {
+    const lastMode = session.lastSupportModeFromProfile ?? "auto";
+    if (supportMode !== lastMode) {
+        session.lastSupportModeFromProfile = supportMode;
+        session.manualSupportTurnsLeft = supportMode === "manual" ? 5 : 0;
+    }
+}
+function getEffectiveSupportLevel(session, supportLevel, supportMode) {
+    resolveManualSupportState(session, supportMode);
+    const turnsLeft = typeof session.manualSupportTurnsLeft === "number" ? session.manualSupportTurnsLeft : 0;
+    const manualBoostActive = supportMode === "manual" && turnsLeft > 0;
+    const effectiveSupportLevel = (0, supportPolicy_1.clampSupportLevel)(supportLevel);
+    return { effectiveSupportLevel, manualBoostActive };
+}
+async function consumeManualSupportTurn(session, supportMode, userId, language) {
+    if (supportMode !== "manual")
+        return;
+    const turnsLeft = typeof session.manualSupportTurnsLeft === "number" ? session.manualSupportTurnsLeft : 0;
+    if (turnsLeft <= 0)
+        return;
+    const next = Math.max(0, turnsLeft - 1);
+    session.manualSupportTurnsLeft = next;
+    if (next === 0) {
+        session.lastSupportModeFromProfile = "auto";
+        try {
+            await (0, learnerProfileStore_1.updateTeachingProfilePrefs)({
+                userId,
+                language,
+                supportMode: "auto",
+            });
+        }
+        catch {
+            // best-effort
+        }
+    }
+}
+function getConceptTag(question, lessonId) {
+    if (question && typeof question.conceptTag === "string" && question.conceptTag.trim()) {
+        return question.conceptTag.trim();
+    }
+    if (lessonId && question?.id != null) {
+        return `lesson-${lessonId}-q${String(question.id)}`;
+    }
+    return "";
+}
+function buildQuestionMeta(question) {
+    if (!question)
+        return null;
+    const promptRaw = typeof question.prompt === "string" ? question.prompt.trim() : "";
+    const questionRaw = typeof question.question === "string" ? question.question.trim() : "";
+    const prompt = promptRaw || questionRaw;
+    if (!prompt)
+        return null;
+    const taskType = question?.taskType === "speaking" ? "speaking" : "typing";
+    const expectedInputRaw = typeof question?.expectedInput === "string" ? question.expectedInput.trim().toLowerCase() : "";
+    const expectedInput = expectedInputRaw === "blank" || expectedInputRaw === "sentence"
+        ? expectedInputRaw
+        : undefined;
+    const idRaw = question?.id ?? "";
+    return expectedInput ? { id: idRaw, prompt, taskType, expectedInput } : { id: idRaw, prompt, taskType };
+}
 function toMapLike(map) {
     if (map instanceof Map)
         return map;
@@ -61,10 +173,11 @@ async function buildReviewQueueItems(lesson, lessonId, questionIds, now, languag
         const prompt = await (0, reviewPrompt_1.buildReviewPrompt)({
             language,
             lessonId,
-            sourceQuestionText: q.question,
+            sourceQuestionText: q.prompt || q.question,
             expectedAnswerRaw: expected,
             examples: q.examples,
             conceptTag,
+            promptStyle: q.promptStyle,
         });
         items.push({
             id: (0, crypto_1.randomUUID)(),
@@ -79,7 +192,7 @@ async function buildReviewQueueItems(lesson, lessonId, questionIds, now, languag
     }
     return items;
 }
-async function ensureTutorPromptOnResume(session, instructionLanguage) {
+async function ensureTutorPromptOnResume(session, instructionLanguage, supportLevel, supportMode = "auto") {
     const last = session.messages?.[session.messages.length - 1];
     if (last && last.role === "assistant")
         return null;
@@ -88,7 +201,8 @@ async function ensureTutorPromptOnResume(session, instructionLanguage) {
         return null;
     const idx = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
     const q = lesson.questions[idx];
-    const questionText = q ? q.question : "";
+    const questionText = q ? (q.prompt || q.question) : "";
+    const conceptTag = q ? getConceptTag(q, session.lessonId) : "";
     let intent;
     if (session.state === "COMPLETE")
         intent = "END_LESSON";
@@ -96,20 +210,48 @@ async function ensureTutorPromptOnResume(session, instructionLanguage) {
         intent = "ADVANCE_LESSON";
     else
         intent = "ASK_QUESTION";
-    const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, instructionLanguage ? { instructionLanguage } : undefined);
+    const { effectiveSupportLevel, manualBoostActive } = getEffectiveSupportLevel(session, supportLevel ?? DEFAULT_SUPPORT_LEVEL, supportMode);
+    let includeSupport = Boolean(instructionLanguage) &&
+        (0, supportPolicy_1.shouldIncludeSupportPolicy)({
+            eventType: "SESSION_START",
+            supportLevel: effectiveSupportLevel,
+            questionIndex: idx,
+            repeatedConfusion: false,
+            explicitRequest: false,
+            forceNoSupport: Boolean(session.forceNoSupport),
+        });
+    if (intent === "ASK_QUESTION" || intent === "ADVANCE_LESSON") {
+        includeSupport = false;
+    }
+    const supportCharLimit = (0, supportPolicy_1.getSupportCharLimit)(effectiveSupportLevel);
+    const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
+        ...(instructionLanguage ? { instructionLanguage } : {}),
+        supportLevel: effectiveSupportLevel,
+        supportTextDirective: "omit",
+        eventType: "SESSION_START",
+        includeSupport,
+        supportCharLimit,
+        conceptTag,
+    });
     let tutorMessage;
+    let supportText = "";
     try {
-        tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: session.language });
+        const response = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: session.language });
+        tutorMessage = response.primaryText;
+        if (!(0, tutorOutputGuard_1.validateJsonShape)(response)) {
+            tutorMessage = "";
+        }
     }
     catch {
         tutorMessage = "I'm having trouble responding right now. Please try again later.";
     }
-    if (!(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
-        intent,
-        language: session.language,
-        message: tutorMessage,
-        questionText,
-    })) {
+    if (!(0, tutorOutputGuard_1.validatePrimaryLanguage)(tutorMessage, session.language) ||
+        !(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
+            intent,
+            language: session.language,
+            message: tutorMessage,
+            questionText,
+        })) {
         tutorMessage = (0, tutorOutputGuard_1.buildTutorFallback)({
             intent,
             language: session.language,
@@ -117,10 +259,37 @@ async function ensureTutorPromptOnResume(session, instructionLanguage) {
             questionText,
         });
     }
+    if (includeSupport && instructionLanguage) {
+        const supportResult = await (0, supportResolver_1.resolveSupportText)({
+            targetLanguage: session.language,
+            instructionLanguage,
+            supportLevel: effectiveSupportLevel,
+            includeSupport,
+            supportCharLimit,
+            eventType: "SESSION_START",
+            conceptTag,
+            hintTarget: typeof q?.hintTarget === "string" ? q.hintTarget : undefined,
+            explanationTarget: typeof q?.explanationTarget === "string" ? q.explanationTarget : undefined,
+        });
+        supportText = supportResult.supportText;
+        const supportOk = (0, tutorOutputGuard_1.validateSupportLanguage)(supportText, instructionLanguage) &&
+            (0, tutorOutputGuard_1.validateSupportLength)(supportText, supportCharLimit);
+        if (!supportOk) {
+            const fallback = (0, supportFallback_1.buildSupportFallback)(instructionLanguage, effectiveSupportLevel, "SESSION_START");
+            supportText = (0, tutorOutputGuard_1.validateSupportLanguage)(fallback, instructionLanguage) ? fallback : "";
+        }
+    }
+    else {
+        supportText = "";
+    }
+    const combinedMessage = supportText ? `${tutorMessage}\n\n${supportText}` : tutorMessage;
     session.messages = session.messages || [];
-    session.messages.push({ role: "assistant", content: tutorMessage });
+    session.messages.push({ role: "assistant", content: combinedMessage });
+    if (manualBoostActive) {
+        await consumeManualSupportTurn(session, supportMode, session.userId, session.language);
+    }
     await session.save();
-    return tutorMessage;
+    return combinedMessage;
 }
 //----------------------
 // Start lesson
@@ -131,7 +300,7 @@ const startLesson = async (req, res) => {
     if (!userId)
         return (0, sendError_1.sendError)(res, 400, "UserId is required", "INVALID_REQUEST");
     if (!lang)
-        return (0, sendError_1.sendError)(res, 400, "language must be 'en' (English only for now)", "INVALID_REQUEST");
+        return (0, sendError_1.sendError)(res, 400, "language must be one of: en, de, es, fr", "INVALID_REQUEST");
     if (!lessonId)
         return (0, sendError_1.sendError)(res, 400, "lessonId is required", "INVALID_REQUEST");
     try {
@@ -143,6 +312,8 @@ const startLesson = async (req, res) => {
                     language: lang,
                     pace: teachingPrefs?.pace,
                     explanationDepth: teachingPrefs?.explanationDepth,
+                    supportLevel: teachingPrefs?.supportLevel,
+                    supportMode: teachingPrefs?.supportMode,
                 });
             }
             catch {
@@ -171,22 +342,35 @@ const startLesson = async (req, res) => {
                 instructionLanguage = null;
             }
         }
+        let supportLevel = DEFAULT_SUPPORT_LEVEL;
+        let supportMode = "auto";
+        try {
+            const supportProfile = await (0, learnerProfileStore_1.getSupportProfile)(userId, lang);
+            supportLevel = (0, supportPolicy_1.clampSupportLevel)(supportProfile.supportLevel);
+            supportMode = supportProfile.supportMode === "manual" ? "manual" : "auto";
+        }
+        catch {
+            supportLevel = DEFAULT_SUPPORT_LEVEL;
+        }
         let session = await sessionState_1.LessonSessionModel.findOne({ userId });
         if (session) {
             const sameLesson = session.lessonId === lessonId && session.language === lang;
             if (sameLesson) {
                 if (restart === true) {
-                    await progressState_1.LessonProgressModel.deleteOne({ userId });
+                    await progressState_1.LessonProgressModel.deleteOne({ userId, language: lang, lessonId });
                     session = null;
                 }
                 else {
                     const resumeLesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
                     const progress = resumeLesson ? (0, lessonHelpers_1.buildProgressPayload)(session, resumeLesson) : undefined;
-                    const tutorMessage = await ensureTutorPromptOnResume(session, instructionLanguage);
+                    const resumeQuestion = resumeLesson?.questions?.[session.currentQuestionIndex ?? 0];
+                    const question = buildQuestionMeta(resumeQuestion);
+                    const tutorMessage = await ensureTutorPromptOnResume(session, instructionLanguage, supportLevel, supportMode);
                     return res.status(200).json({
                         session,
                         ...(tutorMessage ? { tutorMessage } : {}),
                         ...(progress ? { progress } : {}),
+                        ...(question ? { question } : {}),
                     });
                 }
             }
@@ -205,31 +389,100 @@ const startLesson = async (req, res) => {
             currentQuestionIndex: 0,
             messages: [],
             language: lang,
+            ...(typeof teachingPrefs?.forceNoSupport === "boolean"
+                ? { forceNoSupport: teachingPrefs.forceNoSupport }
+                : {}),
         };
         const firstQuestion = lesson.questions[0];
+        const firstQuestionText = firstQuestion ? (firstQuestion.prompt || firstQuestion.question) : "";
+        const firstConceptTag = getConceptTag(firstQuestion, lessonId);
+        if (firstConceptTag) {
+            const seen = new Map();
+            seen.set(firstConceptTag, 1);
+            newSession.seenConceptTags = seen;
+        }
         const intent = "ASK_QUESTION";
-        const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(newSession, intent, firstQuestion.question, instructionLanguage ? { instructionLanguage } : undefined);
+        const { effectiveSupportLevel, manualBoostActive } = getEffectiveSupportLevel(newSession, supportLevel, supportMode);
+        let includeSupport = Boolean(instructionLanguage) &&
+            (0, supportPolicy_1.shouldIncludeSupportPolicy)({
+                eventType: "SESSION_START",
+                supportLevel: effectiveSupportLevel,
+                questionIndex: 0,
+                repeatedConfusion: false,
+                explicitRequest: false,
+                forceNoSupport: Boolean(newSession.forceNoSupport),
+            });
+        if (intent === "ASK_QUESTION" || intent === "ADVANCE_LESSON") {
+            includeSupport = false;
+        }
+        const supportCharLimit = (0, supportPolicy_1.getSupportCharLimit)(effectiveSupportLevel);
+        const tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(newSession, intent, firstQuestionText, {
+            ...(instructionLanguage ? { instructionLanguage } : {}),
+            supportLevel: effectiveSupportLevel,
+            supportTextDirective: "omit",
+            eventType: "SESSION_START",
+            includeSupport,
+            supportCharLimit,
+            conceptTag: firstConceptTag,
+            teachingPace: teachingPrefs?.pace,
+            explanationDepth: teachingPrefs?.explanationDepth,
+        });
         let tutorMessage;
+        let supportText = "";
         try {
-            tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: lang });
+            const response = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: lang });
+            tutorMessage = response.primaryText;
+            if (!(0, tutorOutputGuard_1.validateJsonShape)(response)) {
+                tutorMessage = "";
+            }
         }
         catch {
             tutorMessage = "I'm having trouble responding right now. Please try again later.";
         }
-        if (!(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
-            intent,
-            language: lang,
-            message: tutorMessage,
-            questionText: firstQuestion.question,
-        })) {
+        if (!(0, tutorOutputGuard_1.validatePrimaryLanguage)(tutorMessage, lang) ||
+            !(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
+                intent,
+                language: lang,
+                message: tutorMessage,
+                questionText: firstQuestionText,
+            })) {
             tutorMessage = (0, tutorOutputGuard_1.buildTutorFallback)({
                 intent,
                 language: lang,
                 message: tutorMessage,
-                questionText: firstQuestion.question,
+                questionText: firstQuestionText,
             });
         }
-        const intitialMessage = { role: "assistant", content: tutorMessage };
+        if (includeSupport && instructionLanguage) {
+            const supportResult = await (0, supportResolver_1.resolveSupportText)({
+                targetLanguage: lang,
+                instructionLanguage,
+                supportLevel: effectiveSupportLevel,
+                includeSupport,
+                supportCharLimit,
+                eventType: "SESSION_START",
+                conceptTag: firstConceptTag,
+                hintTarget: typeof firstQuestion?.hintTarget === "string" ? firstQuestion.hintTarget : undefined,
+                explanationTarget: typeof firstQuestion?.explanationTarget === "string"
+                    ? firstQuestion.explanationTarget
+                    : undefined,
+            });
+            supportText = supportResult.supportText;
+            const supportOk = (0, tutorOutputGuard_1.validateSupportLanguage)(supportText, instructionLanguage) &&
+                (0, tutorOutputGuard_1.validateSupportLength)(supportText, supportCharLimit);
+            if (!supportOk) {
+                const fallback = (0, supportFallback_1.buildSupportFallback)(instructionLanguage, effectiveSupportLevel, "SESSION_START");
+                supportText = (0, tutorOutputGuard_1.validateSupportLanguage)(fallback, instructionLanguage) ? fallback : "";
+            }
+        }
+        else {
+            supportText = "";
+        }
+        const combinedMessage = supportText ? `${tutorMessage}\n\n${supportText}` : tutorMessage;
+        if (manualBoostActive) {
+            await consumeManualSupportTurn(newSession, supportMode, userId, lang);
+        }
+        const intitialMessage = { role: "assistant", content: combinedMessage };
         session = await sessionState_1.LessonSessionModel.create({ ...newSession, messages: [intitialMessage] });
         await progressState_1.LessonProgressModel.updateOne({ userId, language: lang, lessonId }, {
             $setOnInsert: { status: "in_progress" },
@@ -239,7 +492,13 @@ const startLesson = async (req, res) => {
             },
         }, { upsert: true });
         const progress = (0, lessonHelpers_1.buildProgressPayload)(session, lesson);
-        return res.status(201).json({ session, tutorMessage, progress });
+        const question = buildQuestionMeta(firstQuestion);
+        return res.status(201).json({
+            session,
+            tutorMessage: combinedMessage,
+            progress,
+            ...(question ? { question } : {}),
+        });
     }
     catch (err) {
         (0, logger_1.logServerError)("startLesson", err, res.locals?.requestId);
@@ -274,6 +533,8 @@ const submitAnswer = async (req, res) => {
                     language: session.language,
                     pace: teachingPrefs?.pace,
                     explanationDepth: teachingPrefs?.explanationDepth,
+                    supportLevel: teachingPrefs?.supportLevel,
+                    supportMode: teachingPrefs?.supportMode,
                 });
             }
             catch {
@@ -305,6 +566,22 @@ const submitAnswer = async (req, res) => {
                 instructionLanguage = null;
             }
         }
+        let supportLevel = DEFAULT_SUPPORT_LEVEL;
+        let supportMode = "auto";
+        try {
+            const supportProfile = await (0, learnerProfileStore_1.getSupportProfile)(session.userId, session.language);
+            supportLevel = (0, supportPolicy_1.clampSupportLevel)(supportProfile.supportLevel);
+            supportMode = supportProfile.supportMode === "manual" ? "manual" : "auto";
+        }
+        catch {
+            supportLevel = DEFAULT_SUPPORT_LEVEL;
+        }
+        if (typeof teachingPrefs?.forceNoSupport === "boolean") {
+            session.forceNoSupport = teachingPrefs.forceNoSupport;
+        }
+        const { effectiveSupportLevel, manualBoostActive } = getEffectiveSupportLevel(session, supportLevel, supportMode);
+        const supportCharLimit = (0, supportPolicy_1.getSupportCharLimit)(effectiveSupportLevel);
+        const forceNoSupport = Boolean(session.forceNoSupport);
         const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
         if (!lesson)
             return (0, sendError_1.sendError)(res, 404, "Lesson not found", "NOT_FOUND");
@@ -334,9 +611,24 @@ const submitAnswer = async (req, res) => {
         session.lastAnswerByQuestionId = lastAnswerMap;
         const evaluation = (0, answerEvaluator_1.evaluateAnswer)(currentQuestion, answer, session.language);
         const isCorrect = evaluation.result === "correct";
-        const hintObj = (0, lessonHelpers_1.chooseHintForAttempt)(currentQuestion, attemptCount);
-        const hintForResponse = hintObj;
-        const hintTextForPrompt = hintObj ? hintObj.text : "";
+        const conceptTag = getConceptTag(currentQuestion, session.lessonId);
+        const conceptMap = session.mistakeCountByConceptTag ?? new Map();
+        if (!isCorrect && conceptTag) {
+            const prev = (0, mapLike_1.mapLikeGetNumber)(conceptMap, conceptTag, 0);
+            session.mistakeCountByConceptTag = (0, mapLike_1.mapLikeSet)(conceptMap, conceptTag, prev + 1);
+        }
+        else if (conceptTag && !session.mistakeCountByConceptTag) {
+            session.mistakeCountByConceptTag = conceptMap;
+        }
+        if (!isCorrect) {
+            if (evaluation.result === "almost") {
+                session.almostCount = (session.almostCount || 0) + 1;
+            }
+            else {
+                session.wrongCount = (session.wrongCount || 0) + 1;
+            }
+        }
+        const explicitSupportRequest = isExplicitSupportRequest(answer);
         let markNeedsReview = false;
         if (isCorrect) {
             if (currentIndex + 1 >= lesson.questions.length) {
@@ -352,6 +644,7 @@ const submitAnswer = async (req, res) => {
         else {
             if (attemptCount >= 4) {
                 markNeedsReview = true;
+                session.forcedAdvanceCount = (session.forcedAdvanceCount || 0) + 1;
                 if (currentIndex + 1 >= lesson.questions.length) {
                     session.state = "COMPLETE";
                 }
@@ -366,7 +659,8 @@ const submitAnswer = async (req, res) => {
                 session.state = "USER_INPUT";
             }
         }
-        const baseStatus = session.state === "COMPLETE" ? (markNeedsReview ? "needs_review" : "completed") : "in_progress";
+        const repeatedConfusion = updateRecentConfusions(session, conceptTag, !isCorrect, markNeedsReview);
+        let baseStatus = session.state === "COMPLETE" ? (markNeedsReview ? "needs_review" : "completed") : "in_progress";
         const updateMistakes = {};
         if (markNeedsReview) {
             updateMistakes[`mistakesByQuestion.${qid}`] = 1;
@@ -420,9 +714,74 @@ const submitAnswer = async (req, res) => {
                 // best-effort: never block lesson completion
             }
         }
+        if (baseStatus === "completed" || baseStatus === "needs_review") {
+            try {
+                const stats = {
+                    wrongCount: Number(session.wrongCount || 0),
+                    almostCount: Number(session.almostCount || 0),
+                    forcedAdvanceCount: Number(session.forcedAdvanceCount || 0),
+                    hintsUsedCount: Number(session.hintsUsedCount || 0),
+                };
+                const delta = (0, supportLevelService_1.computeSupportLevelDelta)(stats, supportLevel);
+                if (delta !== 0) {
+                    await (0, supportLevelService_1.updateSupportLevel)(session.userId, session.language, delta);
+                }
+            }
+            catch {
+                // best-effort
+            }
+        }
         const intent = (0, lessonHelpers_1.getTutorIntent)(session.state, isCorrect, markNeedsReview);
         const safeIndex = typeof session.currentQuestionIndex === "number" ? session.currentQuestionIndex : 0;
-        const questionText = session.state !== "COMPLETE" && lesson.questions[safeIndex] ? lesson.questions[safeIndex].question : "";
+        const nextQuestion = session.state !== "COMPLETE" && lesson.questions[safeIndex] ? lesson.questions[safeIndex] : null;
+        const questionText = nextQuestion ? (nextQuestion.prompt || nextQuestion.question) : "";
+        const nextConceptTag = nextQuestion ? getConceptTag(nextQuestion, session.lessonId) : "";
+        const seenConceptTags = session.seenConceptTags ?? new Map();
+        const hasSeenConcept = nextConceptTag
+            ? (0, mapLike_1.mapLikeGetNumber)(seenConceptTags, nextConceptTag, 0) > 0
+            : false;
+        const newConcept = nextConceptTag ? !hasSeenConcept : false;
+        if (nextConceptTag && !hasSeenConcept) {
+            session.seenConceptTags = (0, mapLike_1.mapLikeSet)(seenConceptTags, nextConceptTag, 1);
+        }
+        else if (!session.seenConceptTags) {
+            session.seenConceptTags = seenConceptTags;
+        }
+        const hintEvent = !isCorrect && attemptCount >= 2 && attemptCount < 4;
+        const eventType = resolveSupportEventType({
+            intent,
+            evaluationResult: evaluation.result,
+            attemptCount,
+            hintPresent: hintEvent,
+            newConcept,
+            explicitSupportRequest,
+            repeatedConfusion,
+        });
+        let includeSupport = Boolean(instructionLanguage) &&
+            (0, supportPolicy_1.shouldIncludeSupportPolicy)({
+                eventType,
+                supportLevel: effectiveSupportLevel,
+                questionIndex: currentIndex,
+                repeatedConfusion,
+                explicitRequest: explicitSupportRequest,
+                forceNoSupport,
+            });
+        if (intent === "ASK_QUESTION" || intent === "ADVANCE_LESSON") {
+            includeSupport = false;
+        }
+        const hintObj = (0, lessonHelpers_1.chooseHintForAttempt)(currentQuestion, attemptCount, {
+            instructionLanguage: instructionLanguage ?? undefined,
+            targetLanguage: session.language,
+            supportLevel: effectiveSupportLevel,
+            recentConfusion: repeatedConfusion,
+            includeSupport,
+        });
+        const hintTextForPrompt = hintObj?.text ?? "";
+        const hintForResponse = hintObj ? { level: hintObj.level, text: hintObj.text } : undefined;
+        if (hintObj && hintObj.level >= 1 && hintObj.level < 3) {
+            session.hintsUsedCount = (session.hintsUsedCount || 0) + 1;
+        }
+        let supportText = "";
         const revealAnswer = intent === "FORCED_ADVANCE" ? String(currentQuestion.answer || "").trim() : "";
         const retryMessage = intent === "ENCOURAGE_RETRY"
             ? (0, staticTutorMessages_1.getDeterministicRetryMessage)({
@@ -431,7 +790,8 @@ const submitAnswer = async (req, res) => {
                 repeatedSameWrong,
             })
             : "";
-        const forcedAdvanceMessage = intent === "FORCED_ADVANCE" ? (0, staticTutorMessages_1.getForcedAdvanceMessage)() : "";
+        const isEnglishTarget = session.language === "en";
+        const forcedAdvanceMessage = intent === "FORCED_ADVANCE" && isEnglishTarget ? (0, staticTutorMessages_1.getForcedAdvanceMessage)() : "";
         const hintLeadIn = intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? (0, staticTutorMessages_1.getHintLeadIn)(attemptCount) : "";
         let teachingPace = "normal";
         let explanationDepth = "normal";
@@ -476,6 +836,7 @@ const submitAnswer = async (req, res) => {
                 .trim()
             : hintLeadIn;
         const forcedAdvanceMessageWithFocus = intent === "FORCED_ADVANCE" ? forcedAdvanceMessage : forcedAdvanceMessage;
+        const eventConceptTag = intent === "ENCOURAGE_RETRY" || intent === "FORCED_ADVANCE" ? conceptTag : nextConceptTag;
         let retryExplanationText = "";
         try {
             retryExplanationText =
@@ -500,62 +861,158 @@ const submitAnswer = async (req, res) => {
             : intent === "FORCED_ADVANCE"
                 ? forcedAdvanceExplanationText
                 : "";
-        let tutorPrompt;
-        try {
-            tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
-                retryMessage,
+        let tutorMessage = "";
+        if (intent === "ENCOURAGE_RETRY") {
+            const lines = [];
+            const retryLine = isEnglishTarget ? retryMessage : "";
+            if (retryLine)
+                lines.push(retryLine);
+            const showPrimaryHint = !includeSupport && Boolean(hintTextForPrompt);
+            if (showPrimaryHint) {
+                if (isEnglishTarget && hintLeadInWithFocus)
+                    lines.push(hintLeadInWithFocus);
+                const hintLine = `${isEnglishTarget ? "Hint: " : ""}${hintTextForPrompt}`.trim();
+                if (hintLine)
+                    lines.push(hintLine);
+            }
+            if (questionText)
+                lines.push(questionText);
+            tutorMessage = lines.join("\n").trim();
+            if (!tutorMessage) {
+                tutorMessage = questionText || retryLine;
+            }
+        }
+        else {
+            let tutorPrompt;
+            try {
+                tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
+                    retryMessage,
+                    hintText: "",
+                    hintLeadIn: "",
+                    forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
+                    revealAnswer: "",
+                    learnerProfileSummary: learnerProfileSummary ?? undefined,
+                    explanationText: "",
+                    instructionLanguage: instructionLanguage ?? undefined,
+                    supportLevel: effectiveSupportLevel,
+                    supportTextDirective: "omit",
+                    eventType,
+                    includeSupport,
+                    supportCharLimit,
+                    conceptTag: eventConceptTag,
+                    teachingPace,
+                    explanationDepth,
+                });
+            }
+            catch {
+                tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
+                    retryMessage,
+                    hintText: "",
+                    hintLeadIn: "",
+                    forcedAdvanceMessage,
+                    revealAnswer: "",
+                    learnerProfileSummary: learnerProfileSummary ?? undefined,
+                    explanationText: intent === "FORCED_ADVANCE" ? (currentQuestion?.explanation ?? "") : "",
+                    instructionLanguage: instructionLanguage ?? undefined,
+                    supportLevel: effectiveSupportLevel,
+                    supportTextDirective: "omit",
+                    eventType,
+                    includeSupport,
+                    supportCharLimit,
+                    conceptTag: eventConceptTag,
+                    teachingPace,
+                    explanationDepth,
+                });
+            }
+            try {
+                const response = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: session.language });
+                tutorMessage = response.primaryText;
+                if (!(0, tutorOutputGuard_1.validateJsonShape)(response)) {
+                    tutorMessage = "";
+                }
+            }
+            catch {
+                tutorMessage = "I'm having trouble responding right now. please try again.";
+            }
+        }
+        const retryMessageForGuard = isEnglishTarget ? retryMessage : "";
+        if (!(0, tutorOutputGuard_1.validatePrimaryLanguage)(tutorMessage, session.language) ||
+            !(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
+                intent,
+                language: session.language,
+                message: tutorMessage,
+                questionText,
+                retryMessage: retryMessageForGuard,
                 hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
                 hintLeadIn: hintLeadInWithFocus,
                 forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
-                revealAnswer: "",
-                learnerProfileSummary: learnerProfileSummary ?? undefined,
-                explanationText: "",
-                instructionLanguage: instructionLanguage ?? undefined,
-            });
-        }
-        catch {
-            tutorPrompt = (0, promptBuilder_1.buildTutorPrompt)(session, intent, questionText, {
-                retryMessage,
-                hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-                hintLeadIn,
-                forcedAdvanceMessage,
-                revealAnswer: "",
-                learnerProfileSummary: learnerProfileSummary ?? undefined,
-                explanationText: intent === "FORCED_ADVANCE" ? (currentQuestion?.explanation ?? "") : "",
-                instructionLanguage: instructionLanguage ?? undefined,
-            });
-        }
-        let tutorMessage;
-        try {
-            tutorMessage = await (0, openaiClient_1.generateTutorResponse)(tutorPrompt, intent, { language: session.language });
-        }
-        catch {
-            tutorMessage = "I'm having trouble responding right now. please try again.";
-        }
-        if (!(0, tutorOutputGuard_1.isTutorMessageAcceptable)({
-            intent,
-            language: session.language,
-            message: tutorMessage,
-            questionText,
-            retryMessage,
-            hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
-            hintLeadIn: hintLeadInWithFocus,
-            forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
-            revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
-        })) {
+                revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
+            })) {
             tutorMessage = (0, tutorOutputGuard_1.buildTutorFallback)({
                 intent,
                 language: session.language,
                 message: tutorMessage,
                 questionText,
-                retryMessage,
+                retryMessage: retryMessageForGuard,
                 hintText: intent === "ENCOURAGE_RETRY" ? hintTextForPrompt : "",
                 hintLeadIn: hintLeadInWithFocus,
                 forcedAdvanceMessage: forcedAdvanceMessageWithFocus,
                 revealAnswer: intent === "FORCED_ADVANCE" ? revealAnswer : "",
             });
         }
-        session.messages.push({ role: "assistant", content: tutorMessage });
+        const completionDetected = /completed this (lesson|session)/i.test(tutorMessage);
+        if (completionDetected && baseStatus !== "completed") {
+            session.state = "COMPLETE";
+            baseStatus = "completed";
+            try {
+                await progressState_1.LessonProgressModel.updateOne({ userId: session.userId, language: session.language, lessonId: session.lessonId }, {
+                    $set: {
+                        status: baseStatus,
+                        currentQuestionIndex: session.currentQuestionIndex || 0,
+                        lastActiveAt: new Date(),
+                    },
+                }, { upsert: true });
+            }
+            catch {
+                // best-effort
+            }
+        }
+        if (includeSupport && instructionLanguage) {
+            const supportQuestion = intent === "ENCOURAGE_RETRY" || intent === "FORCED_ADVANCE" ? currentQuestion : nextQuestion;
+            const supportResult = await (0, supportResolver_1.resolveSupportText)({
+                targetLanguage: session.language,
+                instructionLanguage,
+                supportLevel: effectiveSupportLevel,
+                includeSupport,
+                supportCharLimit,
+                eventType,
+                conceptTag: eventConceptTag,
+                hintTarget: typeof supportQuestion?.hintTarget === "string" ? supportQuestion.hintTarget : undefined,
+                explanationTarget: typeof supportQuestion?.explanationTarget === "string"
+                    ? supportQuestion.explanationTarget
+                    : undefined,
+                repeatedConfusion,
+            });
+            supportText = supportResult.supportText;
+            const supportOk = (0, tutorOutputGuard_1.validateSupportLanguage)(supportText, instructionLanguage) &&
+                (0, tutorOutputGuard_1.validateSupportLength)(supportText, supportCharLimit);
+            if (!supportOk) {
+                const fallback = (0, supportFallback_1.buildSupportFallback)(instructionLanguage, effectiveSupportLevel, eventType);
+                supportText = (0, tutorOutputGuard_1.validateSupportLanguage)(fallback, instructionLanguage) ? fallback : "";
+            }
+            if (!supportText && intent !== "FORCED_ADVANCE") {
+                const fallback = (0, supportFallback_1.buildSupportFallback)(instructionLanguage, effectiveSupportLevel, eventType);
+                supportText = (0, tutorOutputGuard_1.validateSupportLanguage)(fallback, instructionLanguage) ? fallback : "";
+            }
+        }
+        else {
+            supportText = "";
+        }
+        const combinedMessage = supportText ? `${tutorMessage}\n\n${supportText}` : tutorMessage;
+        session.messages.push({ role: "assistant", content: combinedMessage });
+        if (manualBoostActive) {
+            await consumeManualSupportTurn(session, supportMode, session.userId, session.language);
+        }
         await session.save();
         let practice;
         const practiceConceptTag = typeof currentQuestion.conceptTag === "string" && currentQuestion.conceptTag.trim().length > 0
@@ -586,7 +1043,7 @@ const submitAnswer = async (req, res) => {
                 const { item: practiceItem } = await (0, practiceGenerator_1.generatePracticeItem)({
                     language: session.language,
                     lessonId: session.lessonId,
-                    sourceQuestionText: currentQuestion.question,
+                    sourceQuestionText: currentQuestion.prompt || currentQuestion.question,
                     expectedAnswerRaw: currentQuestion.answer,
                     conceptTag: practiceConceptTag,
                     type: practiceType,
@@ -613,6 +1070,7 @@ const submitAnswer = async (req, res) => {
             }
         }
         const progress = (0, lessonHelpers_1.buildProgressPayload)(session, lesson, baseStatus);
+        const question = buildQuestionMeta(nextQuestion);
         return res.status(200).json({
             progress,
             session,
@@ -623,6 +1081,7 @@ const submitAnswer = async (req, res) => {
             },
             ...(hintForResponse ? { hint: hintForResponse } : {}),
             ...(practice ? { practice } : {}),
+            ...(question ? { question } : {}),
         });
     }
     catch (err) {
@@ -654,14 +1113,28 @@ const getSessionHandler = async (req, res) => {
                 instructionLanguage = null;
             }
         }
-        const tutorMessage = await ensureTutorPromptOnResume(session, instructionLanguage);
+        let supportLevel = DEFAULT_SUPPORT_LEVEL;
+        let supportMode = "auto";
+        try {
+            const supportProfile = await (0, learnerProfileStore_1.getSupportProfile)(session.userId, session.language);
+            supportLevel = (0, supportPolicy_1.clampSupportLevel)(supportProfile.supportLevel);
+            supportMode = supportProfile.supportMode === "manual" ? "manual" : "auto";
+        }
+        catch {
+            supportLevel = DEFAULT_SUPPORT_LEVEL;
+        }
+        const tutorMessage = await ensureTutorPromptOnResume(session, instructionLanguage, supportLevel, supportMode);
         const lesson = (0, lessonLoader_1.loadLesson)(session.language, session.lessonId);
         const progress = lesson ? (0, lessonHelpers_1.buildProgressPayload)(session, lesson) : undefined;
+        const question = lesson
+            ? buildQuestionMeta(lesson.questions?.[session.currentQuestionIndex ?? 0])
+            : null;
         return res.status(200).json({
             session,
             messages: session.messages,
             ...(tutorMessage ? { tutorMessage } : {}),
             ...(progress ? { progress } : {}),
+            ...(question ? { question } : {}),
         });
     }
     catch (err) {

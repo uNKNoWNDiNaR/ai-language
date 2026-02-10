@@ -1,0 +1,245 @@
+{
+  "lessonId": "basic-4",
+  "title": "Present simple: he/she/it + does",
+  "description": "Use -s with he/she/it, and use does in questions and negatives.",
+  "questions": [
+    {
+      "id": 1,
+      "conceptTag": "a1.present3.likes",
+      "question": "Change “I like coffee.” to “he”.",
+      "prompt": "Change “I like coffee.” to “he”.",
+      "taskType": "typing",
+      "promptStyle": "TRANSFORM_SUBJECT",
+      "answer": "He likes coffee.",
+      "acceptedAnswers": [
+        "He likes coffee.",
+        "He likes coffee"
+      ],
+      "hintTarget": "With he/she/it, add -s: likes.",
+      "explanationTarget": "With he/she/it, add -s in the present simple.",
+      "hints": [
+        "He + like → likes"
+      ],
+      "examples": [
+        "He likes coffee.",
+        "She likes tea."
+      ]
+    },
+    {
+      "id": 2,
+      "conceptTag": "a1.present3.likes",
+      "question": "Change “I like tea.” to “she”.",
+      "prompt": "Change “I like tea.” to “she”.",
+      "taskType": "typing",
+      "promptStyle": "TRANSFORM_SUBJECT",
+      "answer": "She likes tea.",
+      "acceptedAnswers": [
+        "She likes tea.",
+        "She likes tea"
+      ],
+      "hintTarget": "Add -s: likes.",
+      "explanationTarget": "With she, the verb ends in -s: likes.",
+      "hints": [
+        "She + like → likes"
+      ],
+      "examples": [
+        "She likes tea.",
+        "He likes music."
+      ]
+    },
+    {
+      "id": 3,
+      "conceptTag": "a1.present3.has",
+      "question": "Make a sentence: car / he / has / a",
+      "prompt": "Make a sentence: car / he / has / a",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "He has a car.",
+      "acceptedAnswers": [
+        "He has a car.",
+        "He has a car"
+      ],
+      "hintTarget": "Use: has (not have).",
+      "explanationTarget": "With he/she/it, use “has”.",
+      "hints": [
+        "He + have → has"
+      ],
+      "examples": [
+        "He has a car.",
+        "She has a phone."
+      ]
+    },
+    {
+      "id": 4,
+      "conceptTag": "a1.present3.has",
+      "question": "Make a sentence: phone / a / she / has",
+      "prompt": "Make a sentence: phone / a / she / has",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "She has a phone.",
+      "acceptedAnswers": [
+        "She has a phone.",
+        "She has a phone"
+      ],
+      "hintTarget": "Use: has.",
+      "explanationTarget": "With she, use “has”.",
+      "hints": [
+        "She + have → has"
+      ],
+      "examples": [
+        "She has a phone.",
+        "He has a bag."
+      ]
+    },
+    {
+      "id": 5,
+      "conceptTag": "a1.present3.wants",
+      "question": "Change “I want water.” to “it”.",
+      "prompt": "Change “I want water.” to “it”.",
+      "taskType": "typing",
+      "promptStyle": "TRANSFORM_SUBJECT",
+      "answer": "It wants water.",
+      "acceptedAnswers": [
+        "It wants water.",
+        "It wants water"
+      ],
+      "hintTarget": "Add -s: wants.",
+      "explanationTarget": "With it, add -s: wants.",
+      "hints": [
+        "It + want → wants"
+      ],
+      "examples": [
+        "It wants water.",
+        "He wants help."
+      ]
+    },
+    {
+      "id": 6,
+      "conceptTag": "a1.present3.does_question",
+      "question": "Turn into a question: He likes tea.",
+      "prompt": "Turn into a question: He likes tea.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Does he like tea?",
+      "acceptedAnswers": [
+        "Does he like tea?",
+        "Does he like tea"
+      ],
+      "hintTarget": "Does + he + like …?",
+      "explanationTarget": "After “Does”, use base verb: like (no -s).",
+      "hints": [
+        "Start with “Does …?”"
+      ],
+      "examples": [
+        "Does he like tea?",
+        "Does she like coffee?"
+      ]
+    },
+    {
+      "id": 7,
+      "conceptTag": "a1.present3.does_question",
+      "question": "Turn into a question: She has a car.",
+      "prompt": "Turn into a question: She has a car.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Does she have a car?",
+      "acceptedAnswers": [
+        "Does she have a car?",
+        "Does she have a car"
+      ],
+      "hintTarget": "Does + she + have …?",
+      "explanationTarget": "After “Does”, use have (not has).",
+      "hints": [
+        "Use “Does she have …?”"
+      ],
+      "examples": [
+        "Does she have a car?",
+        "Does he have time?"
+      ]
+    },
+    {
+      "id": 8,
+      "conceptTag": "a1.present3.does_not",
+      "question": "Complete: He ___ like milk.",
+      "prompt": "Complete: He ___ like milk.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "doesn't",
+        "does not"
+      ],
+      "answer": "He doesn't like milk.",
+      "acceptedAnswers": [
+        "He doesn't like milk.",
+        "He doesn't like milk",
+        "He does not like milk.",
+        "He does not like milk",
+        "He doesn’t like milk.",
+        "He doesn’t like milk"
+      ],
+      "hintTarget": "Use: doesn't + base verb.",
+      "explanationTarget": "After “doesn't”, use base verb: like (no -s).",
+      "hints": [
+        "doesn't + like (no -s)"
+      ],
+      "examples": [
+        "He doesn't like milk.",
+        "She doesn't like sugar."
+      ]
+    },
+    {
+      "id": 9,
+      "conceptTag": "a1.present3.does_not",
+      "question": "Complete: She ___ want tea.",
+      "prompt": "Complete: She ___ want tea.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "doesn't",
+        "does not"
+      ],
+      "answer": "She doesn't want tea.",
+      "acceptedAnswers": [
+        "She doesn't want tea.",
+        "She doesn't want tea",
+        "She does not want tea.",
+        "She does not want tea",
+        "She doesn’t want tea.",
+        "She doesn’t want tea"
+      ],
+      "hintTarget": "Use: doesn't + want.",
+      "explanationTarget": "After “doesn't”, the verb stays base form.",
+      "hints": [
+        "doesn't + want (no -s)"
+      ],
+      "examples": [
+        "She doesn't want tea.",
+        "He doesn't want coffee."
+      ]
+    },
+    {
+      "id": 10,
+      "conceptTag": "a1.present3.short_answer",
+      "question": "Reply: Does he like coffee? (yes)",
+      "prompt": "Reply: Does he like coffee? (yes)",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Yes, he does.",
+      "acceptedAnswers": [
+        "Yes, he does.",
+        "Yes, he does"
+      ],
+      "hintTarget": "Use: Yes, he does.",
+      "explanationTarget": "Short answers to does-questions use does/doesn't.",
+      "hints": [
+        "Start with “Yes, he does.”"
+      ],
+      "examples": [
+        "Yes, he does.",
+        "No, he doesn't."
+      ]
+    }
+  ]
+}

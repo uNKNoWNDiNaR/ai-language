@@ -33,10 +33,24 @@ export type LessonSession = {
   attemptCountByQuestionId?: StringNumberMap;
   lastAnswerByQuestionId?: StringStringMap;
 
+  // Support-level tracking (session-scoped)
+  mistakeCountByConceptTag?: StringNumberMap;
+  seenConceptTags?: StringNumberMap;
+  wrongCount?: number;
+  almostCount?: number;
+  forcedAdvanceCount?: number;
+  hintsUsedCount?: number;
+
   // Practice persistence
   practiceById?: PracticeItemMap;
   practiceAttempts?: PracticeAttemptMap;
 
   // Practice scheduling cooldown (per source question)
   practiceCooldownByQuestionId?: StringNumberMap;
+
+  // Support-level scaffolding
+  recentConfusions?: Array<{ conceptTag: string; timestamp: Date }>;
+  manualSupportTurnsLeft?: number;
+  lastSupportModeFromProfile?: "auto" | "manual";
+  forceNoSupport?: boolean;
 };
