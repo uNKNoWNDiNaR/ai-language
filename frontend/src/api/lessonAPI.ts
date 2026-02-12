@@ -226,7 +226,7 @@ const AUTH_TOKEN: string| undefined = import.meta.env.VITE_AUTH_TOKEN
 
 const http = axios.create({
   baseURL: API_BASE,
-  timeout: 15000,
+  timeout: 60000,
   headers: AUTH_TOKEN ? {Authorization: `Bearer ${AUTH_TOKEN}`} : undefined,
 })
 
@@ -471,6 +471,18 @@ export async function submitLessonFeedback(
   return data;
 }
 
+export async function warmupBackend(): Promise<boolean> {
+  try {
+    const res = await http.get("/health", {
+      timeout: 65000,
+      validateStatus: () => true,
+    });
+    return res.status >= 200 && res.status < 300;
+  } catch {
+    return false;
+  }
+}
+
 export function toUserSafeErrorMessage(e: unknown): string {
   // If not an axios error then fallback
   if(!axios.isAxiosError(e)) {
@@ -490,7 +502,7 @@ export function toUserSafeErrorMessage(e: unknown): string {
   if (!e.response) {
     const isTimeout = e.code === "ECONNABORTED";
     const msg = isTimeout
-      ? "The server took too long to respond. Please try again."
+      ? "The server is waking up. This can take up to a minute after inactivity. Please try again."
       : "Couldn’t reach the server. Check your connection and try again.";
     return requestId ? `${msg} (Request ID: ${requestId})` : msg;
   }

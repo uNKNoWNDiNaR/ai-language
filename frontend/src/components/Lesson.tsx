@@ -14,6 +14,7 @@ import {
   getLessonCatalog,
   getUserProgress,
   submitLessonFeedback,
+  warmupBackend,
   toUserSafeErrorMessage,
   getHttpStatus,
   type LessonSession,
@@ -82,6 +83,8 @@ const FRICTION_PROMPT_SHOWN_PREFIX = "ai-language:frictionPromptShown:";
 const QUICK_REVIEW_DISMISS_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
 const TEACHING_PREFS_PREFIX = "ai-language:teachingPrefs:";
+const WARMUP_THROTTLE_MS = 10 * 60 * 1000;
+let lastWarmupAt = 0;
 
 type TargetLanguage = "en" | "de";
 type LanguageOption = {
@@ -111,6 +114,13 @@ const AVAILABLE_INSTRUCTION_LANGUAGES: SupportedLanguage[] = ["en"];
 
 function makeTeachingPrefsKey(userId: string, language: string): string {
   return makeScopedKey(TEACHING_PREFS_PREFIX, userId, language);
+}
+
+async function runWarmupIfNeeded() {
+  const now = Date.now();
+  if (now - lastWarmupAt < WARMUP_THROTTLE_MS) return;
+  lastWarmupAt = now;
+  await warmupBackend();
 }
 
 function makeLegacyTeachingPrefsKey(userId: string, language: string): string {
@@ -1164,6 +1174,21 @@ export function Lesson() {
   useEffect(() => {
     writeUserId(userId);
   }, [userId]);
+
+  useEffect(() => {
+    void runWarmupIfNeeded();
+    const handler = () => {
+      if (document.visibilityState === "visible") {
+        void runWarmupIfNeeded();
+      }
+    };
+    window.addEventListener("focus", handler);
+    document.addEventListener("visibilitychange", handler);
+    return () => {
+      window.removeEventListener("focus", handler);
+      document.removeEventListener("visibilitychange", handler);
+    };
+  }, []);
 
   useEffect(() => {
     const stored = readTesterContext(anonUserId);

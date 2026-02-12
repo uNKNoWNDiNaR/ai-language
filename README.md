@@ -32,6 +32,9 @@ Default ports:
 - Backend: `http://localhost:3000`
 - Frontend: `http://localhost:5173`
 
+## Production URL
+- Backend (Render): `https://ai-language-tutor-2ff9.onrender.com`
+
 ## Environment Variables
 
 Backend (in `backend/.env`):
@@ -43,7 +46,8 @@ Backend (in `backend/.env`):
 - `PRACTICE_GEN_ENABLED`, `FEATURE_INSTRUCTION_LANGUAGE` optional feature flags
 
 Frontend (in `frontend/.env`):
-- `VITE_API_BASE` (defaults to `http://localhost:3000`)
+- `VITE_API_BASE` (defaults to `http://localhost:3000`).
+  - Production: `https://ai-language-tutor-2ff9.onrender.com`
 - `VITE_AUTH_TOKEN` optional; must match backend `AUTH_TOKEN` if enabled
 - `VITE_FEATURE_INSTRUCTION_LANGUAGE` optional flag
 
