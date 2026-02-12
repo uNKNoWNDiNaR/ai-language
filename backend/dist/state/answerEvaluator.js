@@ -15,6 +15,66 @@ function normalize(text) {
         .replace(/[.,!?;:"'()\[\]{}]/g, "")
         .trim();
 }
+function normalizeForCompare(text, language) {
+    const base = normalize(text);
+    const lang = (language || "").trim().toLowerCase();
+    if (lang === "de")
+        return foldGerman(base);
+    return base;
+}
+function normalizeCaseSensitive(text) {
+    return (text || "")
+        .replace(SMART_APOSTROPHES, "'")
+        .trim()
+        .replace(/\s+/g, " ")
+        .replace(/[.,!?;:"'()\[\]{}]/g, "")
+        .trim();
+}
+function foldGerman(text) {
+    return text
+        .replace(/ä/g, "ae")
+        .replace(/ö/g, "oe")
+        .replace(/ü/g, "ue")
+        .replace(/ß/g, "ss");
+}
+function foldGermanUmlautToBase(text) {
+    return text.replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u");
+}
+function normalizeGermanUmlautBase(text) {
+    return foldGermanUmlautToBase(normalize(text));
+}
+function stripPunctKeepSpaces(text) {
+    return normalizeCaseSensitive(text);
+}
+function tokenStartsUpper(token) {
+    return /^[A-ZÄÖÜẞ]/.test(token);
+}
+function tokenStartsLower(token) {
+    return /^[a-zäöü]/.test(token);
+}
+function hasGermanCapitalizationMismatch(expectedRaw, userRaw) {
+    const expected = stripPunctKeepSpaces(expectedRaw);
+    const user = stripPunctKeepSpaces(userRaw);
+    if (!expected || !user)
+        return false;
+    const expectedTokens = expected.split(" ");
+    const userTokens = user.split(" ");
+    if (expectedTokens.length !== userTokens.length)
+        return false;
+    if (expectedTokens.length <= 1)
+        return false;
+    for (let i = 1; i < expectedTokens.length; i += 1) {
+        const exp = expectedTokens[i];
+        const usr = userTokens[i];
+        if (!exp || !usr)
+            continue;
+        if (normalizeForCompare(exp, "de") !== normalizeForCompare(usr, "de"))
+            continue;
+        if (tokenStartsUpper(exp) && tokenStartsLower(usr))
+            return true;
+    }
+    return false;
+}
 function getPromptText(question) {
     const promptRaw = typeof question.prompt === "string" ? question.prompt.trim() : "";
     if (promptRaw)
@@ -97,23 +157,70 @@ function levenshtein(a, b) {
     }
     return dp[m][n];
 }
-function matchesAnyExact(question, userNorm) {
+function matchesAnyExact(question, userNorm, language) {
+    const normalizeCandidate = (text) => normalizeForCompare(text, language);
     const accepted = Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [];
     for (const a of accepted) {
-        if (userNorm === normalize(a))
+        if (userNorm === normalizeCandidate(a))
             return true;
     }
-    const primary = normalize(question.answer);
+    const primary = normalizeCandidate(question.answer);
     if (userNorm === primary)
         return true;
     const examples = Array.isArray(question.examples) ? question.examples : [];
     for (const ex of examples) {
-        if (userNorm === normalize(ex))
+        if (userNorm === normalizeCandidate(ex))
             return true;
     }
     return false;
 }
-function matchPlaceholderTemplate(expectedRaw, userNorm) {
+function matchGermanCandidate(userAnswer, candidate, userCompare) {
+    const candCompare = normalizeForCompare(candidate, "de");
+    if (!candCompare || userCompare !== candCompare)
+        return null;
+    if (hasGermanCapitalizationMismatch(candidate, userAnswer)) {
+        return { result: "almost", reasonCode: "CAPITALIZATION" };
+    }
+    return { result: "correct" };
+}
+function matchGermanCandidates(userAnswer, candidates) {
+    const userCompare = normalizeForCompare(userAnswer, "de");
+    if (!userCompare)
+        return null;
+    let foundCapitalization = false;
+    for (const candidate of candidates) {
+        if (!candidate)
+            continue;
+        const match = matchGermanCandidate(userAnswer, candidate, userCompare);
+        if (!match)
+            continue;
+        if (match.result === "correct")
+            return match;
+        if (match.result === "almost")
+            foundCapitalization = true;
+    }
+    return foundCapitalization ? { result: "almost", reasonCode: "CAPITALIZATION" } : null;
+}
+function matchesGermanUmlautMissing(userAnswer, candidates) {
+    const userBase = normalizeGermanUmlautBase(userAnswer);
+    if (!userBase)
+        return false;
+    const userCompare = normalizeForCompare(userAnswer, "de");
+    for (const candidate of candidates) {
+        if (!candidate)
+            continue;
+        const candBase = normalizeGermanUmlautBase(candidate);
+        if (!candBase)
+            continue;
+        if (userBase !== candBase)
+            continue;
+        if (userCompare === normalizeForCompare(candidate, "de"))
+            continue;
+        return true;
+    }
+    return false;
+}
+function matchPlaceholderTemplate(expectedRaw, userAnswer, language) {
     const hasPlaceholder = /\[[^\]]+\]/.test(expectedRaw) ||
         /\{[^}]+\}/.test(expectedRaw) ||
         /<[^>]+>/.test(expectedRaw);
@@ -124,9 +231,10 @@ function matchPlaceholderTemplate(expectedRaw, userNorm) {
         .replace(/\{[^}]+\}/g, "")
         .replace(/<[^>]+>/g, "")
         .trim();
-    const prefix = normalize(expectedPrefixRaw);
+    const prefix = normalizeForCompare(expectedPrefixRaw, language);
     if (!prefix)
         return null;
+    const userNorm = normalizeForCompare(userAnswer, language);
     if (userNorm === prefix)
         return "almost";
     if (!userNorm.startsWith(prefix + " "))
@@ -265,23 +373,51 @@ const SPECIAL_EQUIVALENCE_RULES = [
     ruleGoodMorningShort,
 ];
 function evaluateAnswer(question, userAnswer, language) {
+    const lang = (language || "").trim().toLowerCase();
     const userNorm = normalize(userAnswer);
+    const userCompare = normalizeForCompare(userAnswer, lang);
     const expectedNorm = normalize(question.answer);
     const promptText = getPromptText(question);
     const expectedInput = getExpectedInput(question);
     const isBlank = expectedInput === "blank" || promptText.includes("___");
+    const isGerman = lang === "de";
     if (isBlank) {
         const blankAnswers = getBlankAnswers(question, promptText, expectedInput);
-        for (const blank of blankAnswers) {
-            if (userNorm === normalize(blank)) {
-                return { result: "correct" };
+        if (isGerman) {
+            const blankMatch = matchGermanCandidates(userAnswer, blankAnswers);
+            if (blankMatch)
+                return blankMatch;
+            if (matchesGermanUmlautMissing(userAnswer, blankAnswers)) {
+                return { result: "almost", reasonCode: "UMLAUT" };
+            }
+        }
+        else {
+            for (const blank of blankAnswers) {
+                if (userCompare === normalizeForCompare(blank, lang)) {
+                    return { result: "correct" };
+                }
             }
         }
     }
-    if (matchesAnyExact(question, userNorm)) {
-        return { result: "correct" };
+    if (isGerman) {
+        const candidates = [
+            ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : []),
+            question.answer,
+            ...(Array.isArray(question.examples) ? question.examples : []),
+        ];
+        const germanMatch = matchGermanCandidates(userAnswer, candidates);
+        if (germanMatch)
+            return germanMatch;
+        if (matchesGermanUmlautMissing(userAnswer, candidates)) {
+            return { result: "almost", reasonCode: "UMLAUT" };
+        }
     }
-    const templateMatch = matchPlaceholderTemplate(question.answer, userNorm);
+    else {
+        if (matchesAnyExact(question, userCompare, lang)) {
+            return { result: "correct" };
+        }
+    }
+    const templateMatch = matchPlaceholderTemplate(question.answer, userAnswer, language);
     if (templateMatch === "correct")
         return { result: "correct" };
     if (templateMatch === "almost")

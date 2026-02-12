@@ -1,0 +1,218 @@
+lessonId: basic-2
+title: Pronouns and “sein”
+description: Use ich/du/er/sie/wir/ihr and the verb “sein” (bin/bist/ist/sind/seid). Ask simple questions.
+questions:
+  - id: 1
+    conceptTag: sein_ich_bin
+    question: "Complete the sentence."
+    prompt: "Complete the sentence: Ich ___ Student."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["bin"]
+    answer: "Ich bin Student."
+    acceptedAnswers: ["Ich bin Student.", "Ich bin Student"]
+    hintTarget: "“Ich” uses “bin”."
+    explanationTarget: "With “ich”, “sein” becomes “bin”."
+    hints: ["ich → bin"]
+    examples: ["Ich bin Student."]
+
+  - id: 2
+    conceptTag: sein_du_bist
+    question: "Complete the sentence."
+    prompt: "Complete the sentence: Du ___ Student."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["bist"]
+    answer: "Du bist Student."
+    acceptedAnswers: ["Du bist Student.", "Du bist Student"]
+    hintTarget: "“Du” uses “bist”."
+    explanationTarget: "With “du”, “sein” becomes “bist”."
+    hints: ["du → bist"]
+    examples: ["Du bist Student."]
+
+  - id: 3
+    conceptTag: sein_er_ist
+    question: "Complete the sentence."
+    prompt: "Complete the sentence: Er ___ Lehrer."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["ist"]
+    answer: "Er ist Lehrer."
+    acceptedAnswers: ["Er ist Lehrer.", "Er ist Lehrer"]
+    hintTarget: "“Er” uses “ist”."
+    explanationTarget: "With “er”, “sein” becomes “ist”."
+    hints: ["er → ist"]
+    examples: ["Er ist Lehrer."]
+
+  - id: 4
+    conceptTag: sein_sie_ist
+    question: "Complete the sentence."
+    prompt: "Complete the sentence: Sie ___ Lehrerin."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["ist"]
+    answer: "Sie ist Lehrerin."
+    acceptedAnswers: ["Sie ist Lehrerin.", "Sie ist Lehrerin"]
+    hintTarget: "“Sie” (she) uses “ist”."
+    explanationTarget: "With “sie” (she), “sein” becomes “ist”."
+    hints: ["sie → ist"]
+    examples: ["Sie ist Lehrerin."]
+
+  - id: 5
+    conceptTag: sein_wir_sind
+    question: "Complete the sentence."
+    prompt: "Complete the sentence: Wir ___ hier."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["sind"]
+    answer: "Wir sind hier."
+    acceptedAnswers: ["Wir sind hier.", "Wir sind hier"]
+    hintTarget: "“Wir” uses “sind”."
+    explanationTarget: "With “wir”, “sein” becomes “sind”."
+    hints: ["wir → sind"]
+    examples: ["Wir sind hier."]
+
+  - id: 6
+    conceptTag: sein_ihr_seid
+    question: "Complete the sentence."
+    prompt: "Complete the sentence: Ihr ___ hier."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["seid"]
+    answer: "Ihr seid hier."
+    acceptedAnswers: ["Ihr seid hier.", "Ihr seid hier"]
+    hintTarget: "“Ihr” uses “seid”."
+    explanationTarget: "With “ihr”, “sein” becomes “seid”."
+    hints: ["ihr → seid"]
+    examples: ["Ihr seid hier."]
+
+  - id: 7
+    conceptTag: sein_sie_sind
+    question: "Complete the sentence."
+    prompt: "Complete the sentence: Sie ___ hier."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["sind"]
+    answer: "Sie sind hier."
+    acceptedAnswers: ["Sie sind hier.", "Sie sind hier"]
+    hintTarget: "Plural “sie” uses “sind”."
+    explanationTarget: "With “sie” (they), “sein” becomes “sind”."
+    hints: ["sie (they) → sind"]
+    examples: ["Sie sind hier."]
+
+  - id: 8
+    conceptTag: question_sein_yesno
+    question: "Turn the statement into a question."
+    prompt: "Turn this into a yes/no question: Du bist Student."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Bist du Student?"
+    acceptedAnswers: ["Bist du Student?", "Bist du Student ?"]
+    hintTarget: "Verb goes first."
+    explanationTarget: "Yes/no questions: put the verb first."
+    hints: ["Start with “Bist …”."] 
+    examples: ["Bist du Student?"]
+
+  - id: 9
+    conceptTag: answer_yes_sein
+    question: "Answer the question positively."
+    prompt: "Answer (Yes): Bist du Student?"
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ja, ich bin Student."
+    acceptedAnswers: ["Ja, ich bin Student.", "Ja, ich bin Student", "Ja ich bin Student.", "Ja ich bin Student"]
+    hintTarget: "Start with “Ja,”."
+    explanationTarget: "A simple yes answer: “Ja, ich bin …”."
+    hints: ["Ja, ich bin …"] 
+    examples: ["Ja, ich bin Student."]
+
+  - id: 10
+    conceptTag: answer_no_kein
+    question: "Answer the question negatively."
+    prompt: "Answer (No): Bist du Student?"
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Nein, ich bin kein Student."
+    acceptedAnswers:
+      - "Nein, ich bin kein Student."
+      - "Nein, ich bin kein Student"
+      - "Nein ich bin kein Student."
+      - "Nein ich bin kein Student"
+    hintTarget: "Use “kein”."
+    explanationTarget: "For “not a …”, use “kein”: “kein Student”."
+    hints: ["Nein, ich bin kein …"] 
+    examples: ["Nein, ich bin kein Student."]
+
+  - id: 11
+    conceptTag: negation_nicht
+    question: "Complete the sentence."
+    prompt: "Complete the sentence: Er ___ nicht müde."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["ist"]
+    answer: "Er ist nicht müde."
+    acceptedAnswers: ["Er ist nicht müde.", "Er ist nicht müde"]
+    hintTarget: "Use “ist”."
+    explanationTarget: "Negation with “nicht”: “… ist nicht …”."
+    hints: ["er → ist"] 
+    examples: ["Er ist nicht müde."]
+
+  - id: 12
+    conceptTag: word_order_w_question
+    question: "Make the question by ordering the words."
+    prompt: "Order the words to make a question: wie / heißt / du"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "Wie heißt du?"
+    acceptedAnswers: ["Wie heißt du?", "Wie heißt du", "Wie heisst du?", "Wie heisst du"]
+    hintTarget: "Start with “Wie”."
+    explanationTarget: "In W-questions, the question word comes first."
+    hints: ["Begin with “Wie”."] 
+    examples: ["Wie heißt du?"]
+
+  - id: 13
+    conceptTag: question_where_from
+    question: "Ask where someone is from."
+    prompt: "Ask: Where are you from? (informal)"
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Woher kommst du?"
+    acceptedAnswers: ["Woher kommst du?", "Woher kommst du", "Woher kommst du ?"]
+    hintTarget: "Start with “Woher …”."
+    explanationTarget: "“Woher kommst du?” asks about origin."
+    hints: ["Woher …?"] 
+    examples: ["Woher kommst du?"]
+
+  - id: 14
+    conceptTag: answer_from_place
+    question: "Answer where you are from."
+    prompt: "Answer: Woher kommst du?"
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich komme aus [Land]."
+    acceptedAnswers: ["Ich komme aus [Land].", "Ich komme aus [Land]"]
+    hintTarget: "Start with “Ich komme aus …”."
+    explanationTarget: "Use “Ich komme aus …” + a country/place."
+    hints: ["Ich komme aus …"] 
+    examples: ["Ich komme aus Deutschland."]
+
+  - id: 15
+    conceptTag: answer_live_in
+    question: "Answer where you live."
+    prompt: "Answer: Wo wohnst du?"
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich wohne in [Stadt]."
+    acceptedAnswers: ["Ich wohne in [Stadt].", "Ich wohne in [Stadt]"]
+    hintTarget: "Start with “Ich wohne in …”."
+    explanationTarget: "Use “Ich wohne in …” + a city."
+    hints: ["Ich wohne in …"] 
+    examples: ["Ich wohne in Berlin."]

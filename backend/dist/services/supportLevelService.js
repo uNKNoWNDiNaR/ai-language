@@ -8,15 +8,16 @@ exports.computeSupportLevelDelta = computeSupportLevelDelta;
 exports.updateSupportLevel = updateSupportLevel;
 const mongoose_1 = __importDefault(require("mongoose"));
 const learnerProfileState_1 = require("../state/learnerProfileState");
-const DEFAULT_SUPPORT_LEVEL = 0.85;
+const supportLevel_1 = require("../utils/supportLevel");
+const DEFAULT_SUPPORT_LEVEL = "high";
+const DEFAULT_SUPPORT_NUMBER = (0, supportLevel_1.supportLevelToNumber)(DEFAULT_SUPPORT_LEVEL);
 function clampLevel(value) {
     return Math.max(0, Math.min(1, value));
 }
 function normalizeLevel(value) {
-    const n = typeof value === "number" ? value : Number(value);
-    if (!Number.isFinite(n))
-        return DEFAULT_SUPPORT_LEVEL;
-    return clampLevel(n);
+    const normalized = (0, supportLevel_1.normalizeSupportLevel)(value);
+    const base = (0, supportLevel_1.supportLevelToNumber)(normalized, DEFAULT_SUPPORT_NUMBER);
+    return clampLevel(base);
 }
 function computeSupportLevelDelta(stats, _currentSupportLevel) {
     const wrongCount = Number.isFinite(stats.wrongCount) ? stats.wrongCount : 0;
@@ -39,7 +40,7 @@ function computeSupportLevelDelta(stats, _currentSupportLevel) {
 async function updateSupportLevel(userId, language, delta) {
     // Skip DB writes if not connected (avoid buffering in tests)
     if (mongoose_1.default.connection.readyState !== 1) {
-        return clampLevel(DEFAULT_SUPPORT_LEVEL + delta);
+        return clampLevel(DEFAULT_SUPPORT_NUMBER + delta);
     }
     const doc = (await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { supportLevel: 1, supportMode: 1 }).lean());
     const current = normalizeLevel(doc?.supportLevel);
@@ -48,9 +49,10 @@ async function updateSupportLevel(userId, language, delta) {
         return current;
     }
     const next = clampLevel(current + delta);
+    const nextLevel = (0, supportLevel_1.supportLevelFromNumber)(next, DEFAULT_SUPPORT_LEVEL);
     await learnerProfileState_1.LearnerProfileModel.updateOne({ userId, language }, {
         $setOnInsert: { userId, language },
-        $set: { supportLevel: next, supportMode, lastActiveAt: new Date() },
+        $set: { supportLevel: nextLevel, supportMode, lastActiveAt: new Date() },
     }, { upsert: true });
     return next;
 }

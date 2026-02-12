@@ -9,19 +9,44 @@ exports.generateReview = generateReview;
 const sendError_1 = require("../http/sendError");
 const learnerProfileState_1 = require("../state/learnerProfileState");
 const answerEvaluator_1 = require("../state/answerEvaluator");
-const staticTutorMessages_1 = require("../ai/staticTutorMessages");
 const reviewScheduler_1 = require("../services/reviewScheduler");
 const learnerProfileStore_1 = require("../storage/learnerProfileStore");
 const reviewScheduler_2 = require("../services/reviewScheduler");
 const logger_1 = require("../utils/logger");
 const reviewPrompt_1 = require("../services/reviewPrompt");
 const lessonLoader_1 = require("../state/lessonLoader");
+const featureFlags_1 = require("../config/featureFlags");
 function normalizeQuestionText(text) {
     return (text || "")
         .trim()
         .toLowerCase()
         .replace(/\s+/g, " ")
         .replace(/[?]+$/g, "");
+}
+function countPromptWords(text) {
+    const cleaned = (text || "")
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .trim();
+    if (!cleaned)
+        return 0;
+    return cleaned.split(/\s+/).filter(Boolean).length;
+}
+function isGenericReviewPrompt(prompt, expected) {
+    const raw = (prompt || "").trim();
+    if (!raw)
+        return true;
+    const normalized = raw.replace(/[.!?]+$/g, "").trim().toLowerCase();
+    if (normalized === "short response")
+        return true;
+    if (normalized === "write a short sentence")
+        return true;
+    if (normalized === "write a sentence")
+        return true;
+    if (normalized === "make a sentence")
+        return true;
+    if (expected && normalizeQuestionText(raw) === normalizeQuestionText(expected))
+        return true;
+    return countPromptWords(raw) < 3;
 }
 function normalizeLanguage(value) {
     if (typeof value !== "string")
@@ -31,26 +56,65 @@ function normalizeLanguage(value) {
         return t;
     return null;
 }
-function buildReviewHint(expected, attemptCount, reasonCode) {
+function normalizeFeedbackLanguage(value, fallback) {
+    if (value === "en" || value === "de" || value === "es" || value === "fr")
+        return value;
+    return fallback;
+}
+function buildReviewHint(expected, attemptCount, reasonCode, language) {
     if (attemptCount < 2)
         return null;
     const cleaned = (expected || "").trim();
     if (!cleaned)
         return null;
     const reason = typeof reasonCode === "string" ? reasonCode.trim().toUpperCase() : "";
+    const isDe = language === "de";
+    const hintPrefix = isDe ? "Hinweis:" : "Hint:";
     if (reason === "ARTICLE")
-        return "Hint: Check the article.";
+        return `${hintPrefix} ${isDe ? "Prüfe den Artikel." : "Check the article."}`;
     if (reason === "WORD_ORDER")
-        return "Hint: Check word order.";
+        return `${hintPrefix} ${isDe ? "Prüfe die Wortstellung." : "Check word order."}`;
     if (reason === "WRONG_LANGUAGE")
-        return "Hint: Answer in the target language.";
+        return `${hintPrefix} ${isDe ? "Antworte in der Zielsprache." : "Answer in the target language."}`;
     if (reason === "TYPO")
-        return "Hint: Check spelling or small typos.";
+        return `${hintPrefix} ${isDe ? "Prüfe die Rechtschreibung." : "Check spelling or small typos."}`;
+    if (reason === "UMLAUT")
+        return `${hintPrefix} ${isDe ? "Prüfe den Umlaut." : "Check the umlaut."}`;
     if (reason === "MISSING_SLOT")
-        return "Hint: Something is missing — add the missing word.";
+        return `${hintPrefix} ${isDe ? "Es fehlt ein Wort." : "Something is missing — add the missing word."}`;
     if (reason === "OTHER")
-        return "Hint: Try a simple, natural response.";
-    return "Hint: Try again with a simple, natural response.";
+        return `${hintPrefix} ${isDe ? "Antworte kurz und natürlich." : "Try a simple, natural response."}`;
+    return `${hintPrefix} ${isDe ? "Versuch's nochmal." : "Try again with a simple, natural response."}`;
+}
+function cleanStringList(list) {
+    if (!Array.isArray(list))
+        return [];
+    return list
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter(Boolean);
+}
+function pickHintForAttempt(hints, hint, expected, attemptCount, reasonCode, language) {
+    if (attemptCount <= 1)
+        return null;
+    if (attemptCount === 2)
+        return hints[0] || hint || buildReviewHint(expected, attemptCount, reasonCode, language);
+    if (attemptCount === 3)
+        return hints[1] || hints[0] || hint || buildReviewHint(expected, attemptCount, reasonCode, language);
+    return expected ? `${language === "de" ? "Antwort" : "Answer"}: ${expected}` : null;
+}
+function buildTutorMessage(result, hint, language) {
+    if (language === "de") {
+        if (result === "correct")
+            return "Gut gemacht.";
+        if (result === "almost")
+            return hint ? `Fast. ${hint}` : "Fast. Versuch's nochmal.";
+        return hint ? `Noch nicht. ${hint}` : "Noch nicht. Versuch's nochmal.";
+    }
+    if (result === "correct")
+        return "Nice — that’s correct.";
+    if (result === "almost")
+        return hint ? `Almost. ${hint}` : "Almost. Try again.";
+    return hint ? `Not quite. ${hint}` : "Not quite. Try again.";
 }
 function parseSuggestReviewInput(req) {
     const body = (req.body ?? {});
@@ -198,33 +262,57 @@ async function getReviewSuggested(req, res) {
         const lessonCache = new Map();
         for (const item of items) {
             let prompt = item.prompt;
-            if (item.lessonId && typeof prompt === "string" && prompt.trim()) {
+            const expected = typeof item.expected === "string" ? item.expected : "";
+            const needsRebuild = isGenericReviewPrompt(prompt, expected);
+            if (item.lessonId) {
                 const cached = lessonCache.get(item.lessonId);
                 const lesson = cached !== undefined ? cached : (0, lessonLoader_1.loadLesson)(language, item.lessonId);
                 if (!lessonCache.has(item.lessonId))
                     lessonCache.set(item.lessonId, lesson);
+                let match;
                 if (lesson) {
-                    const match = lesson.questions.find((q) => normalizeQuestionText(q.prompt || q.question) ===
-                        normalizeQuestionText(prompt));
-                    if (match) {
-                        const expected = String(match.answer ?? "");
-                        const conceptTag = match.conceptTag || item.conceptTag;
-                        prompt = await (0, reviewPrompt_1.buildReviewPrompt)({
-                            language: language,
-                            lessonId: item.lessonId,
-                            sourceQuestionText: match.prompt || match.question,
-                            expectedAnswerRaw: expected,
-                            examples: match.examples,
-                            conceptTag,
-                            promptStyle: match.promptStyle,
-                        });
-                        if (prompt && prompt !== item.prompt) {
-                            queueChanged = true;
-                            const idx = queueCopy.findIndex((q) => q.id === item.id);
-                            if (idx >= 0) {
-                                queueCopy[idx] = { ...queueCopy[idx], prompt };
-                            }
-                        }
+                    if (typeof prompt === "string" && prompt.trim()) {
+                        match = lesson.questions.find((q) => normalizeQuestionText(q.prompt || q.question) ===
+                            normalizeQuestionText(prompt));
+                    }
+                    if (!match && item.conceptTag) {
+                        match = lesson.questions.find((q) => q.conceptTag && q.conceptTag === item.conceptTag);
+                    }
+                    if (!match && expected) {
+                        match = lesson.questions.find((q) => normalizeQuestionText(String(q.answer ?? "")) === normalizeQuestionText(expected));
+                    }
+                }
+                if (match) {
+                    const expectedAnswer = String(match.answer ?? "");
+                    const conceptTag = match.conceptTag || item.conceptTag;
+                    const nextPrompt = await (0, reviewPrompt_1.buildReviewPrompt)({
+                        language: language,
+                        lessonId: item.lessonId,
+                        sourceQuestionText: match.prompt || match.question,
+                        expectedAnswerRaw: expectedAnswer,
+                        examples: match.examples,
+                        conceptTag,
+                        promptStyle: match.promptStyle,
+                    });
+                    if (nextPrompt && nextPrompt !== prompt) {
+                        prompt = nextPrompt;
+                    }
+                }
+                else if (needsRebuild) {
+                    const fallbackPrompt = (0, reviewPrompt_1.buildReviewFallbackPrompt)({
+                        sourceQuestionText: "",
+                        conceptTag: item.conceptTag,
+                        expectedAnswerRaw: expected,
+                    });
+                    if (fallbackPrompt && fallbackPrompt !== prompt) {
+                        prompt = fallbackPrompt;
+                    }
+                }
+                if (prompt && prompt !== item.prompt) {
+                    queueChanged = true;
+                    const idx = queueCopy.findIndex((q) => q.id === item.id);
+                    if (idx >= 0) {
+                        queueCopy[idx] = { ...queueCopy[idx], prompt };
                     }
                 }
             }
@@ -306,29 +394,37 @@ async function submitReview(req, res) {
         }, { upsert: true });
         const dueItems = (0, reviewScheduler_1.pickDueReviewQueueItems)(queue, now, 5);
         const nextItem = dueItems.find((i) => i.id !== itemId) ?? (evaluation.result !== "correct" ? updated : null);
-        const retryMessage = (0, staticTutorMessages_1.getDeterministicRetryMessage)({
-            reasonCode: evaluation.reasonCode,
-            attemptCount: attempts,
-            repeatedSameWrong: false,
-        });
-        let hint = null;
-        if (evaluation.result !== "correct") {
+        let instructionLanguage = null;
+        if ((0, featureFlags_1.isInstructionLanguageEnabled)()) {
             try {
-                const lesson = (0, lessonLoader_1.loadLesson)(language, item.lessonId);
-                const match = lesson?.questions?.find((q) => q.conceptTag && q.conceptTag === item.conceptTag);
-                const hintTarget = typeof match?.hintTarget === "string" ? match.hintTarget.trim() : "";
-                const legacyHint = typeof match?.hint === "string" ? match.hint.trim() : "";
-                hint = hintTarget || legacyHint || buildReviewHint(expected, attempts, evaluation.reasonCode);
+                instructionLanguage = await (0, learnerProfileStore_1.getInstructionLanguage)(userId, language);
             }
             catch {
-                hint = buildReviewHint(expected, attempts, evaluation.reasonCode);
+                instructionLanguage = null;
             }
         }
-        const tutorMessage = evaluation.result === "correct"
-            ? "Nice work. Let's keep going."
-            : hint
-                ? `${retryMessage}\nHint: ${hint}`.trim()
-                : retryMessage;
+        const feedbackLanguage = normalizeFeedbackLanguage(instructionLanguage, "en");
+        const useTargetHints = !instructionLanguage || instructionLanguage === language;
+        let hint = null;
+        if (evaluation.result !== "correct") {
+            if (useTargetHints) {
+                try {
+                    const lesson = (0, lessonLoader_1.loadLesson)(language, item.lessonId);
+                    const match = lesson?.questions?.find((q) => q.conceptTag && q.conceptTag === item.conceptTag);
+                    const hintTarget = typeof match?.hintTarget === "string" ? match.hintTarget.trim() : "";
+                    const legacyHint = typeof match?.hint === "string" ? match.hint.trim() : "";
+                    const hints = cleanStringList(match?.hints);
+                    hint = pickHintForAttempt(hints, hintTarget || legacyHint, expected, attempts, evaluation.reasonCode, feedbackLanguage);
+                }
+                catch {
+                    hint = pickHintForAttempt([], "", expected, attempts, evaluation.reasonCode, feedbackLanguage);
+                }
+            }
+            else {
+                hint = pickHintForAttempt([], "", expected, attempts, evaluation.reasonCode, feedbackLanguage);
+            }
+        }
+        const tutorMessage = buildTutorMessage(evaluation.result, hint, feedbackLanguage);
         return res.status(200).json({
             result: evaluation.result,
             tutorMessage,

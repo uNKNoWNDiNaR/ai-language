@@ -4,14 +4,18 @@ import type { Request, Response } from "express";
 import { sendError } from "../http/sendError";
 import { LearnerProfileModel } from "../state/learnerProfileState";
 import { evaluateAnswer } from "../state/answerEvaluator";
-import { getDeterministicRetryMessage } from "../ai/staticTutorMessages";
 import { pickDueReviewQueueItems, computeNextReviewDueAt, type ReviewQueueItem } from "../services/reviewScheduler";
-import { getReviewQueueSnapshot, enqueueReviewQueueItems } from "../storage/learnerProfileStore";
+import {
+  getReviewQueueSnapshot,
+  enqueueReviewQueueItems,
+  getInstructionLanguage,
+} from "../storage/learnerProfileStore";
 import { suggestReviewItems } from "../services/reviewScheduler";
 import { logServerError } from "../utils/logger";
 import type { SupportedLanguage } from "../types";
-import { buildReviewPrompt } from "../services/reviewPrompt";
+import { buildReviewPrompt, buildReviewFallbackPrompt } from "../services/reviewPrompt";
 import { loadLesson, type LessonQuestion } from "../state/lessonLoader";
+import { isInstructionLanguageEnabled } from "../config/featureFlags";
 
 type SuggestReviewInput = {
   userId?: unknown;
@@ -41,6 +45,26 @@ function normalizeQuestionText(text: string): string {
     .replace(/[?]+$/g, "");
 }
 
+function countPromptWords(text: string): number {
+  const cleaned = (text || "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .trim();
+  if (!cleaned) return 0;
+  return cleaned.split(/\s+/).filter(Boolean).length;
+}
+
+function isGenericReviewPrompt(prompt: string, expected?: string): boolean {
+  const raw = (prompt || "").trim();
+  if (!raw) return true;
+  const normalized = raw.replace(/[.!?]+$/g, "").trim().toLowerCase();
+  if (normalized === "short response") return true;
+  if (normalized === "write a short sentence") return true;
+  if (normalized === "write a sentence") return true;
+  if (normalized === "make a sentence") return true;
+  if (expected && normalizeQuestionText(raw) === normalizeQuestionText(expected)) return true;
+  return countPromptWords(raw) < 3;
+}
+
 function normalizeLanguage(value: unknown): SupportedLanguage | null {
   if (typeof value !== "string") return null;
   const t = value.trim().toLowerCase();
@@ -48,21 +72,85 @@ function normalizeLanguage(value: unknown): SupportedLanguage | null {
   return null;
 }
 
-function buildReviewHint(expected: string, attemptCount: number, reasonCode?: string): string | null {
+function normalizeFeedbackLanguage(
+  value: unknown,
+  fallback: SupportedLanguage
+): SupportedLanguage {
+  if (value === "en" || value === "de" || value === "es" || value === "fr") return value;
+  return fallback;
+}
+
+function buildReviewHint(
+  expected: string,
+  attemptCount: number,
+  reasonCode: string | undefined,
+  language: SupportedLanguage
+): string | null {
   if (attemptCount < 2) return null;
   const cleaned = (expected || "").trim();
   if (!cleaned) return null;
 
   const reason = typeof reasonCode === "string" ? reasonCode.trim().toUpperCase() : "";
-  if (reason === "ARTICLE") return "Hint: Check the article.";
-  if (reason === "WORD_ORDER") return "Hint: Check word order.";
-  if (reason === "WRONG_LANGUAGE") return "Hint: Answer in the target language.";
+  const isDe = language === "de";
+  const hintPrefix = isDe ? "Hinweis:" : "Hint:";
+  if (reason === "ARTICLE") return `${hintPrefix} ${isDe ? "Prüfe den Artikel." : "Check the article."}`;
+  if (reason === "WORD_ORDER")
+    return `${hintPrefix} ${isDe ? "Prüfe die Wortstellung." : "Check word order."}`;
+  if (reason === "WRONG_LANGUAGE")
+    return `${hintPrefix} ${isDe ? "Antworte in der Zielsprache." : "Answer in the target language."}`;
 
-  if (reason === "TYPO") return "Hint: Check spelling or small typos.";
-  if (reason === "MISSING_SLOT") return "Hint: Something is missing — add the missing word.";
-  if (reason === "OTHER") return "Hint: Try a simple, natural response.";
+  if (reason === "TYPO")
+    return `${hintPrefix} ${isDe ? "Prüfe die Rechtschreibung." : "Check spelling or small typos."}`;
+  if (reason === "UMLAUT")
+    return `${hintPrefix} ${isDe ? "Prüfe den Umlaut." : "Check the umlaut."}`;
+  if (reason === "MISSING_SLOT")
+    return `${hintPrefix} ${
+      isDe ? "Es fehlt ein Wort." : "Something is missing — add the missing word."
+    }`;
+  if (reason === "OTHER")
+    return `${hintPrefix} ${
+      isDe ? "Antworte kurz und natürlich." : "Try a simple, natural response."
+    }`;
 
-  return "Hint: Try again with a simple, natural response.";
+  return `${hintPrefix} ${isDe ? "Versuch's nochmal." : "Try again with a simple, natural response."}`;
+}
+
+function cleanStringList(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean);
+}
+
+function pickHintForAttempt(
+  hints: string[],
+  hint: string,
+  expected: string,
+  attemptCount: number,
+  reasonCode: string | undefined,
+  language: SupportedLanguage
+): string | null {
+  if (attemptCount <= 1) return null;
+  if (attemptCount === 2)
+    return hints[0] || hint || buildReviewHint(expected, attemptCount, reasonCode, language);
+  if (attemptCount === 3)
+    return hints[1] || hints[0] || hint || buildReviewHint(expected, attemptCount, reasonCode, language);
+  return expected ? `${language === "de" ? "Antwort" : "Answer"}: ${expected}` : null;
+}
+
+function buildTutorMessage(
+  result: "correct" | "almost" | "wrong",
+  hint: string | null,
+  language: SupportedLanguage
+): string {
+  if (language === "de") {
+    if (result === "correct") return "Gut gemacht.";
+    if (result === "almost") return hint ? `Fast. ${hint}` : "Fast. Versuch's nochmal.";
+    return hint ? `Noch nicht. ${hint}` : "Noch nicht. Versuch's nochmal.";
+  }
+  if (result === "correct") return "Nice — that’s correct.";
+  if (result === "almost") return hint ? `Almost. ${hint}` : "Almost. Try again.";
+  return hint ? `Not quite. ${hint}` : "Not quite. Try again.";
 }
 
 function parseSuggestReviewInput(req: Request): { userId: string; language: string; maxItems: number } {
@@ -259,38 +347,70 @@ export async function getReviewSuggested(req: Request, res: Response) {
 
     for (const item of items) {
       let prompt = item.prompt;
+      const expected = typeof item.expected === "string" ? item.expected : "";
+      const needsRebuild = isGenericReviewPrompt(prompt, expected);
 
-      if (item.lessonId && typeof prompt === "string" && prompt.trim()) {
+      if (item.lessonId) {
         const cached = lessonCache.get(item.lessonId);
         const lesson = cached !== undefined ? cached : loadLesson(language, item.lessonId);
         if (!lessonCache.has(item.lessonId)) lessonCache.set(item.lessonId, lesson);
 
+        let match: LessonQuestion | undefined;
         if (lesson) {
-        const match = lesson.questions.find(
-          (q: LessonQuestion) =>
-            normalizeQuestionText((q as any).prompt || q.question) ===
-            normalizeQuestionText(prompt)
-          );
-          if (match) {
-            const expected = String(match.answer ?? "");
-            const conceptTag = match.conceptTag || item.conceptTag;
-            prompt = await buildReviewPrompt({
-              language: language as SupportedLanguage,
-              lessonId: item.lessonId,
-              sourceQuestionText: (match as any).prompt || match.question,
-              expectedAnswerRaw: expected,
-              examples: match.examples,
-              conceptTag,
-              promptStyle: (match as any).promptStyle,
-            });
+          if (typeof prompt === "string" && prompt.trim()) {
+            match = lesson.questions.find(
+              (q: LessonQuestion) =>
+                normalizeQuestionText((q as any).prompt || q.question) ===
+                normalizeQuestionText(prompt)
+            );
+          }
 
-            if (prompt && prompt !== item.prompt) {
-              queueChanged = true;
-              const idx = queueCopy.findIndex((q) => q.id === item.id);
-              if (idx >= 0) {
-                queueCopy[idx] = { ...queueCopy[idx], prompt };
-              }
-            }
+          if (!match && item.conceptTag) {
+            match = lesson.questions.find(
+              (q: LessonQuestion) => q.conceptTag && q.conceptTag === item.conceptTag
+            );
+          }
+
+          if (!match && expected) {
+            match = lesson.questions.find(
+              (q: LessonQuestion) =>
+                normalizeQuestionText(String(q.answer ?? "")) === normalizeQuestionText(expected)
+            );
+          }
+        }
+
+        if (match) {
+          const expectedAnswer = String(match.answer ?? "");
+          const conceptTag = match.conceptTag || item.conceptTag;
+          const nextPrompt = await buildReviewPrompt({
+            language: language as SupportedLanguage,
+            lessonId: item.lessonId,
+            sourceQuestionText: (match as any).prompt || match.question,
+            expectedAnswerRaw: expectedAnswer,
+            examples: match.examples,
+            conceptTag,
+            promptStyle: (match as any).promptStyle,
+          });
+
+          if (nextPrompt && nextPrompt !== prompt) {
+            prompt = nextPrompt;
+          }
+        } else if (needsRebuild) {
+          const fallbackPrompt = buildReviewFallbackPrompt({
+            sourceQuestionText: "",
+            conceptTag: item.conceptTag,
+            expectedAnswerRaw: expected,
+          });
+          if (fallbackPrompt && fallbackPrompt !== prompt) {
+            prompt = fallbackPrompt;
+          }
+        }
+
+        if (prompt && prompt !== item.prompt) {
+          queueChanged = true;
+          const idx = queueCopy.findIndex((q) => q.id === item.id);
+          if (idx >= 0) {
+            queueCopy[idx] = { ...queueCopy[idx], prompt };
           }
         }
       }
@@ -398,34 +518,47 @@ export async function submitReview(req: Request, res: Response) {
     const dueItems = pickDueReviewQueueItems(queue, now, 5);
     const nextItem = dueItems.find((i) => i.id !== itemId) ?? (evaluation.result !== "correct" ? updated : null);
 
-    const retryMessage = getDeterministicRetryMessage({
-      reasonCode: evaluation.reasonCode,
-      attemptCount: attempts,
-      repeatedSameWrong: false,
-    });
-
-    let hint: string | null = null;
-    if (evaluation.result !== "correct") {
+    let instructionLanguage: SupportedLanguage | null = null;
+    if (isInstructionLanguageEnabled()) {
       try {
-        const lesson = loadLesson(language, item.lessonId);
-        const match = lesson?.questions?.find(
-          (q: LessonQuestion) => q.conceptTag && q.conceptTag === item.conceptTag
-        );
-        const hintTarget =
-          typeof (match as any)?.hintTarget === "string" ? (match as any).hintTarget.trim() : "";
-        const legacyHint = typeof match?.hint === "string" ? match.hint.trim() : "";
-        hint = hintTarget || legacyHint || buildReviewHint(expected, attempts, evaluation.reasonCode);
+        instructionLanguage = await getInstructionLanguage(userId, language);
       } catch {
-        hint = buildReviewHint(expected, attempts, evaluation.reasonCode);
+        instructionLanguage = null;
       }
     }
 
-    const tutorMessage =
-      evaluation.result === "correct"
-        ? "Nice work. Let's keep going."
-        : hint
-          ? `${retryMessage}\nHint: ${hint}`.trim()
-          : retryMessage;
+    const feedbackLanguage = normalizeFeedbackLanguage(instructionLanguage, "en");
+    const useTargetHints = !instructionLanguage || instructionLanguage === language;
+
+    let hint: string | null = null;
+    if (evaluation.result !== "correct") {
+      if (useTargetHints) {
+        try {
+          const lesson = loadLesson(language, item.lessonId);
+          const match = lesson?.questions?.find(
+            (q: LessonQuestion) => q.conceptTag && q.conceptTag === item.conceptTag
+          );
+          const hintTarget =
+            typeof (match as any)?.hintTarget === "string" ? (match as any).hintTarget.trim() : "";
+          const legacyHint = typeof match?.hint === "string" ? match.hint.trim() : "";
+          const hints = cleanStringList((match as any)?.hints);
+          hint = pickHintForAttempt(
+            hints,
+            hintTarget || legacyHint,
+            expected,
+            attempts,
+            evaluation.reasonCode,
+            feedbackLanguage
+          );
+        } catch {
+          hint = pickHintForAttempt([], "", expected, attempts, evaluation.reasonCode, feedbackLanguage);
+        }
+      } else {
+        hint = pickHintForAttempt([], "", expected, attempts, evaluation.reasonCode, feedbackLanguage);
+      }
+    }
+
+    const tutorMessage = buildTutorMessage(evaluation.result, hint, feedbackLanguage);
 
     return res.status(200).json({
       result: evaluation.result,

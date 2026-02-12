@@ -13,6 +13,6 @@ router.post("/submit", lessonController_1.submitAnswer);
 router.get("/catalog", lessonCatalogController_1.getLessonCatalog);
 //GET /lesson/session/:userId (legacy resume route)
 router.get("/session/:userId", lessonController_1.getSessionHandler);
-//GET /lesson/:userId (get Session)
+//GET /lesson/:userId?language=en&lessonId=basic-1 (get Session)
 router.get("/:userId", lessonController_1.getSessionHandler);
 exports.default = router;

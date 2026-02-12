@@ -23,7 +23,7 @@ router.get("/catalog", getLessonCatalog);
 //GET /lesson/session/:userId (legacy resume route)
 router.get("/session/:userId", getSessionHandler);
 
-//GET /lesson/:userId (get Session)
+//GET /lesson/:userId?language=en&lessonId=basic-1 (get Session)
 router.get("/:userId", getSessionHandler);
 
 export default router;

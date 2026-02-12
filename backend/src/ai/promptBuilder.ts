@@ -1,6 +1,9 @@
 // backend/src/ai/promptBuilder.ts
 
 import type { TutorIntent } from "./tutorIntent";
+import { computeSupportPolicy } from "./supportPolicy";
+import type { SupportedLanguage } from "../types";
+import { normalizeSupportLevel, type TeachingSupportLevel } from "../utils/supportLevel";
 
 export type BuildTutorPromptCtx = {
   retryMessage?: string;
@@ -11,14 +14,16 @@ export type BuildTutorPromptCtx = {
   learnerProfileSummary?: string;
   explanationText?: string;
   instructionLanguage?: string;
-  supportLevel?: number;
+  supportLevel?: TeachingSupportLevel | number;
   supportTextDirective?: "include" | "omit";
   eventType?: string;
   includeSupport?: boolean;
-  supportCharLimit?: number;
   conceptTag?: string;
   teachingPace?: string;
   explanationDepth?: string;
+  pace?: "slow" | "normal";
+  attemptCount?: number;
+  isFirstQuestion?: boolean;
 };
 
 function safeStr(v: unknown): string {
@@ -41,31 +46,55 @@ export function buildTutorPrompt(
   const learnerProfileSummary = safeStr(ctx.learnerProfileSummary).trim();
   const explanationText = safeStr(ctx.explanationText).trim();
   const instructionLanguage = safeStr(ctx.instructionLanguage).trim();
-  const supportLevel =
-    typeof ctx.supportLevel === "number" && Number.isFinite(ctx.supportLevel)
-      ? Math.max(0, Math.min(1, ctx.supportLevel))
-      : 0.85;
+  const normalizedInstructionLanguage: SupportedLanguage | undefined =
+    instructionLanguage === "en" ||
+    instructionLanguage === "de" ||
+    instructionLanguage === "es" ||
+    instructionLanguage === "fr"
+      ? (instructionLanguage as SupportedLanguage)
+      : undefined;
+  const normalizedSupportLevel = normalizeSupportLevel(ctx.supportLevel) ?? "high";
   const supportTextDirective = ctx.supportTextDirective === "include" ? "include" : "omit";
   const isEnglish = lang === "en";
   const eventType = safeStr(ctx.eventType).trim() || "UNSPECIFIED";
-  const includeSupport = ctx.includeSupport === true;
-  const supportCharLimit =
-    typeof ctx.supportCharLimit === "number" && Number.isFinite(ctx.supportCharLimit)
-      ? Math.max(60, Math.floor(ctx.supportCharLimit))
-      : supportLevel >= 0.75
-        ? 280
-        : supportLevel >= 0.4
-          ? 200
-          : 120;
   const conceptTag = safeStr(ctx.conceptTag).trim();
-  const teachingPace = safeStr(ctx.teachingPace).trim();
+  const teachingPace = safeStr(ctx.pace ?? ctx.teachingPace).trim();
   const explanationDepthPref = safeStr(ctx.explanationDepth).trim();
+  const pace = teachingPace === "slow" ? "slow" : "normal";
+  const explanationDepth =
+    explanationDepthPref === "short" || explanationDepthPref === "detailed"
+      ? explanationDepthPref
+      : "normal";
+
+  const lessonLanguage: SupportedLanguage =
+    lang === "de" || lang === "es" || lang === "fr" || lang === "en" ? (lang as SupportedLanguage) : "en";
+
+  const policy = computeSupportPolicy({
+    intent,
+    pace,
+    explanationDepth,
+    supportLevel: normalizedSupportLevel,
+    instructionLanguage: normalizedInstructionLanguage,
+    lessonLanguage,
+    attemptCount: ctx.attemptCount,
+    isFirstQuestion: ctx.isFirstQuestion,
+  });
+
+  let includeSupport = policy.includeSupport;
+  if (typeof ctx.includeSupport === "boolean") includeSupport = ctx.includeSupport;
+  if (supportTextDirective === "omit") includeSupport = false;
+
+  const supportLanguageStyle = policy.supportLanguageStyle;
+  const maxSupportBullets = policy.maxSupportBullets;
+  const pacePrefix = pace === "slow" ? "Take your time." : "";
 
   const languageGuard = [
-    `LANGUAGE GUARD:`,
+    `LANGUAGE RULES:`,
     `- The lesson language is "${lang}".`,
     `- primaryText MUST be in the lesson language.`,
-    `- supportText MUST be in the instruction language (or empty).`,
+    `- A separate "Support" section is allowed only when includeSupport=true.`,
+    `- Never mention language names.`,
+    `- Never translate tokens inside quotes "..." or brackets [...].`,
     `- Do NOT introduce other languages in primaryText.`,
     `- ONLY quote foreign words that appear in the question text.`,
     `- do NOT turn the prompt into a translation task.`,
@@ -89,25 +118,29 @@ export function buildTutorPrompt(
       ].join("\n")
     : "";
 
-  const instructionLanguageBlock = instructionLanguage
-    ? [
-        ``,
-        `INSTRUCTION LANGUAGE:`,
-        `- Instruction language for explanations/help is "${instructionLanguage}".`,
-        `- supportText must use the instruction language.`,
-        `- primaryText must stay in the lesson language.`,
-      ].join("\n")
-    : "";
-
   const supportRulesBlock = [
     ``,
-    `SUPPORT RULES (summary):`,
-    `- supportLevel is ${supportLevel.toFixed(2)}.`,
+    `SUPPORT RULES:`,
+    `- supportMode: ${policy.supportMode}.`,
+    `- supportLevel: ${normalizedSupportLevel}.`,
     `- eventType: ${eventType}.`,
     `- includeSupport: ${includeSupport ? "true" : "false"}.`,
-    `- supportCharLimit: ${supportCharLimit} chars max.`,
-    `- For this turn, supportText: ${supportTextDirective}.`,
-    `- If supportText is omitted, output an empty string.`,
+    `- supportLanguageStyle: ${supportLanguageStyle}.`,
+    `- maxSupportBullets: ${maxSupportBullets}.`,
+    `- explanationDepth: ${explanationDepth}.`,
+    `- If includeSupport=false, supportText MUST be an empty string.`,
+    `- If includeSupport=true, supportText MUST follow:`,
+    `  Support:`,
+    `  - bullet 1`,
+    `  - bullet 2 (optional)`,
+    `- support bullets must follow supportLanguageStyle:`,
+    `  - il_only: bullets in instruction language.`,
+    `  - mixed: each bullet = TL short phrase, then "—", then IL clarification.`,
+    `  - tl_only: bullets in lesson language only.`,
+    `- explanationDepth rules:`,
+    `  - short: 1 bullet max, very brief.`,
+    `  - normal: up to maxSupportBullets, include 1 micro-rule.`,
+    `  - detailed: up to maxSupportBullets, include 2 micro-rules + 1 tiny example pattern.`,
   ].join("\n");
 
   const outputFormatBlock = [
@@ -139,8 +172,8 @@ export function buildTutorPrompt(
     ? [
         ``,
         `Teaching Prefs:`,
-        teachingPace ? `- pace: ${teachingPace}` : "",
-        explanationDepthPref ? `- explanationDepth: ${explanationDepthPref}` : "",
+        teachingPace ? `- pace: ${pace}` : "",
+        explanationDepthPref ? `- explanationDepth: ${explanationDepth}` : "",
       ]
         .filter(Boolean)
         .join("\n")
@@ -155,12 +188,14 @@ export function buildTutorPrompt(
   intentBlock.push(`When intent is ASK_QUESTION:`);
   if (isEnglish) {
     intentBlock.push(`Set primaryText to EXACTLY:`);
+    if (pacePrefix) intentBlock.push(pacePrefix);
     intentBlock.push(`Let's begin.`);
     intentBlock.push(questionText ? questionText : "");
   } else {
     intentBlock.push(
       `Set primaryText to a short, calm line in the lesson language, then the question text on a new line.`
     );
+    if (pacePrefix) intentBlock.push(`(If pace=slow, add a calm prefix line first.)`);
     if (questionText) intentBlock.push(questionText);
   }
 
@@ -168,12 +203,14 @@ export function buildTutorPrompt(
   intentBlock.push(`When intent is ADVANCE_LESSON:`);
   if (isEnglish) {
     intentBlock.push(`Set primaryText to EXACTLY:`);
+    if (pacePrefix) intentBlock.push(pacePrefix);
     intentBlock.push(`Nice work! Next question:`);
     intentBlock.push(questionText ? `"${questionText}"` : "");
   } else {
     intentBlock.push(
       `Set primaryText to a short positive transition in the lesson language, then the next question on a new line.`
     );
+    if (pacePrefix) intentBlock.push(`(If pace=slow, add a calm prefix line first.)`);
     if (questionText) intentBlock.push(questionText);
   }
 
@@ -240,7 +277,6 @@ export function buildTutorPrompt(
     `You are a calm, patient language tutor.`,
     ``,
     languageGuard,
-    instructionLanguageBlock,
     supportRulesBlock,
     outputFormatBlock,
     learnerProfileBlock,

@@ -29,8 +29,26 @@ const FeedbackSchema = new mongoose_1.default.Schema({
     targetLanguage: { type: String },
     instructionLanguage: { type: String },
     sessionKey: { type: String },
+    sessionId: { type: String },
+    supportLevel: { type: String },
     appVersion: { type: String },
     clientTimestamp: { type: String },
+    feedbackType: { type: String },
+    rating: { type: Number, min: 1, max: 5 },
+    quickTags: [{ type: String }],
+    freeText: { type: String },
+    forcedChoice: {
+        returnTomorrow: { type: String },
+        clarity: { type: String },
+        pace: { type: String },
+        answerChecking: { type: String },
+        frictionType: { type: String },
+    },
+    questionId: { type: String },
+    attemptsOnQuestion: { type: Number },
+    promptStyle: { type: String },
+    evaluationResult: { type: String },
+    reasonCode: { type: String },
 }, { timestamps: true });
 FeedbackSchema.index({ userAnonId: 1, createdAt: -1 });
 FeedbackSchema.index({ lessonId: 1, conceptTag: 1, createdAt: -1 });

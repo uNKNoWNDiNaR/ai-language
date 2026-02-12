@@ -1,0 +1,218 @@
+lessonId: basic-1
+title: Greetings and Introductions
+description: Greet people, introduce yourself, and use simple polite phrases in German.
+questions:
+  - id: 1
+    conceptTag: greetings_hello
+    question: "You meet someone. Greet them."
+    prompt: "You meet someone. Greet them."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Hallo."
+    acceptedAnswers: ["Hallo.", "Hallo", "Hallo!", "Hi", "Hi!", "Hey", "Hey!"]
+    hintTarget: "Use a common neutral greeting."
+    explanationTarget: "A neutral greeting is “Hallo”."
+    hints: ["Short and neutral."]
+    examples: ["Hallo."]
+
+  - id: 2
+    conceptTag: good_morning
+    question: "It is morning. Greet someone politely."
+    prompt: "It is morning. Greet someone politely."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Guten Morgen."
+    acceptedAnswers: ["Guten Morgen.", "Guten Morgen", "Guten Morgen!"]
+    hintTarget: "Use this greeting before noon."
+    explanationTarget: "Say “Guten Morgen” in the morning."
+    hints: ["Two words: Guten …"]
+    examples: ["Guten Morgen."]
+
+  - id: 3
+    conceptTag: good_day
+    question: "It is daytime. Use a polite greeting."
+    prompt: "It is daytime. Use a polite greeting."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Guten Tag."
+    acceptedAnswers: ["Guten Tag.", "Guten Tag", "Guten Tag!"]
+    hintTarget: "Use a polite daytime greeting."
+    explanationTarget: "A polite daytime greeting is “Guten Tag”."
+    hints: ["Two words: Guten …"]
+    examples: ["Guten Tag."]
+
+  - id: 4
+    conceptTag: good_evening
+    question: "It is evening. Greet someone politely."
+    prompt: "It is evening. Greet someone politely."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Guten Abend."
+    acceptedAnswers: ["Guten Abend.", "Guten Abend", "Guten Abend!"]
+    hintTarget: "Use this greeting in the evening."
+    explanationTarget: "Say “Guten Abend” in the evening."
+    hints: ["Two words: Guten …"]
+    examples: ["Guten Abend."]
+
+  - id: 5
+    conceptTag: goodbye_informal
+    question: "You are leaving a friend. Say goodbye."
+    prompt: "You are leaving a friend. Say goodbye."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Tschüss."
+    acceptedAnswers: ["Tschüss.", "Tschüss", "Tschüss!"]
+    hintTarget: "Use a friendly informal goodbye."
+    explanationTarget: "A common informal goodbye is “Tschüss”."
+    hints: ["Informal and friendly."]
+    examples: ["Tschüss."]
+
+  - id: 6
+    conceptTag: goodbye_formal
+    question: "You are leaving politely (formal). Say goodbye."
+    prompt: "You are leaving politely (formal). Say goodbye."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Auf Wiedersehen."
+    acceptedAnswers: ["Auf Wiedersehen.", "Auf Wiedersehen", "Auf Wiedersehen!"]
+    hintTarget: "Use a polite formal goodbye."
+    explanationTarget: "A standard formal goodbye is “Auf Wiedersehen”."
+    hints: ["Two words."]
+    examples: ["Auf Wiedersehen."]
+
+  - id: 7
+    conceptTag: asking_name_informal
+    question: "Ask someone their name (informal)."
+    prompt: "Ask someone their name (informal)."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Wie heißt du?"
+    acceptedAnswers: ["Wie heißt du?", "Wie heißt du", "Wie heisst du?", "Wie heisst du"]
+    hintTarget: "Start with “Wie …”."
+    explanationTarget: "Informal: “Wie heißt du?”"
+    hints: ["The question starts with “Wie”.", "It ends with “du?”."] 
+    examples: ["Wie heißt du?"]
+
+  - id: 8
+    conceptTag: asking_name_formal
+    question: "Ask someone their name (formal)."
+    prompt: "Ask someone their name (formal)."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Wie heißen Sie?"
+    acceptedAnswers: ["Wie heißen Sie?", "Wie heißen Sie", "Wie heissen Sie?", "Wie heissen Sie"]
+    hintTarget: "Use the formal “Sie”."
+    explanationTarget: "Formal: “Wie heißen Sie?”"
+    hints: ["Formal uses “Sie”.", "Verb is “heißen”."] 
+    examples: ["Wie heißen Sie?"]
+
+  - id: 9
+    conceptTag: introduce_self_name
+    question: "Introduce yourself with your name."
+    prompt: "Introduce yourself with your name."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich heiße [Name]."
+    acceptedAnswers:
+      - "Ich heiße [Name]."
+      - "Ich heiße [Name]"
+      - "Ich heisse [Name]."
+      - "Ich heisse [Name]"
+      - "Mein Name ist [Name]."
+      - "Mein Name ist [Name]"
+    hintTarget: "Use “Ich heiße …” or “Mein Name ist …”."
+    explanationTarget: "Both “Ich heiße …” and “Mein Name ist …” introduce your name."
+    hints: ["Start with “Ich …” or “Mein Name …”."] 
+    examples: ["Ich heiße Anna.", "Mein Name ist Max."]
+
+  - id: 10
+    conceptTag: asking_how_are_you
+    question: "Ask “How are you?” (informal)."
+    prompt: "Ask “How are you?” (informal)."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Wie geht es dir?"
+    acceptedAnswers:
+      - "Wie geht es dir?"
+      - "Wie geht es dir"
+      - "Wie geht's dir?"
+      - "Wie geht's dir"
+      - "Wie gehts dir?"
+      - "Wie gehts dir"
+    hintTarget: "It starts with “Wie geht …”."
+    explanationTarget: "Informal: “Wie geht es dir?” (short: “Wie geht’s dir?”)"
+    hints: ["Starts with “Wie”.", "Contains “geht”."] 
+    examples: ["Wie geht es dir?"]
+
+  - id: 11
+    conceptTag: how_are_you_reply_good
+    question: "Reply positively to “How are you?”"
+    prompt: "Reply positively to “How are you?”"
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Mir geht es gut, danke."
+    acceptedAnswers:
+      - "Mir geht es gut, danke."
+      - "Mir geht es gut, danke"
+      - "Mir geht's gut, danke."
+      - "Mir geht's gut, danke"
+      - "Gut, danke."
+      - "Gut, danke"
+      - "Ganz gut, danke."
+      - "Ganz gut, danke"
+    hintTarget: "A simple reply can start with “Mir geht …”."
+    explanationTarget: "A common reply is “Mir geht es gut, danke.”"
+    hints: ["Includes “gut”.", "You can add “danke”."] 
+    examples: ["Mir geht es gut, danke."]
+
+  - id: 12
+    conceptTag: thanks
+    question: "You received help. Say thanks in German."
+    prompt: "You received help. Say thanks in German."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Danke."
+    acceptedAnswers: ["Danke.", "Danke", "Danke!"]
+    hintTarget: "One common word."
+    explanationTarget: "“Danke” means “Thank you.”"
+    hints: ["Very short."] 
+    examples: ["Danke."]
+
+  - id: 13
+    conceptTag: youre_welcome
+    question: "Someone thanks you. Reply politely."
+    prompt: "Someone thanks you. Reply politely."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Bitte."
+    acceptedAnswers: ["Bitte.", "Bitte", "Bitte!"]
+    hintTarget: "One short word."
+    explanationTarget: "“Bitte” can mean “You’re welcome.”"
+    hints: ["Very short."] 
+    examples: ["Bitte."]
+
+  - id: 14
+    conceptTag: excuse_me
+    question: "You bump into someone. Apologize politely in German."
+    prompt: "You bump into someone. Apologize politely in German."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Entschuldigung."
+    acceptedAnswers: ["Entschuldigung.", "Entschuldigung", "Entschuldigung!"]
+    hintTarget: "A common polite apology."
+    explanationTarget: "“Entschuldigung” is used to say sorry/excuse me."
+    hints: ["Starts with “Ent…”."] 
+    examples: ["Entschuldigung."]
+
+  - id: 15
+    conceptTag: nice_to_meet_you
+    question: "After someone introduces themselves, say 'nice to meet you' in German."
+    prompt: "After someone introduces themselves, say 'nice to meet you' in German."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Freut mich."
+    acceptedAnswers: ["Freut mich.", "Freut mich", "Freut mich!"]
+    hintTarget: "Two words."
+    explanationTarget: "“Freut mich” is a simple way to say “Nice to meet you.”"
+    hints: ["Starts with “Freut …”."] 
+    examples: ["Freut mich."]

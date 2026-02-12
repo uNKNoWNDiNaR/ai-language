@@ -23,9 +23,16 @@ function parseRevealMessage(content: string): RevealPayload {
 
 function splitSupportText(message: ChatMessage): { primary: string; support?: string } {
   if (message.primaryText || message.supportText) {
+    const supportRaw = message.supportText ?? "";
+    const supportClean = supportRaw.trim();
+    if (!supportClean || /^[-•]\s*$/.test(supportClean)) {
+      return {
+        primary: message.primaryText ?? message.content ?? "",
+      };
+    }
     return {
       primary: message.primaryText ?? message.content ?? "",
-      support: message.supportText,
+      support: supportClean,
     };
   }
 
@@ -34,7 +41,7 @@ function splitSupportText(message: ChatMessage): { primary: string; support?: st
   if (idx > -1) {
     const primary = content.slice(0, idx).trim();
     const support = content.slice(idx + 2).trim();
-    if (support) {
+    if (support && !/^[-•]\s*$/.test(support)) {
       return { primary: primary || content, support };
     }
   }
@@ -62,6 +69,22 @@ function formatPrimaryText(text: string): string {
   }
 
   return out;
+}
+
+function formatSupportText(text: string): string {
+  const raw = (text ?? "").trim();
+  if (!raw) return "";
+
+  const withoutLabel = raw.replace(/^support\s*:?\s*/i, "").trim();
+  const collapsed = withoutLabel
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[-•]\s*/i, "").trim())
+    .filter(Boolean)
+    .join(" ");
+
+  if (!collapsed) return "";
+  if (collapsed.length <= 140) return collapsed;
+  return withoutLabel;
 }
 
 type ChatPaneProps = {
@@ -238,6 +261,7 @@ export function ChatPane({
 
         const revealSource = m.content || m.primaryText || "";
         const reveal = m.role === "assistant" ? parseRevealMessage(revealSource) : null;
+        const showRevealDivider = Boolean(reveal && i < messages.length - 1);
         const parts = m.role === "assistant" ? splitSupportText(m) : { primary: m.content };
         const primaryText = m.role === "assistant" ? formatPrimaryText(parts.primary) : parts.primary;
         const shouldRenderCloze =
@@ -303,7 +327,7 @@ export function ChatPane({
                       <div>{primaryText}</div>
                     )}
                   </div>
-                  {m.role === "assistant" && parts.support && (
+                  {m.role === "assistant" && parts.support && i === lastAssistantIndex && (
                     <div
                       style={{
                         maxWidth: "70%",
@@ -332,12 +356,25 @@ export function ChatPane({
                           ? `${supportLabel} (${instructionLanguage.toUpperCase()})`
                           : supportLabel}
                       </div>
-                      {parts.support}
+                      {formatSupportText(parts.support)}
                     </div>
                   )}
                 </div>
               )}
             </div>
+            {showRevealDivider && (
+              <div style={{ display: "flex", justifyContent: "center", margin: "2px 0 6px" }}>
+                <div
+                  style={{
+                    height: 1,
+                    width: "60%",
+                    background: "var(--border)",
+                    borderRadius: 999,
+                    opacity: 0.6,
+                  }}
+                />
+              </div>
+            )}
           </Fragment>
         );
       })}

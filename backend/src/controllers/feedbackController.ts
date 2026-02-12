@@ -24,6 +24,14 @@ function toHelpedUnderstandOrUndefined(v: unknown): number | undefined {
     return n;
 }
 
+function toRatingOrUndefined(v: unknown): number | undefined {
+  if (typeof v !== "number") return undefined;
+  if (!Number.isFinite(v)) return undefined;
+  const n = Math.trunc(v);
+  if (n < 1 || n > 5) return undefined;
+  return n;
+}
+
 function toConfusedTextOrUndefined(v: unknown): string | undefined {
     if (typeof v !== "string") return undefined;
     const t = v.trim();
@@ -37,6 +45,12 @@ function toShortTextOrUndefined(v: unknown, max = 120): string | undefined {
   const t = v.trim();
   if (!t) return undefined;
   return t.slice(0, max);
+}
+
+function toNumberOrUndefined(v: unknown): number | undefined {
+  if (typeof v !== "number") return undefined;
+  if (!Number.isFinite(v)) return undefined;
+  return v;
 }
 
 function toEnumOrUndefined<T extends string>(
@@ -77,6 +91,33 @@ const FELT_BEST_OPTIONS = new Set([
   "calm_tone",
   "other",
 ]);
+const LESSON_FEEDBACK_TYPES = new Set(["lesson_end", "friction"]);
+const LESSON_QUICK_TAGS = new Set([
+  "too_hard",
+  "too_easy",
+  "confusing_instructions",
+  "answer_checking_unfair",
+  "good_pace",
+  "helpful_hints",
+]);
+const RETURN_TOMORROW_OPTIONS = new Set(["yes", "maybe", "no"]);
+const CLARITY_OPTIONS = new Set([
+  "very_clear",
+  "mostly_clear",
+  "somewhat_confusing",
+  "very_confusing",
+]);
+const PACE_OPTIONS = new Set(["too_slow", "just_right", "too_fast"]);
+const ANSWER_CHECKING_OPTIONS = new Set(["fair", "mostly_fair", "unfair", "not_sure"]);
+const FRICTION_TYPE_OPTIONS = new Set([
+  "instructions",
+  "vocab",
+  "grammar",
+  "evaluation_unfair",
+  "other",
+]);
+const SUPPORT_LEVEL_OPTIONS = new Set(["high", "medium", "low"]);
+const EVAL_RESULTS = new Set(["correct", "almost", "wrong"]);
 
 function toAnonSessionIdOrGenerated(v: unknown): string {
   if (typeof v === "string") {
@@ -180,6 +221,149 @@ export async function submitFeedback(req: Request, res: Response) {
     instructionLanguage,
     sessionKey,
     appVersion,
+    clientTimestamp,
+  });
+
+  return res.status(201).json({ ok: true });
+}
+
+export async function submitLessonFeedback(req: Request, res: Response) {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+
+  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+  if (!userId) {
+    return sendError(res, 400, "userId is required", "INVALID_REQUEST");
+  }
+
+  const targetLanguage =
+    typeof body.targetLanguage === "string" ? body.targetLanguage.trim() : "";
+  const lessonId = typeof body.lessonId === "string" ? body.lessonId.trim() : "";
+  if (!targetLanguage || !lessonId) {
+    return sendError(
+      res,
+      400,
+      "targetLanguage and lessonId are required",
+      "MISSING_CONTEXT",
+    );
+  }
+
+  const feedbackType = toEnumOrUndefined(body.feedbackType, LESSON_FEEDBACK_TYPES);
+  if (!feedbackType) {
+    return sendError(res, 400, "feedbackType is required", "INVALID_REQUEST");
+  }
+
+  const ratingProvided = body.rating !== undefined && body.rating !== null;
+  const rating = toRatingOrUndefined(body.rating);
+  if (ratingProvided && typeof rating !== "number") {
+    return sendError(res, 400, "rating must be between 1 and 5", "INVALID_RATING");
+  }
+
+  let freeText: string | undefined;
+  if (typeof body.freeText === "string") {
+    const trimmed = body.freeText.trim();
+    if (trimmed.length > 500) {
+      return sendError(res, 400, "freeText is too long", "TEXT_TOO_LONG");
+    }
+    if (trimmed) freeText = trimmed;
+  }
+
+  const quickTags = toStringArrayOrUndefined(body.quickTags, LESSON_QUICK_TAGS, 8, 40);
+
+  let forcedChoice:
+    | {
+        returnTomorrow?: string;
+        clarity?: string;
+        pace?: string;
+        answerChecking?: string;
+        frictionType?: string;
+      }
+    | undefined;
+  if (body.forcedChoice !== undefined) {
+    if (!body.forcedChoice || typeof body.forcedChoice !== "object" || Array.isArray(body.forcedChoice)) {
+      return sendError(res, 400, "forcedChoice must be an object", "INVALID_FORCED_CHOICE");
+    }
+    const raw = body.forcedChoice as Record<string, unknown>;
+
+    const returnTomorrow = toEnumOrUndefined(raw.returnTomorrow, RETURN_TOMORROW_OPTIONS);
+    if (raw.returnTomorrow !== undefined && !returnTomorrow) {
+      return sendError(res, 400, "returnTomorrow is invalid", "INVALID_FORCED_CHOICE");
+    }
+
+    const clarity = toEnumOrUndefined(raw.clarity, CLARITY_OPTIONS);
+    if (raw.clarity !== undefined && !clarity) {
+      return sendError(res, 400, "clarity is invalid", "INVALID_FORCED_CHOICE");
+    }
+
+    const pace = toEnumOrUndefined(raw.pace, PACE_OPTIONS);
+    if (raw.pace !== undefined && !pace) {
+      return sendError(res, 400, "pace is invalid", "INVALID_FORCED_CHOICE");
+    }
+
+    const answerChecking = toEnumOrUndefined(raw.answerChecking, ANSWER_CHECKING_OPTIONS);
+    if (raw.answerChecking !== undefined && !answerChecking) {
+      return sendError(res, 400, "answerChecking is invalid", "INVALID_FORCED_CHOICE");
+    }
+
+    const frictionType = toEnumOrUndefined(raw.frictionType, FRICTION_TYPE_OPTIONS);
+    if (raw.frictionType !== undefined && !frictionType) {
+      return sendError(res, 400, "frictionType is invalid", "INVALID_FORCED_CHOICE");
+    }
+
+    if (returnTomorrow || clarity || pace || answerChecking || frictionType) {
+      forcedChoice = { returnTomorrow, clarity, pace, answerChecking, frictionType };
+    }
+  }
+
+  const hasAnyField =
+    typeof rating === "number" || typeof freeText === "string" || (quickTags?.length ?? 0) > 0;
+
+  if (!hasAnyField && !forcedChoice) {
+    return sendError(res, 400, "Please fill at least one feedback field.", "EMPTY_FEEDBACK");
+  }
+
+  const instructionLanguage = toShortTextOrUndefined(body.instructionLanguage, 12);
+  const supportLevel = toEnumOrUndefined(body.supportLevel, SUPPORT_LEVEL_OPTIONS);
+  const sessionId = toShortTextOrUndefined(body.sessionId, 160);
+  const clientTimestamp =
+    toShortTextOrUndefined(body.createdAt, 40) ?? toShortTextOrUndefined(body.timestamp, 40);
+
+  const context = (body.context ?? {}) as Record<string, unknown>;
+  const questionIdRaw = context.questionId ?? "";
+  const questionId =
+    typeof questionIdRaw === "string" || typeof questionIdRaw === "number"
+      ? String(questionIdRaw)
+      : undefined;
+  const conceptTag =
+    toShortTextOrUndefined(context.conceptTag, 80) ??
+    toShortTextOrUndefined(body.conceptTag, 80);
+  const attemptsOnQuestion = toNumberOrUndefined(context.attemptsOnQuestion);
+  const promptStyle = toShortTextOrUndefined(context.promptStyle, 40);
+  const evaluationResult = toEnumOrUndefined(context.evaluationResult, EVAL_RESULTS);
+  const reasonCode = toShortTextOrUndefined(context.reasonCode, 40);
+
+  const anonSessionId = toAnonSessionIdOrGenerated(sessionId);
+  const userAnonId = sha256Short(userId);
+
+  await LessonFeedbackModel.create({
+    userAnonId,
+    anonSessionId,
+    lessonId,
+    language: targetLanguage,
+    targetLanguage,
+    instructionLanguage,
+    sessionId,
+    supportLevel,
+    feedbackType,
+    rating,
+    quickTags,
+    freeText,
+    forcedChoice,
+    questionId,
+    conceptTag,
+    attemptsOnQuestion,
+    promptStyle,
+    evaluationResult,
+    reasonCode,
     clientTimestamp,
   });
 

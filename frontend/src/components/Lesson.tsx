@@ -9,9 +9,11 @@ import {
   getSuggestedReview,
   getReviewCandidates,
   generateReviewQueue,
+  generateQuickReview,
   submitReview,
   getLessonCatalog,
   getUserProgress,
+  submitLessonFeedback,
   toUserSafeErrorMessage,
   getHttpStatus,
   type LessonSession,
@@ -30,6 +32,10 @@ import {
   type ReviewCandidateItem,
   type ReviewSummary,
   type SupportedLanguage,
+  type SupportLevel,
+  type MicroPracticeItem,
+  type LessonFeedbackQuickTag,
+  type LessonFeedbackContext,
 } from "../api/lessonAPI";
 import {
   isInstructionLanguageEnabledFlag,
@@ -37,6 +43,7 @@ import {
   buildTeachingPrefsPayload,
   getUiStrings,
 } from "../utils/instructionLanguage";
+import { applyInstructionLanguageMeta } from "../utils/lessonMetaByIL";
 import {
   LessonShell,
   LessonSetupPanel,
@@ -45,16 +52,44 @@ import {
   SuggestedReviewCard,
   PracticeCard,
   AnswerBar,
+  LessonFeedbackModal,
+  FrictionFeedback,
 } from "./lesson/index";
 import settingsIcon from "../assets/settings.svg";
-import { Badge, Chip, cn, type BadgeVariant } from "./ui";
+import { Badge, Button, Card, Chip, cn, type BadgeVariant } from "./ui";
 import { FeedbackCard } from "./FeedbackCard";
 
-const LAST_SESSION_KEY = "ai-language:lastSessionKey";
-const LAST_SESSION_STATUS_KEY = "ai-language:lastSessionStatus";
-const LAST_COMPLETED_LESSON_KEY = "ai-language:lastCompletedLessonId";
+const TARGET_LANGUAGE_KEY = "ai-language:targetLanguage";
+const USER_ID_KEY = "ai-language:userId";
+const LAST_SESSION_KEY_PREFIX = "ai-language:lastSessionKey:";
+const LAST_SESSION_STATUS_PREFIX = "ai-language:lastSessionStatus:";
+const LAST_COMPLETED_LESSON_PREFIX = "ai-language:lastCompletedLessonId:";
+const SELECTED_LESSON_PREFIX = "ai-language:selectedLessonId:";
+const LEGACY_LAST_SESSION_KEY = "ai-language:lastSessionKey";
+const LEGACY_LAST_SESSION_STATUS_KEY = "ai-language:lastSessionStatus";
+const LEGACY_LAST_COMPLETED_LESSON_KEY = "ai-language:lastCompletedLessonId";
+const QUICK_REVIEW_DISMISS_PREFIX = "ai-language:quickReviewDismissed:";
+const LESSON_FEEDBACK_SHOWN_PREFIX = "ai-language:lessonFeedbackShown:";
+const FRICTION_PROMPT_SHOWN_PREFIX = "ai-language:frictionPromptShown:";
+const QUICK_REVIEW_DISMISS_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
 const TEACHING_PREFS_PREFIX = "ai-language:teachingPrefs:";
+
+type TargetLanguage = "en" | "de";
+type LanguageOption = {
+  code: SupportedLanguage;
+  label: string;
+  flag: string;
+  disabled?: boolean;
+  note?: string;
+};
+
+const TARGET_LANGUAGES: LanguageOption[] = [
+  { code: "en", label: "English", flag: "🇺🇸" },
+  { code: "de", label: "German", flag: "🇩🇪" },
+  { code: "es", label: "Spanish", flag: "🇪🇸", disabled: true, note: "will be added soon" },
+  { code: "fr", label: "French", flag: "🇫🇷", disabled: true, note: "will be added soon" },
+];
 
 const INSTRUCTION_LANGUAGE_ENABLED = isInstructionLanguageEnabledFlag(
   import.meta.env.VITE_FEATURE_INSTRUCTION_LANGUAGE
@@ -63,12 +98,348 @@ const SUPPORT_LEVEL_ENABLED = isInstructionLanguageEnabledFlag(
   (import.meta as any).env?.VITE_FEATURE_SUPPORT_LEVEL ??
     import.meta.env.VITE_FEATURE_INSTRUCTION_LANGUAGE
 );
+const IS_DEV = Boolean(import.meta.env.DEV);
+const AVAILABLE_INSTRUCTION_LANGUAGES: SupportedLanguage[] = ["en"];
 
 function makeTeachingPrefsKey(userId: string, language: string): string {
+  return makeScopedKey(TEACHING_PREFS_PREFIX, userId, language);
+}
+
+function makeLegacyTeachingPrefsKey(userId: string, language: string): string {
   const u = userId.trim();
   const l = language.trim();
   if (!u || !l) return "";
   return `${TEACHING_PREFS_PREFIX}${u}|${l}`;
+}
+
+function isTargetLanguage(v: unknown): v is TargetLanguage {
+  return v === "en" || v === "de";
+}
+
+function normalizeUserId(value: string): string {
+  return value.trim();
+}
+
+function readUserId(): string {
+  try {
+    const raw = localStorage.getItem(USER_ID_KEY);
+    if (raw) return normalizeUserId(raw);
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function writeUserId(userId: string) {
+  const normalized = normalizeUserId(userId);
+  try {
+    if (!normalized) {
+      localStorage.removeItem(USER_ID_KEY);
+    } else {
+      localStorage.setItem(USER_ID_KEY, normalized);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function readTargetLanguage(): TargetLanguage {
+  try {
+    const raw = localStorage.getItem(TARGET_LANGUAGE_KEY);
+    return isTargetLanguage(raw) ? raw : "en";
+  } catch {
+    return "en";
+  }
+}
+
+function writeTargetLanguage(language: SupportedLanguage) {
+  if (!isTargetLanguage(language)) return;
+  try {
+    localStorage.setItem(TARGET_LANGUAGE_KEY, language);
+  } catch {
+    // ignore
+  }
+}
+
+function makeScopedKey(prefix: string, userId: string, language: string): string {
+  const u = userId.trim();
+  const l = language.trim();
+  if (!u || !l) return "";
+  return `${prefix}${u}:${l}`;
+}
+
+function getTodayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function makeLessonFeedbackShownKey(
+  userId: string,
+  language: string,
+  lessonId: string,
+  dateKey: string
+): string {
+  const u = userId.trim();
+  const l = language.trim();
+  const lid = lessonId.trim();
+  if (!u || !l || !lid || !dateKey) return "";
+  return `${LESSON_FEEDBACK_SHOWN_PREFIX}${u}:${l}:${lid}:${dateKey}`;
+}
+
+function hasLessonFeedbackShown(
+  userId: string,
+  language: string,
+  lessonId: string,
+  dateKey: string
+): boolean {
+  const key = makeLessonFeedbackShownKey(userId, language, lessonId, dateKey);
+  if (!key) return false;
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markLessonFeedbackShown(
+  userId: string,
+  language: string,
+  lessonId: string,
+  dateKey: string
+) {
+  const key = makeLessonFeedbackShownKey(userId, language, lessonId, dateKey);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, "1");
+  } catch {
+    // ignore
+  }
+}
+
+function clearLessonFeedbackShown(
+  userId: string,
+  language: string,
+  lessonId: string,
+  dateKey: string
+) {
+  const key = makeLessonFeedbackShownKey(userId, language, lessonId, dateKey);
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+function makeFrictionPromptKey(sessionId: string, questionId: string): string {
+  const sid = sessionId.trim();
+  const qid = questionId.trim();
+  if (!sid || !qid) return "";
+  return `${FRICTION_PROMPT_SHOWN_PREFIX}${sid}:${qid}`;
+}
+
+function hasFrictionPromptShown(sessionId: string, questionId: string): boolean {
+  const key = makeFrictionPromptKey(sessionId, questionId);
+  if (!key) return false;
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markFrictionPromptShown(sessionId: string, questionId: string) {
+  const key = makeFrictionPromptKey(sessionId, questionId);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, "1");
+  } catch {
+    // ignore
+  }
+}
+
+function parseSessionKey(raw: string): { userId: string; language: string; lessonId: string } | null {
+  const parts = raw.split("|");
+  if (parts.length < 3) return null;
+  const [u, l, lid] = parts;
+  if (!u || !l || !lid) return null;
+  return { userId: u, language: l, lessonId: lid };
+}
+
+function readLastSessionKey(userId: string, language: string): string {
+  const key = makeScopedKey(LAST_SESSION_KEY_PREFIX, userId, language);
+  if (key) {
+    try {
+      const scoped = localStorage.getItem(key);
+      if (scoped) return scoped;
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    const legacy = localStorage.getItem(LEGACY_LAST_SESSION_KEY);
+    if (legacy) {
+      const parsed = parseSessionKey(legacy);
+      if (parsed && parsed.userId === userId && parsed.language === language) {
+        return legacy;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return "";
+}
+
+function writeLastSessionKey(userId: string, language: string, value: string) {
+  const key = makeScopedKey(LAST_SESSION_KEY_PREFIX, userId, language);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore
+  }
+}
+
+function clearLastSessionKey(userId: string, language: string) {
+  const key = makeScopedKey(LAST_SESSION_KEY_PREFIX, userId, language);
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+function readLastSessionStatus(userId: string, language: string): "completed" | "in_progress" | "" {
+  const key = makeScopedKey(LAST_SESSION_STATUS_PREFIX, userId, language);
+  if (key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === "completed" || raw === "in_progress") return raw;
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    const legacyKey = localStorage.getItem(LEGACY_LAST_SESSION_KEY);
+    const legacyStatus = localStorage.getItem(LEGACY_LAST_SESSION_STATUS_KEY);
+    if (legacyKey && legacyStatus) {
+      const parsed = parseSessionKey(legacyKey);
+      if (parsed && parsed.userId === userId && parsed.language === language) {
+        return legacyStatus === "completed" || legacyStatus === "in_progress" ? legacyStatus : "";
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return "";
+}
+
+function writeLastSessionStatus(
+  userId: string,
+  language: string,
+  value: "completed" | "in_progress"
+) {
+  const key = makeScopedKey(LAST_SESSION_STATUS_PREFIX, userId, language);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore
+  }
+}
+
+function clearLastSessionStatus(userId: string, language: string) {
+  const key = makeScopedKey(LAST_SESSION_STATUS_PREFIX, userId, language);
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+function readLastCompletedLessonId(userId: string, language: string): string {
+  const key = makeScopedKey(LAST_COMPLETED_LESSON_PREFIX, userId, language);
+  if (key) {
+    try {
+      return localStorage.getItem(key) ?? "";
+    } catch {
+      return "";
+    }
+  }
+  try {
+    return localStorage.getItem(LEGACY_LAST_COMPLETED_LESSON_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeLastCompletedLessonId(userId: string, language: string, lessonId: string) {
+  const key = makeScopedKey(LAST_COMPLETED_LESSON_PREFIX, userId, language);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, lessonId);
+  } catch {
+    // ignore
+  }
+}
+
+function readSelectedLessonId(userId: string, language: string): string {
+  const key = makeScopedKey(SELECTED_LESSON_PREFIX, userId, language);
+  if (!key) return "";
+  try {
+    return localStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeSelectedLessonId(userId: string, language: string, lessonId: string) {
+  const key = makeScopedKey(SELECTED_LESSON_PREFIX, userId, language);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, lessonId);
+  } catch {
+    // ignore
+  }
+}
+
+function makeQuickReviewDismissKey(language: string, lessonId: string): string {
+  const lang = language.trim();
+  const lesson = lessonId.trim();
+  if (!lang || !lesson) return "";
+  return `${QUICK_REVIEW_DISMISS_PREFIX}${lang}:${lesson}`;
+}
+
+function readQuickReviewDismissed(language: string, lessonId: string): boolean {
+  const key = makeQuickReviewDismissKey(language, lessonId);
+  if (!key) return false;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    const ts = Number(raw);
+    if (!Number.isFinite(ts)) return false;
+    const age = Date.now() - ts;
+    if (age <= QUICK_REVIEW_DISMISS_TTL_MS) return true;
+    localStorage.removeItem(key);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function writeQuickReviewDismissed(language: string, lessonId: string) {
+  const key = makeQuickReviewDismissKey(language, lessonId);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, String(Date.now()));
+  } catch {
+    // ignore
+  }
 }
 
 function isTeachingPace(v: unknown): v is TeachingPace {
@@ -79,47 +450,60 @@ function isExplanationDepth(v: unknown): v is ExplanationDepth {
   return v === "short" || v === "normal" || v === "detailed";
 }
 
-function isSupportMode(v: unknown): v is "auto" | "manual" {
-  return v === "auto" || v === "manual";
+function isSupportLevel(v: unknown): v is SupportLevel {
+  return v === "high" || v === "medium" || v === "low";
 }
 
-function clampSupportLevel(v: unknown, fallback = 0.85): number {
+function normalizeSupportLevel(v: unknown, fallback: SupportLevel = "high"): SupportLevel {
+  if (isSupportLevel(v)) return v;
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) return fallback;
-  return Math.max(0, Math.min(1, n));
+  if (n >= 0.75) return "high";
+  if (n >= 0.4) return "medium";
+  return "low";
 }
 
-function readTeachingPrefs(key: string): TeachingPrefs | null {
-  if (!key) return null;
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
+function normalizeInstructionLanguagePreference(value: unknown): SupportedLanguage {
+  const normalized = normalizeInstructionLanguage(value);
+  if (normalized && AVAILABLE_INSTRUCTION_LANGUAGES.includes(normalized)) return normalized;
+  return "en";
+}
 
-    const obj = parsed as {
-      pace?: unknown;
-      explanationDepth?: unknown;
-      instructionLanguage?: unknown;
-      supportLevel?: unknown;
-      supportMode?: unknown;
-    };
+function readTeachingPrefs(primaryKey: string, fallbackKey?: string): TeachingPrefs | null {
+  const readFromKey = (key: string): TeachingPrefs | null => {
+    if (!key) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
 
-    const pace: TeachingPace = isTeachingPace(obj.pace) ? obj.pace : "normal";
-    const explanationDepth: ExplanationDepth = isExplanationDepth(obj.explanationDepth)
-      ? obj.explanationDepth
-      : "normal";
+      const obj = parsed as {
+        pace?: unknown;
+        explanationDepth?: unknown;
+        instructionLanguage?: unknown;
+        supportLevel?: unknown;
+      };
 
-    const instructionLanguage =
-      normalizeInstructionLanguage(obj.instructionLanguage) ?? "en";
+      const pace: TeachingPace = isTeachingPace(obj.pace) ? obj.pace : "normal";
+      const explanationDepth: ExplanationDepth = isExplanationDepth(obj.explanationDepth)
+        ? obj.explanationDepth
+        : "normal";
 
-    const supportLevel = clampSupportLevel(obj.supportLevel);
-    const supportMode: "auto" | "manual" = isSupportMode(obj.supportMode) ? obj.supportMode : "auto";
+      const instructionLanguage = normalizeInstructionLanguagePreference(obj.instructionLanguage);
 
-    return { pace, explanationDepth, instructionLanguage, supportLevel, supportMode };
-  } catch {
-    return null;
-  }
+      const supportLevel = normalizeSupportLevel(obj.supportLevel);
+
+      return { pace, explanationDepth, instructionLanguage, supportLevel };
+    } catch {
+      return null;
+    }
+  };
+
+  const primary = readFromKey(primaryKey);
+  if (primary) return primary;
+  if (fallbackKey) return readFromKey(fallbackKey);
+  return null;
 }
 
 function writeTeachingPrefs(key: string, prefs: TeachingPrefs) {
@@ -139,6 +523,55 @@ function splitNextQuestion(text: string): { before: string; next: string } | nul
   const next = raw.slice(idx).trim();
   if (!before || !next) return null;
   return { before, next };
+}
+
+function splitPromptFromMessage(text: string, prompt: string): { before: string; next: string } | null {
+  const raw = (text ?? "");
+  const trimmedPrompt = (prompt ?? "").trim();
+  if (!raw || !trimmedPrompt) return null;
+
+  const candidates = [trimmedPrompt, `"${trimmedPrompt}"`, `“${trimmedPrompt}”`];
+  let idx = -1;
+  let used = "";
+  for (const candidate of candidates) {
+    const found = raw.lastIndexOf(candidate);
+    if (found !== -1) {
+      idx = found;
+      used = candidate;
+      break;
+    }
+  }
+  if (idx === -1) return null;
+
+  const before = (raw.slice(0, idx) + raw.slice(idx + used.length)).trim();
+  return { before, next: trimmedPrompt };
+}
+
+function normalizeCompact(text: string): string {
+  return (text ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripTrailingNextLabel(text: string, label: string): string {
+  if (!text || !label) return text;
+  const re = new RegExp(`${escapeRegex(label)}\\s*$`, "i");
+  return text.replace(re, "").trimEnd();
+}
+
+function getNextQuestionLabel(il: SupportedLanguage): string {
+  switch (il) {
+    case "de":
+      return "Nächste Frage:";
+    case "es":
+      return "Siguiente pregunta:";
+    case "fr":
+      return "Question suivante :";
+    default:
+      return "Next question:";
+  }
 }
 
 const LESSON_CONCEPTS: Record<string, string[]> = {
@@ -169,6 +602,43 @@ const LESSON_UNITS: LessonUnitDef[] = [
   { key: "questions", label: "Questions", order: 3, range: [5, 6] },
   { key: "everyday-use", label: "Everyday use", order: 4, range: [7, 12] },
 ];
+
+const UNIT_LABELS_BY_IL_TARGET: Partial<
+  Record<SupportedLanguage, Partial<Record<SupportedLanguage, Record<string, string>>>>
+> = {
+  en: {
+    en: {
+      introductions: "Introductions",
+      "simple-sentences": "Simple sentences",
+      questions: "Questions",
+      "everyday-use": "Everyday use",
+      other: "More lessons",
+    },
+    de: {
+      introductions: "Greetings",
+      "simple-sentences": "Basics & requests",
+      questions: "Time & routines",
+      "everyday-use": "Everyday use",
+      other: "More lessons",
+    },
+  },
+  de: {
+    en: {
+      introductions: "Einführungen",
+      "simple-sentences": "Einfache Sätze",
+      questions: "Fragen",
+      "everyday-use": "Alltag",
+      other: "Weitere Lektionen",
+    },
+    de: {
+      introductions: "Begrüßungen",
+      "simple-sentences": "Grundlagen & Bitten",
+      questions: "Zeit & Routinen",
+      "everyday-use": "Alltag",
+      other: "Weitere Lektionen",
+    },
+  },
+};
 
 const STATUS_ACCENT: Record<string, string> = {
   not_started: "#E5E7EB",
@@ -206,21 +676,49 @@ type LessonUnit = {
   lessons: LessonCatalogItem[];
 };
 
-function buildLessonUnits(lessons: LessonCatalogItem[]): LessonUnit[] {
+type FrictionContext = {
+  questionId: string;
+  conceptTag?: string;
+  promptStyle?: string;
+  attempts: number;
+  evaluationResult?: LessonFeedbackContext["evaluationResult"];
+  reasonCode?: LessonFeedbackContext["reasonCode"];
+};
+
+function getUnitLabel(
+  unitKey: string,
+  instructionLanguage: SupportedLanguage,
+  targetLanguage: SupportedLanguage
+): string {
+  const normalizedIL = normalizeInstructionLanguagePreference(instructionLanguage);
+  const labelsForIL = UNIT_LABELS_BY_IL_TARGET[normalizedIL] ?? UNIT_LABELS_BY_IL_TARGET.en;
+  const labelsForTarget = labelsForIL?.[targetLanguage] ?? labelsForIL?.en;
+  const fallback =
+    LESSON_UNITS.find((unit) => unit.key === unitKey)?.label ?? "More lessons";
+  return labelsForTarget?.[unitKey] ?? fallback;
+}
+
+function buildLessonUnits(
+  lessons: LessonCatalogItem[],
+  instructionLanguage: SupportedLanguage,
+  targetLanguage: SupportedLanguage
+): LessonUnit[] {
   const grouped = new Map<string, LessonUnit>();
   const safeLessons = lessons.filter(
     (lesson) => lesson && typeof lesson.lessonId === "string" && lesson.lessonId.trim().length > 0
   );
   safeLessons.forEach((lesson) => {
     const unit = getLessonUnitDef(lesson.lessonId);
+    const label = getUnitLabel(unit.key, instructionLanguage, targetLanguage);
     const existing = grouped.get(unit.key);
     if (existing) {
+      existing.label = label;
       existing.lessons.push(lesson);
       return;
     }
     grouped.set(unit.key, {
       key: unit.key,
-      label: unit.label,
+      label,
       order: unit.order,
       lessons: [lesson],
     });
@@ -233,11 +731,6 @@ function buildLessonUnits(lessons: LessonCatalogItem[]): LessonUnit[] {
     });
   });
   return Array.from(grouped.values()).sort((a, b) => a.order - b.order);
-}
-
-function clampSupport(value: number): number {
-  if (!Number.isFinite(value)) return 0.85;
-  return Math.max(0, Math.min(1, value));
 }
 
 function sanitizePracticeTutorMessage(raw: string | undefined): string {
@@ -267,6 +760,22 @@ function sanitizePracticeTutorMessage(raw: string | undefined): string {
   }
 
   return kept.join("\n").trim();
+}
+
+function stripPracticePrefix(value: string): string {
+  const raw = (value ?? "").trim();
+  if (!raw) return raw;
+  const stripped = raw.replace(/^\s*practice\s*[:\-–—]?\s*/i, "").trim();
+  return stripped || raw;
+}
+
+function normalizeLessonCompleteMessage(value: string): string {
+  return (value ?? "")
+    .split(/\r?\n/)[0]
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.!?]+$/, "");
 }
 
 function parseRevealParts(text: string): { explanation: string; answer: string } | null {
@@ -371,9 +880,16 @@ function applyQuestionMetaToMessages(
 }
 
 export function Lesson() {
-  const [userId] = useState("user-1");
-  const [language] = useState<"en" | "de" | "es" | "fr">("en");
-  const [lessonId, setLessonId] = useState("basic-1");
+  const [userId, setUserId] = useState<string>(() => readUserId());
+  const [userGateValue, setUserGateValue] = useState("");
+  const [userGateError, setUserGateError] = useState<string | null>(null);
+  const userGateInputRef = useRef<HTMLInputElement | null>(null);
+  const [language, setLanguage] = useState<SupportedLanguage>(() => readTargetLanguage());
+  const [lessonId, setLessonId] = useState(() => {
+    const initialLang = readTargetLanguage();
+    const stored = readSelectedLessonId(readUserId(), initialLang);
+    return stored || "basic-1";
+  });
   const [session, setSession] = useState<LessonSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [questionMeta, setQuestionMeta] = useState<LessonQuestionMeta | null>(null);
@@ -385,6 +901,7 @@ export function Lesson() {
   const [practiceAnswer, setPracticeAnswer] = useState("");
   const [practiceTutorMessage, setPracticeTutorMessage] = useState<string | null>(null);
   const [, setPracticeAttemptCount] = useState<number | null>(null);
+  const [practiceResult, setPracticeResult] = useState<SubmitPracticeResponse["result"] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<
@@ -396,8 +913,9 @@ export function Lesson() {
   const [teachingPace, setTeachingPace] = useState<TeachingPace>("normal");
   const [explanationDepth, setExplanationDepth] = useState<ExplanationDepth>("normal");
   const [instructionLanguage, setInstructionLanguage] = useState<SupportedLanguage>("en");
-  const [supportLevel, setSupportLevel] = useState(0.85);
-  const [supportMode, setSupportMode] = useState<"auto" | "manual">("auto");
+  const [supportLevel, setSupportLevel] = useState<SupportLevel>("high");
+  const [teachingPrefsEpoch, setTeachingPrefsEpoch] = useState(0);
+  const suppressTeachingPrefsWriteRef = useRef(false);
 
   const [suggestedReviewItems, setSuggestedReviewItems] = useState<SuggestedReviewItem[]>([]);
   const [reviewSummary, setReviewSummary] = useState<ReviewSummary | null>(null);
@@ -412,46 +930,54 @@ export function Lesson() {
   const [reviewBanner, setReviewBanner] = useState<string | null>(null);
   const [practiceMode, setPracticeMode] = useState<null | "lesson" | "review">(null);
 
+  const [quickReviewItems, setQuickReviewItems] = useState<MicroPracticeItem[]>([]);
+  const [quickReviewIndex, setQuickReviewIndex] = useState(0);
+  const [quickReviewAnswer, setQuickReviewAnswer] = useState("");
+  const [quickReviewTutorMessage, setQuickReviewTutorMessage] = useState<string | null>(null);
+  const [quickReviewResult, setQuickReviewResult] = useState<SubmitPracticeResponse["result"] | null>(null);
+  const [quickReviewActive, setQuickReviewActive] = useState(false);
+  const [quickReviewComplete, setQuickReviewComplete] = useState(false);
+  const [quickReviewError, setQuickReviewError] = useState<string | null>(null);
+  const [quickReviewDismissed, setQuickReviewDismissed] = useState(false);
+  const [lessonFeedbackOpen, setLessonFeedbackOpen] = useState(false);
+  const [lessonFeedbackContext, setLessonFeedbackContext] = useState<{
+    userId: string;
+    lessonId: string;
+    language: SupportedLanguage;
+    sessionId: string;
+    instructionLanguage?: SupportedLanguage;
+    supportLevel?: SupportLevel;
+  } | null>(null);
+  const [frictionContext, setFrictionContext] = useState<FrictionContext | null>(null);
+
   const clozeInputRef = useRef<HTMLInputElement | null>(null);
+  const quickReviewInputRef = useRef<HTMLInputElement | null>(null);
 
   const [catalog, setCatalog] = useState<LessonCatalogItem[]>([]);
-  const [lastCompletedLessonId, setLastCompletedLessonId] = useState<string>(() => {
-    try {
-      return localStorage.getItem(LAST_COMPLETED_LESSON_KEY) ?? "";
-    } catch {
-      return "";
-    }
-  });
+  const [lastCompletedLessonId, setLastCompletedLessonId] = useState<string>(() =>
+    readLastCompletedLessonId(readUserId(), readTargetLanguage())
+  );
   const [nextLessonId, setNextLessonId] = useState<string | null>(null);
   const [progressMap, setProgressMap] = useState<Record<string, ProgressDoc>>({});
   const [resumeLessonId, setResumeLessonId] = useState<string | null>(null);
   const [homeDataError, setHomeDataError] = useState<string | null>(null);
   const [openUnits, setOpenUnits] = useState<Record<string, boolean>>({});
+  const [forceLessonComplete, setForceLessonComplete] = useState(false);
 
   const [lastSessionStatus, setLastSessionStatus] = useState<"in_progress" | "completed" | "">(
-    () => {
-      try {
-        const raw = localStorage.getItem(LAST_SESSION_STATUS_KEY);
-        return raw === "completed" || raw === "in_progress" ? raw : "";
-      } catch {
-        return "";
-      }
-    }
+    () => readLastSessionStatus(readUserId(), readTargetLanguage())
   );
 
 
-  const [lastSessionKey, setLastSessionKey] = useState<string>(() => {
-    try {
-      return localStorage.getItem(LAST_SESSION_KEY) ?? "";
-    } catch {
-      return "";
-    }
-  });
+  const [lastSessionKey, setLastSessionKey] = useState<string>(() =>
+    readLastSessionKey(readUserId(), readTargetLanguage())
+  );
 
   const chatRef = useRef<HTMLDivElement | null>(null);
   const answerInputRef = useRef<HTMLInputElement | null>(null);
   const practiceInputRef = useRef<HTMLInputElement | null>(null);
   const reviewInputRef = useRef<HTMLInputElement | null>(null);
+  const quickReviewAutoAdvanceRef = useRef<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const prefsButtonRef = useRef<HTMLButtonElement | null>(null);
   const prefsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -462,36 +988,74 @@ export function Lesson() {
     return Boolean(practiceId && practicePrompt);
   }, [practiceId, practicePrompt]);
 
+  const userReady = Boolean(userId.trim());
   const sessionActive = Boolean(session);
   const showHome = !sessionActive && !practiceScreenOpen && !reviewScreenOpen;
   const showConversation = sessionActive && !practiceScreenOpen && !reviewScreenOpen;
+  const showHomeContent = showHome && userReady;
   const lessonCompleted = useMemo(() => {
+    if (forceLessonComplete) return true;
     const status = (progress?.status ?? "").toLowerCase();
     return status === "completed" || status === "needs_review";
-  }, [progress]);
+  }, [progress, forceLessonComplete]);
 
   const showPracticeScreen = practiceScreenOpen;
   const showReviewScreen = reviewScreenOpen;
-  const reviewItemsAvailable = suggestedReviewItems.length > 0;
+  const reviewItemsAvailable =
+    suggestedReviewItems.length > 0 || reviewCandidates.length > 0;
   const showResumePractice = practiceActive && !practiceScreenOpen;
   const busy = loading || pending !== null;
-  const disableStartResume = busy || practiceActive || sessionActive;
+  const disableStartResume = busy || practiceActive || sessionActive || !userReady;
+  const displayCatalog = useMemo(
+    () => applyInstructionLanguageMeta(catalog, instructionLanguage, language),
+    [catalog, instructionLanguage, language]
+  );
+
+  const noLessonsAvailable = displayCatalog.length === 0;
+  const completedLessonId = (session?.lessonId ?? lessonId).trim();
+  const currentQuickReviewItem =
+    quickReviewItems.length > 0 ? quickReviewItems[Math.min(quickReviewIndex, quickReviewItems.length - 1)] : null;
+  const quickReviewBlankActive = Boolean(
+    currentQuickReviewItem &&
+      (currentQuickReviewItem.expectedInput === "blank" ||
+        (typeof currentQuickReviewItem.prompt === "string" &&
+          currentQuickReviewItem.prompt.includes("___")))
+  );
+  const quickReviewPrompt = stripPracticePrefix(currentQuickReviewItem?.prompt ?? "");
+  const quickReviewPromptParts = quickReviewPrompt.includes("___")
+    ? quickReviewPrompt.split("___", 2)
+    : [quickReviewPrompt, ""];
+  const quickReviewPromptBefore = quickReviewPromptParts[0] ?? "";
+  const quickReviewPromptAfter = quickReviewPromptParts[1] ?? "";
+  const quickReviewCanSubmit = Boolean(quickReviewAnswer.trim()) && !loading;
+  const quickReviewInputDisabled = loading || quickReviewResult === "correct";
 
   const inProgressSession = Boolean(session) && !lessonCompleted;
   const showSuggestedReview =
     !inProgressSession && !practiceActive && reviewItemsAvailable && !reviewDismissed;
   const isReviewPractice = practiceMode === "review";
+  const showQuickReviewCard =
+    lessonCompleted &&
+    !practiceActive &&
+    (quickReviewActive || quickReviewComplete || !quickReviewDismissed);
   const uiStrings = useMemo(
     () => getUiStrings(instructionLanguage ?? null),
     [instructionLanguage]
   );
 
-  const lessonUnits = useMemo(() => buildLessonUnits(catalog), [catalog]);
+  const lessonUnits = useMemo(
+    () => buildLessonUnits(displayCatalog, instructionLanguage, language),
+    [displayCatalog, instructionLanguage, language]
+  );
 
   const heroLesson = useMemo(() => {
-    if (!catalog.length) return null;
-    return catalog.find((lesson) => lesson.lessonId === lessonId) ?? catalog[0] ?? null;
-  }, [catalog, lessonId]);
+    if (!displayCatalog.length) return null;
+    return (
+      displayCatalog.find((lesson) => lesson.lessonId === lessonId) ??
+      displayCatalog[0] ??
+      null
+    );
+  }, [displayCatalog, lessonId]);
 
   const heroConcepts = useMemo(() => {
     if (!heroLesson) return [];
@@ -511,11 +1075,31 @@ export function Lesson() {
     return `${uiStrings.hintLabel}\n${hintText}`;
   }, [hintText, uiStrings]);
 
+  const normalizedLessonCompleteTitle = useMemo(
+    () => normalizeLessonCompleteMessage(uiStrings.lessonCompleteTitle),
+    [uiStrings]
+  );
+
   const chatMessages = useMemo(() => {
-    if (!hintMessage) return messages;
+    let nextMessages = messages;
+    if (lessonCompleted && messages.length > 0) {
+      const lastAssistantIndex = [...messages]
+        .map((m, idx) => (m.role === "assistant" ? idx : -1))
+        .filter((idx) => idx >= 0)
+        .slice(-1)[0];
+      if (lastAssistantIndex !== undefined) {
+        const lastMsg = messages[lastAssistantIndex];
+        const normalizedContent = normalizeLessonCompleteMessage(lastMsg.content);
+        if (normalizedContent === normalizedLessonCompleteTitle) {
+          nextMessages = messages.slice();
+          nextMessages.splice(lastAssistantIndex, 1);
+        }
+      }
+    }
+    if (!hintMessage) return nextMessages;
     const hintMsg: ChatMessage = { role: "assistant", content: hintMessage };
-    return [...messages, hintMsg];
-  }, [messages, hintMessage]);
+    return [...nextMessages, hintMsg];
+  }, [messages, hintMessage, lessonCompleted, normalizedLessonCompleteTitle]);
 
   const currentSessionKey = useMemo(() => {
     const u = userId.trim();
@@ -529,41 +1113,96 @@ export function Lesson() {
     return lastSessionKey || currentSessionKey;
   }, [sessionActive, currentSessionKey, lastSessionKey]);
 
-  const teachingPrefsKey = useMemo(() => {
-    return makeTeachingPrefsKey(userId, language);
-  }, [userId, language, lastSessionKey, lastSessionStatus]);
+  const teachingPrefsKey = useMemo(
+    () => makeTeachingPrefsKey(userId, language),
+    [userId, language]
+  );
+  const legacyTeachingPrefsKey = useMemo(
+    () => makeLegacyTeachingPrefsKey(userId, language),
+    [userId, language]
+  );
 
   const currentLessonMeta = useMemo(() => {
     if (!session?.lessonId) return null;
-    return catalog.find((lesson) => lesson.lessonId === session.lessonId) ?? null;
-  }, [catalog, session?.lessonId]);
+    return displayCatalog.find((lesson) => lesson.lessonId === session.lessonId) ?? null;
+  }, [displayCatalog, session?.lessonId]);
 
   useEffect(() => {
-    const loaded = readTeachingPrefs(teachingPrefsKey);
+    suppressTeachingPrefsWriteRef.current = true;
+    const loaded = readTeachingPrefs(teachingPrefsKey, legacyTeachingPrefsKey);
     if (loaded) {
       setTeachingPace(loaded.pace);
       setExplanationDepth(loaded.explanationDepth);
       setInstructionLanguage(loaded.instructionLanguage ?? "en");
-      setSupportLevel(clampSupportLevel(loaded.supportLevel));
-      setSupportMode(loaded.supportMode ?? "auto");
-      return;
+      setSupportLevel(normalizeSupportLevel(loaded.supportLevel));
+    } else {
+      setTeachingPace("normal");
+      setExplanationDepth("normal");
+      setInstructionLanguage("en");
+      setSupportLevel("high");
     }
-    setTeachingPace("normal");
-    setExplanationDepth("normal");
-    setInstructionLanguage("en");
-    setSupportLevel(0.85);
-    setSupportMode("auto");
-  }, [teachingPrefsKey]);
+    setTeachingPrefsEpoch((v) => v + 1);
+  }, [teachingPrefsKey, legacyTeachingPrefsKey]);
 
   useEffect(() => {
+    writeTargetLanguage(language);
+  }, [language]);
+
+  useEffect(() => {
+    writeUserId(userId);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userReady) {
+      requestAnimationFrame(() => {
+        userGateInputRef.current?.focus();
+      });
+    }
+  }, [userReady]);
+
+  useEffect(() => {
+    if (!userId.trim()) {
+      setLastSessionKey("");
+      setLastSessionStatus("");
+      setLastCompletedLessonId("");
+      return;
+    }
+    setLastSessionKey(readLastSessionKey(userId, language));
+    setLastSessionStatus(readLastSessionStatus(userId, language));
+    setLastCompletedLessonId(readLastCompletedLessonId(userId, language));
+    const storedLesson = readSelectedLessonId(userId, language);
+    if (storedLesson) {
+      setLessonId(storedLesson);
+    } else {
+      setLessonId("");
+    }
+  }, [userId, language]);
+
+  useEffect(() => {
+    if (suppressTeachingPrefsWriteRef.current) {
+      suppressTeachingPrefsWriteRef.current = false;
+      return;
+    }
     writeTeachingPrefs(teachingPrefsKey, {
       pace: teachingPace,
       explanationDepth,
       instructionLanguage,
       supportLevel,
-      supportMode,
     });
-  }, [teachingPrefsKey, teachingPace, explanationDepth, instructionLanguage, supportLevel, supportMode]);
+  }, [
+    teachingPrefsKey,
+    teachingPace,
+    explanationDepth,
+    instructionLanguage,
+    supportLevel,
+    teachingPrefsEpoch,
+  ]);
+
+  useEffect(() => {
+    if (!lessonId || catalog.length === 0) return;
+    if (!catalog.some((lesson) => lesson.lessonId === lessonId)) return;
+    writeSelectedLessonId(userId, language, lessonId);
+  }, [lessonId, userId, language, catalog]);
 
   useEffect(() => {
     void refreshSuggestedReview();
@@ -571,7 +1210,71 @@ export function Lesson() {
 
   useEffect(() => {
     setReviewDismissed(false);
+    setSuggestedReviewItems([]);
+    setReviewSummary(null);
+    setReviewCandidates([]);
+    stopReview();
   }, [userId, language]);
+
+  useEffect(() => {
+    if (reviewDismissed && (suggestedReviewItems.length > 0 || reviewCandidates.length > 0)) {
+      setReviewDismissed(false);
+    }
+  }, [reviewDismissed, suggestedReviewItems.length, reviewCandidates.length]);
+
+  useEffect(() => {
+    if (!sessionActive || practiceScreenOpen || reviewScreenOpen || lessonCompleted) {
+      setFrictionContext(null);
+    }
+  }, [sessionActive, practiceScreenOpen, reviewScreenOpen, lessonCompleted]);
+
+  useEffect(() => {
+    if (!lessonCompleted) {
+      setQuickReviewItems([]);
+      setQuickReviewIndex(0);
+      setQuickReviewAnswer("");
+      setQuickReviewTutorMessage(null);
+      setQuickReviewResult(null);
+      setQuickReviewActive(false);
+      setQuickReviewComplete(false);
+      setQuickReviewError(null);
+      setQuickReviewDismissed(false);
+      return;
+    }
+    if (!completedLessonId) return;
+    setQuickReviewDismissed(readQuickReviewDismissed(language, completedLessonId));
+  }, [lessonCompleted, completedLessonId, language]);
+
+  const lastQuestionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentId = questionMeta?.id != null ? String(questionMeta.id) : null;
+    if (!currentId) {
+      lastQuestionIdRef.current = null;
+      return;
+    }
+    if (lastQuestionIdRef.current && lastQuestionIdRef.current !== currentId) {
+      setAnswer("");
+      setClozeEmptyError(null);
+    }
+    lastQuestionIdRef.current = currentId;
+  }, [questionMeta?.id]);
+
+  useEffect(() => {
+    if (!quickReviewActive) return;
+    const handle = window.setTimeout(() => {
+      quickReviewInputRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(handle);
+  }, [quickReviewActive, quickReviewIndex]);
+
+  useEffect(() => {
+    return () => {
+      if (quickReviewAutoAdvanceRef.current) {
+        window.clearTimeout(quickReviewAutoAdvanceRef.current);
+        quickReviewAutoAdvanceRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -628,15 +1331,14 @@ export function Lesson() {
         explanationDepth,
         instructionLanguage,
         supportLevel,
-        supportMode,
         enableInstructionLanguage: INSTRUCTION_LANGUAGE_ENABLED,
       }),
-    [teachingPace, explanationDepth, instructionLanguage, supportLevel, supportMode]
+    [teachingPace, explanationDepth, instructionLanguage, supportLevel]
   );
 
 
   const canResume =
-    !busy && !practiceActive && !sessionActive && lastSessionStatus !== "completed";
+    userReady && !busy && !practiceActive && !sessionActive && lastSessionStatus !== "completed";
 
   function isLessonResumable(lessonIdValue: string): boolean {
     if (!canResume) return false;
@@ -651,7 +1353,12 @@ export function Lesson() {
   const heroPrimaryLabel = canResumeSelected
     ? uiStrings.continueLabel ?? "Continue"
     : uiStrings.startLabel;
-  const primaryActionDisabled = canResumeSelected ? false : disableStartResume;
+  const primaryActionDisabled = canResumeSelected
+    ? false
+    : disableStartResume || noLessonsAvailable;
+  const emptyLessonsMessage =
+    language === "de" ? "German lessons are being prepared." : uiStrings.noLessonsLabel;
+  const userRequiredMessage = !userReady ? "Enter a username to start." : "";
 
   function getLessonStatusInfo(lessonIdValue: string): {
     status: string;
@@ -677,6 +1384,11 @@ export function Lesson() {
       statusLabel,
       accent: STATUS_ACCENT[status] ?? STATUS_ACCENT.not_started,
     };
+  }
+
+  function shouldRestartLesson(lessonIdValue: string): boolean {
+    const status = progressMap[lessonIdValue]?.status?.toLowerCase() ?? "";
+    return status === "completed" || status === "needs_review";
   }
 
   function getBadgeVariant(status: string): BadgeVariant {
@@ -717,7 +1429,7 @@ export function Lesson() {
     );
   }, [session, answer, loading, practiceActive, lessonCompleted]);
 
-  const clozeHelperText = isClozePrompt ? "Type the missing word." : "";
+  const clozeHelperText = isClozePrompt && !lessonCompleted ? "Type the missing word." : "";
 
   const canSubmitPractice = useMemo(() => {
     return Boolean(practiceId) && practiceAnswer.trim().length > 0 && !loading;
@@ -735,13 +1447,24 @@ export function Lesson() {
     return raw.filter(Boolean).slice(0, 2);
   }, [reviewSummary]);
 
+  const reviewIntroMessage = uiStrings.reviewIntroMessage ?? "Let's do a quick review.";
+  const showReviewIntro = Boolean(currentReviewItem) && reviewIndex === 0 && !reviewComplete;
+  const reviewPromptText = currentReviewItem
+    ? [
+        showReviewIntro ? reviewIntroMessage : "",
+        stripPracticePrefix(currentReviewItem.prompt),
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "";
+
   const completionButtonCount =
     (reviewItemsAvailable ? 1 : 0) + (nextLessonId ? 1 : 0) + 1;
   const completionBackButtonClass =
     completionButtonCount === 1 ? "lessonPrimaryBtn" : "lessonSecondaryBtn";
 
   const showContinueNextLessonCTA =
-    Boolean(nextLessonAfterLastCompleted) && !canResumeSelected && !practiceActive;
+    userReady && Boolean(nextLessonAfterLastCompleted) && !canResumeSelected && !practiceActive;
 
   function updateLocalProgress(lessonIdValue: string, status: string) {
     const now = new Date().toISOString();
@@ -850,87 +1573,80 @@ export function Lesson() {
       return;
     }
 
+    let candidates: ReviewCandidateItem[] = [];
     try {
-      const [queueRes, candidateRes] = await Promise.all([
-        getSuggestedReview({
-          userId: uid,
-          language: lang,
-          maxItems: 5,
-        }),
-        getReviewCandidates({
-          userId: uid,
-          language: lang,
-          maxItems: 5,
-        }),
-      ]);
-
-      let items = Array.isArray(queueRes.items) ? queueRes.items : [];
-      setSuggestedReviewItems(items);
-      setReviewSummary(queueRes.summary ?? null);
-
+      const candidateRes = await getReviewCandidates({
+        userId: uid,
+        language: lang,
+        maxItems: 5,
+      });
       const candidatesRaw = Array.isArray(candidateRes.items) ? candidateRes.items : [];
-      const candidates = candidatesRaw.filter(
+      candidates = candidatesRaw.filter(
         (item) => typeof item.confidence !== "number" || item.confidence < 0.9
       );
       setReviewCandidates(candidates);
+    } catch {
+      setReviewCandidates([]);
+    }
 
-      if (items.length === 0 && candidates.length > 0) {
-        const candidateLessonIds = Array.from(
-          new Set(
-            candidates
-              .map((item) => (typeof item.lessonId === "string" ? item.lessonId.trim() : ""))
-              .filter(Boolean)
-          )
-        ).slice(0, 3);
-
-        try {
-          if (candidateLessonIds.length > 0) {
-            await Promise.all(
-              candidateLessonIds.map((lessonId) =>
-                generateReviewQueue({ userId: uid, language: lang, lessonId })
-              )
-            );
-          }
-
-          const refreshedQueue = await getSuggestedReview({
-            userId: uid,
-            language: lang,
-            maxItems: 5,
-          });
-          items = Array.isArray(refreshedQueue.items) ? refreshedQueue.items : [];
-          setSuggestedReviewItems(items);
-          setReviewSummary(refreshedQueue.summary ?? null);
-        } catch {
-          // ignore: keep empty queue
-        }
-      }
-
-      return { items, candidates };
+    let items: SuggestedReviewItem[] = [];
+    try {
+      const queueRes = await getSuggestedReview({
+        userId: uid,
+        language: lang,
+        maxItems: 5,
+      });
+      items = Array.isArray(queueRes.items) ? queueRes.items : [];
+      setSuggestedReviewItems(items);
+      setReviewSummary(queueRes.summary ?? null);
     } catch {
       setSuggestedReviewItems([]);
       setReviewSummary(null);
-      setReviewCandidates([]);
     }
+
+    if (items.length === 0 && candidates.length > 0) {
+      const candidateLessonIds = Array.from(
+        new Set(
+          candidates
+            .map((item) => (typeof item.lessonId === "string" ? item.lessonId.trim() : ""))
+            .filter(Boolean)
+        )
+      ).slice(0, 3);
+
+      try {
+        if (candidateLessonIds.length > 0) {
+          await Promise.all(
+            candidateLessonIds.map((lessonId) =>
+              generateReviewQueue({ userId: uid, language: lang, lessonId })
+            )
+          );
+        }
+
+        const refreshedQueue = await getSuggestedReview({
+          userId: uid,
+          language: lang,
+          maxItems: 5,
+        });
+        items = Array.isArray(refreshedQueue.items) ? refreshedQueue.items : [];
+        setSuggestedReviewItems(items);
+        setReviewSummary(refreshedQueue.summary ?? null);
+      } catch {
+        // ignore: keep empty queue
+      }
+    }
+
+    return { items, candidates };
   }
 
   async function refreshHomeData(nextUserId?: string, nextLanguage?: SupportedLanguage) {
     const uid = (nextUserId ?? userId).trim();
     const lang = (nextLanguage ?? language) as SupportedLanguage;
-    if (!uid || !lang) {
-      setCatalog([]);
-      setProgressMap({});
-      setResumeLessonId(null);
-      setHomeDataError("Couldn’t load lessons. Check the server and try again.");
-      return;
-    }
+    if (!lang) return;
 
     setHomeDataError(null);
 
     try {
-      const [catalogRes, progressRes] = await Promise.all([
-        getLessonCatalog(lang),
-        getUserProgress(uid, lang),
-      ]);
+      const catalogRes = await getLessonCatalog(lang);
 
       const lessons = Array.isArray(catalogRes.lessons)
         ? catalogRes.lessons.filter(
@@ -940,6 +1656,19 @@ export function Lesson() {
         : [];
       setCatalog(lessons);
 
+      if (!uid) {
+        setProgressMap({});
+        setResumeLessonId(null);
+        setLastCompletedLessonId("");
+        setHomeDataError(null);
+        return;
+      }
+
+      const storedLastSessionKey = readLastSessionKey(uid, lang);
+      const storedLastSessionStatus = readLastSessionStatus(uid, lang);
+      const storedSelectedLessonId = readSelectedLessonId(uid, lang);
+
+      const progressRes = await getUserProgress(uid, lang);
       const progressDocs: ProgressDoc[] = Array.isArray(progressRes.progress)
         ? progressRes.progress
         : [];
@@ -969,16 +1698,14 @@ export function Lesson() {
       const lastCompleted = completedDocs[0]?.lessonId ?? "";
       if (lastCompleted) {
         setLastCompletedLessonId(lastCompleted);
-        try {
-          localStorage.setItem(LAST_COMPLETED_LESSON_KEY, lastCompleted);
-        } catch {
-          // ignore
-        }
+        writeLastCompletedLessonId(uid, lang, lastCompleted);
+      } else {
+        setLastCompletedLessonId("");
       }
 
       let selectedLessonId = lessonId;
 
-      const sessionKeyParts = lastSessionKey.split("|");
+      const sessionKeyParts = storedLastSessionKey.split("|");
       const sessionLessonId =
         sessionKeyParts.length >= 3 &&
         sessionKeyParts[0] === uid &&
@@ -989,11 +1716,16 @@ export function Lesson() {
       if (resumeId && lessons.some((l) => l.lessonId === resumeId)) {
         selectedLessonId = resumeId;
       } else if (
-        lastSessionStatus !== "completed" &&
+        storedLastSessionStatus !== "completed" &&
         sessionLessonId &&
         lessons.some((l) => l.lessonId === sessionLessonId)
       ) {
         selectedLessonId = sessionLessonId;
+      } else if (
+        storedSelectedLessonId &&
+        lessons.some((l) => l.lessonId === storedSelectedLessonId)
+      ) {
+        selectedLessonId = storedSelectedLessonId;
       } else if (lastCompleted) {
         const idx = lessons.findIndex((l) => l.lessonId === lastCompleted);
         const next = idx >= 0 ? lessons[idx + 1]?.lessonId ?? null : null;
@@ -1003,7 +1735,9 @@ export function Lesson() {
         selectedLessonId = lessons[0].lessonId;
       }
 
-      if (selectedLessonId && selectedLessonId !== lessonId) {
+      if (!lessons.length) {
+        setLessonId("");
+      } else if (selectedLessonId && selectedLessonId !== lessonId) {
         setLessonId(selectedLessonId);
       }
     } catch {
@@ -1023,6 +1757,17 @@ export function Lesson() {
     setReviewComplete(false);
 
     if (message) setReviewBanner(message);
+  }
+
+  function resetQuickReviewState() {
+    setQuickReviewItems([]);
+    setQuickReviewIndex(0);
+    setQuickReviewAnswer("");
+    setQuickReviewTutorMessage(null);
+    setQuickReviewResult(null);
+    setQuickReviewActive(false);
+    setQuickReviewComplete(false);
+    setQuickReviewError(null);
   }
 
   async function beginSuggestedReview() {
@@ -1064,6 +1809,120 @@ export function Lesson() {
     setReviewScreenOpen(true);
   }
 
+  async function startQuickReview() {
+    const uid = userId.trim();
+    if (!uid || !completedLessonId || loading) return;
+
+    setError(null);
+    setQuickReviewError(null);
+    setLoading(true);
+    setPending("practice");
+
+    try {
+      const res = await generateQuickReview({
+        userId: uid,
+        language,
+        lessonId: completedLessonId,
+      });
+
+      if (!res.items || res.items.length === 0) {
+        setQuickReviewError("Quick review items aren’t available yet.");
+        resetQuickReviewState();
+        return;
+      }
+
+      setQuickReviewItems(res.items);
+      setQuickReviewIndex(0);
+      setQuickReviewAnswer("");
+      setQuickReviewTutorMessage(null);
+      setQuickReviewResult(null);
+      setQuickReviewComplete(false);
+      setQuickReviewActive(true);
+    } catch (e: unknown) {
+      setQuickReviewError(toUserSafeErrorMessage(e));
+      resetQuickReviewState();
+    } finally {
+      setPending(null);
+      setLoading(false);
+    }
+  }
+
+  function dismissQuickReview() {
+    if (!completedLessonId) return;
+    writeQuickReviewDismissed(language, completedLessonId);
+    setQuickReviewDismissed(true);
+    resetQuickReviewState();
+  }
+
+  async function handleSendQuickReview() {
+    if (!currentQuickReviewItem) return;
+    const uid = userId.trim();
+    if (!uid || loading) return;
+
+    const trimmed = quickReviewAnswer.trim();
+    if (!trimmed) {
+      setQuickReviewError(quickReviewBlankActive ? "Please type the missing word." : "Please type your answer.");
+      return;
+    }
+
+    setQuickReviewError(null);
+    setLoading(true);
+    setPending("practice");
+
+    try {
+      const res = await submitPractice({
+        userId: uid,
+        practiceId: currentQuickReviewItem.id,
+        answer: trimmed,
+      });
+
+      setQuickReviewTutorMessage(sanitizePracticeTutorMessage(res.tutorMessage));
+      setQuickReviewResult(res.result);
+
+      if (quickReviewAutoAdvanceRef.current) {
+        window.clearTimeout(quickReviewAutoAdvanceRef.current);
+        quickReviewAutoAdvanceRef.current = null;
+      }
+
+      if (res.result === "correct") {
+        quickReviewAutoAdvanceRef.current = window.setTimeout(() => {
+          handleNextQuickReview();
+          if (quickReviewAutoAdvanceRef.current) {
+            window.clearTimeout(quickReviewAutoAdvanceRef.current);
+            quickReviewAutoAdvanceRef.current = null;
+          }
+        }, 600);
+      } else {
+        window.setTimeout(() => {
+          quickReviewInputRef.current?.focus();
+        }, 0);
+      }
+    } catch (e: unknown) {
+      setQuickReviewError(toUserSafeErrorMessage(e));
+    } finally {
+      setPending(null);
+      setLoading(false);
+    }
+  }
+
+  function handleNextQuickReview() {
+    const nextIndex = quickReviewIndex + 1;
+    if (nextIndex < quickReviewItems.length) {
+      setQuickReviewIndex(nextIndex);
+      setQuickReviewAnswer("");
+      setQuickReviewTutorMessage(null);
+      setQuickReviewResult(null);
+      setQuickReviewError(null);
+      return;
+    }
+    setQuickReviewComplete(true);
+    setQuickReviewActive(false);
+    setQuickReviewTutorMessage(null);
+    setQuickReviewResult(null);
+    setQuickReviewAnswer("");
+    setQuickReviewError(null);
+  }
+
   function toggleUnit(unitKey: string) {
     setOpenUnits((prev) => ({ ...prev, [unitKey]: !prev[unitKey] }));
   }
@@ -1075,8 +1934,53 @@ export function Lesson() {
     target.focus({ preventScroll: true });
   }
 
-  async function startLessonFlow(targetLessonId: string, restart: boolean) {
+  function handleTargetLanguageChange(nextLanguage: SupportedLanguage) {
+    if (!isTargetLanguage(nextLanguage)) return;
+    if (nextLanguage === language) return;
+    setLanguage(nextLanguage);
     setError(null);
+    setReviewBanner(null);
+    setReviewDismissed(false);
+    const storedLesson = readSelectedLessonId(userId, nextLanguage);
+    setLessonId(storedLesson || "");
+  }
+
+  function handleUserGateSave() {
+    const next = normalizeUserId(userGateValue);
+    if (!next) {
+      setUserGateError("Please enter a username.");
+      return;
+    }
+    setUserGateError(null);
+    setUserGateValue(next);
+    setUserId(next);
+  }
+
+  function handleResetUserForTesting() {
+    writeUserId("");
+    setUserId("");
+    setUserGateValue("");
+    setUserGateError(null);
+    setPrefsOpen(false);
+  }
+
+  function handleResetFeedbackGateForTesting() {
+    if (!lessonFeedbackContext) return;
+    const feedbackDate = getTodayKey();
+    clearLessonFeedbackShown(
+      lessonFeedbackContext.userId,
+      lessonFeedbackContext.language,
+      lessonFeedbackContext.lessonId,
+      feedbackDate
+    );
+    setLessonFeedbackOpen(true);
+  }
+
+  async function startLessonFlow(targetLessonId: string, restart: boolean) {
+    const uid = userId.trim();
+    if (!uid) return;
+    setError(null);
+    setForceLessonComplete(false);
 
     setSession(null);
     setMessages([]);
@@ -1089,6 +1993,7 @@ export function Lesson() {
     setPracticeAnswer("");
     setPracticeTutorMessage(null);
     setPracticeAttemptCount(null);
+    setPracticeResult(null);
 
     setSuggestedReviewItems([]);
     setReviewSummary(null);
@@ -1104,6 +2009,7 @@ export function Lesson() {
     setReviewScreenOpen(false);
     setPracticeMode(null);
     setPracticeScreenOpen(false);
+    resetQuickReviewState();
 
     setLoading(true);
     setPending("start");
@@ -1113,7 +2019,7 @@ export function Lesson() {
 
     try {
       const res = await startLesson({
-        userId: userId.trim(),
+        userId: uid,
         language,
         lessonId: normalizedLessonId,
         restart,
@@ -1133,18 +2039,15 @@ export function Lesson() {
       const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
       setLastSessionKey(key);
       setLastSessionStatus("in_progress");
-      try {
-        localStorage.setItem(LAST_SESSION_KEY, key);
-        localStorage.setItem(LAST_SESSION_STATUS_KEY, "in_progress");
-      } catch {
-        // ignore
-      }
+      writeLastSessionKey(res.session.userId, res.session.language, key);
+      writeLastSessionStatus(res.session.userId, res.session.language, "in_progress");
 
       setPracticeId(null);
       setPracticePrompt(null);
       setPracticeAnswer("");
       setPracticeTutorMessage(null);
       setPracticeAttemptCount(null);
+      setPracticeResult(null);
       setPracticeMode(null);
       setPracticeScreenOpen(false);
       void refreshSuggestedReview(res.session.userId, res.session.language);
@@ -1165,22 +2068,30 @@ export function Lesson() {
   }
 
   async function handleStart(overrideLessonId?: string) {
+    if (!userId.trim()) return;
     const effectiveLessonId = (overrideLessonId ?? lessonId).trim();
     if (!effectiveLessonId) return;
-    await startLessonFlow(effectiveLessonId, false);
+    const restart = shouldRestartLesson(effectiveLessonId);
+    await startLessonFlow(effectiveLessonId, restart);
   }
 
   async function handleResume() {
     setError(null);
 
+    if (!userId.trim()) return;
     if (!canResumeSelected) return;
 
+    setForceLessonComplete(false);
     setLoading(true);
     setPending("resume");
     scrollOnEnterRef.current = true;
 
     try {
-      const res = await getSession(userId.trim());
+      const res = await getSession(
+        userId.trim(),
+        language,
+        lessonId.trim() ? lessonId.trim() : undefined
+      );
       setSession(res.session);
       setLessonId(res.session.lessonId);
       const questionMeta = res.question ?? null;
@@ -1195,12 +2106,8 @@ export function Lesson() {
       const key = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
       setLastSessionKey(key);
       setLastSessionStatus("in_progress");
-      try {
-        localStorage.setItem(LAST_SESSION_KEY, key);
-        localStorage.setItem(LAST_SESSION_STATUS_KEY, "in_progress");
-      } catch {
-        // ignore
-      }
+      writeLastSessionKey(res.session.userId, res.session.language, key);
+      writeLastSessionStatus(res.session.userId, res.session.language, "in_progress");
 
       void refreshSuggestedReview(res.session.userId, res.session.language);
       void refreshHomeData(res.session.userId, res.session.language);
@@ -1210,14 +2117,12 @@ export function Lesson() {
         if (lastSessionKey === currentSessionKey) {
           setLastSessionKey("");
           setLastSessionStatus("");
-          try {
-            localStorage.removeItem(LAST_SESSION_KEY);
-            localStorage.removeItem(LAST_SESSION_STATUS_KEY);
-          } catch {
-            // ignore
-          }
+          clearLastSessionKey(userId, language);
+          clearLastSessionStatus(userId, language);
         }
-        setError("No Session started yet found. Please start a lesson first.");
+        const languageLabel =
+          TARGET_LANGUAGES.find((entry) => entry.code === language)?.label ?? language;
+        setError(`No session to resume for ${languageLabel} yet.`);
         return;
       } else {
         setError(toUserSafeErrorMessage(e));
@@ -1238,6 +2143,7 @@ export function Lesson() {
     updateLocalProgress(lessonId, "in_progress");
     setResumeLessonId(lessonId);
     setLastSessionStatus("in_progress");
+    writeLastSessionStatus(userId, language, "in_progress");
     void refreshHomeData(userId, language);
   }
 
@@ -1251,6 +2157,7 @@ export function Lesson() {
     if (confirm && !window.confirm("Exit this lesson? You can resume later.")) return;
 
     setError(null);
+    setForceLessonComplete(false);
     setSession(null);
     setMessages([]);
     setQuestionMeta(null);
@@ -1264,6 +2171,7 @@ export function Lesson() {
       setPracticeAnswer("");
       setPracticeTutorMessage(null);
       setPracticeAttemptCount(null);
+      setPracticeResult(null);
       setPracticeMode(null);
       setPracticeScreenOpen(false);
     } else {
@@ -1280,6 +2188,7 @@ export function Lesson() {
     setReviewComplete(false);
     setReviewBanner(null);
     setReviewScreenOpen(false);
+    resetQuickReviewState();
 
     setPending(null);
     void refreshSuggestedReview();
@@ -1288,11 +2197,6 @@ export function Lesson() {
 
   function handleBack() {
     resetToHome({ confirm: false, preservePractice: true });
-  }
-
-  function adjustSupport(delta: number) {
-    setSupportMode("manual");
-    setSupportLevel((prev) => clampSupport(prev + delta));
   }
 
   function handleAnswerChange(value: string) {
@@ -1317,7 +2221,9 @@ export function Lesson() {
     setMessages((prev) => [...prev, userMsg]);
 
     const toSend = trimmedAnswer;
-    setAnswer("");
+    if (!isClozePrompt) {
+      setAnswer("");
+    }
     setClozeEmptyError(null);
 
     const previousStatus = progress?.status ?? "";
@@ -1343,23 +2249,45 @@ export function Lesson() {
       // On forced advance: split "Next question" into a separate bubble,
       // and insert a reveal card between the two bubbles.
       if (isForcedAdvance && incomingHint) {
-        const last = nextMessages[nextMessages.length - 1];
-        if (last && last.role === "assistant") {
-          const parts = splitNextQuestion(last.content);
+        const nextLabel = getNextQuestionLabel(instructionLanguage);
+        const lastAssistantIndex = [...nextMessages]
+          .map((msg, idx) =>
+            msg.role === "assistant" && !(msg.content ?? "").startsWith(REVEAL_PREFIX) ? idx : -1
+          )
+          .filter((idx) => idx >= 0)
+          .slice(-1)[0];
+
+        if (lastAssistantIndex !== undefined) {
+          const last = nextMessages[lastAssistantIndex];
+          const revealPayload =
+            parseRevealParts(incomingHint) ?? { explanation: incomingHint, answer: "" };
+          const revealMessage: ChatMessage = {
+            role: "assistant",
+            content: `${REVEAL_PREFIX}${JSON.stringify(revealPayload)}`,
+          };
+
+          const formattedPrompt = questionMeta
+            ? formatPromptForTaskType(questionMeta.prompt, questionMeta.taskType)
+            : "";
+
+          const labeledParts = splitNextQuestion(last.content);
+          const parts =
+            labeledParts ||
+            (formattedPrompt ? splitPromptFromMessage(last.content, formattedPrompt) : null);
+
           if (parts) {
-            const revealPayload =
-              parseRevealParts(incomingHint) ?? { explanation: incomingHint, answer: "" };
-            const revealMessage: ChatMessage = {
-              role: "assistant",
-              content: `${REVEAL_PREFIX}${JSON.stringify(revealPayload)}`,
-            };
-            nextMessages = nextMessages.slice(0, -1);
-            nextMessages.push({ ...last, content: parts.before });
-            nextMessages.push(revealMessage);
-            nextMessages.push({ ...last, content: parts.next });
+            const rebuilt: ChatMessage[] = nextMessages.slice(0, lastAssistantIndex);
+            const beforeContent = labeledParts
+              ? parts.before
+              : stripTrailingNextLabel(parts.before, nextLabel);
+            if (beforeContent) rebuilt.push({ ...last, content: beforeContent });
+            rebuilt.push(revealMessage);
+            rebuilt.push({
+              ...last,
+              content: labeledParts ? parts.next : `${nextLabel}\n${parts.next}`,
+            });
+            nextMessages = rebuilt;
           } else {
-            const revealPayload =
-              parseRevealParts(incomingHint) ?? { explanation: incomingHint, answer: "" };
             nextMessages = [
               ...nextMessages,
               {
@@ -1371,10 +2299,59 @@ export function Lesson() {
         }
       }
 
+      if (isForcedAdvance && questionMeta?.prompt) {
+        const formattedPrompt = formatPromptForTaskType(
+          questionMeta.prompt,
+          questionMeta.taskType
+        );
+        const promptNeedle = normalizeCompact(formattedPrompt || questionMeta.prompt);
+        const lastAssistant = [...nextMessages]
+          .reverse()
+          .find((msg) => msg.role === "assistant" && !(msg.content ?? "").startsWith(REVEAL_PREFIX));
+        const lastContent = normalizeCompact(lastAssistant?.content ?? "");
+        const hasNextQuestionLine = /next question:/i.test(lastAssistant?.content ?? "");
+        const hasPrompt = promptNeedle && lastContent.includes(promptNeedle);
+
+        if (!hasNextQuestionLine && !hasPrompt) {
+          const nextPrompt = formattedPrompt || questionMeta.prompt;
+          const nextLabel = getNextQuestionLabel(instructionLanguage);
+          nextMessages.push({
+            role: "assistant",
+            content: `${nextLabel}\n${nextPrompt}`,
+          });
+        }
+      }
+
       setMessages(applyQuestionMetaToMessages(nextMessages, questionMeta));
       setQuestionMeta(questionMeta);
 
       const evalResult = res.evaluation?.result;
+      const attemptCount =
+        typeof res.session.attempts === "number" ? res.session.attempts : 0;
+      const maxAttempts =
+        typeof res.session.maxAttempts === "number" ? res.session.maxAttempts : 0;
+
+      if (evalResult === "correct") {
+        setFrictionContext(null);
+      } else if (evalResult === "wrong" && !isForcedAdvance) {
+        const questionIdRaw = questionMeta?.id;
+        const questionId = questionIdRaw != null ? String(questionIdRaw) : "";
+        const meetsThreshold =
+          attemptCount >= 3 || (maxAttempts > 0 && attemptCount >= Math.max(1, maxAttempts - 1));
+        const sessionId = `${res.session.userId}|${res.session.language}|${res.session.lessonId}`;
+
+        if (questionId && meetsThreshold && !hasFrictionPromptShown(sessionId, questionId)) {
+          markFrictionPromptShown(sessionId, questionId);
+          setFrictionContext({
+            questionId,
+            conceptTag: questionMeta?.conceptTag,
+            promptStyle: questionMeta?.promptStyle,
+            attempts: attemptCount,
+            evaluationResult: evalResult,
+            reasonCode: res.evaluation?.reasonCode,
+          });
+        }
+      }
 
       const lastMsg = (res.session.messages ?? []).slice(-1)[0];
       const tutorText =
@@ -1409,6 +2386,7 @@ export function Lesson() {
         setPracticeAnswer("");
         setPracticeTutorMessage(null);
         setPracticeAttemptCount(null);
+        setPracticeResult(null);
         setPracticeMode("lesson");
         setPracticeScreenOpen(false);
       } else if (res.hint?.level === 3) {
@@ -1418,6 +2396,7 @@ export function Lesson() {
         setPracticeAnswer("");
         setPracticeTutorMessage(null);
         setPracticeAttemptCount(null);
+        setPracticeResult(null);
         setPracticeMode(null);
         setPracticeScreenOpen(false);
       }
@@ -1426,27 +2405,58 @@ export function Lesson() {
 
       const nextStatus = res.progress?.status ?? "";
       const statusChanged = Boolean(nextStatus && nextStatus !== previousStatus);
+      const completedNow =
+        res.progress?.status === "completed" ||
+        res.progress?.status === "needs_review" ||
+        res.session?.state === "COMPLETE";
 
-      if (res.progress?.status === "completed" || res.progress?.status === "needs_review") {
+      if (completedNow) {
+        const completedStatus = res.progress?.status ?? "completed";
+        setForceLessonComplete(true);
+        setQuestionMeta(null);
+        setAnswer("");
+        setClozeEmptyError(null);
         void refreshSuggestedReview(res.session.userId, res.session.language);
-        updateLocalProgress(res.session.lessonId, res.progress.status);
+        updateLocalProgress(res.session.lessonId, completedStatus);
         if (resumeLessonId === res.session.lessonId) {
           setResumeLessonId(null);
         }
         setLastSessionStatus("completed");
         setLastCompletedLessonId(res.session.lessonId);
         setLastSessionKey("");
-        try {
-          localStorage.setItem(LAST_SESSION_STATUS_KEY, "completed");
-          localStorage.setItem(LAST_COMPLETED_LESSON_KEY, res.session.lessonId);
-          localStorage.removeItem(LAST_SESSION_KEY);
-        } catch {
-          // ignore
+        writeLastSessionStatus(res.session.userId, res.session.language, "completed");
+        writeLastCompletedLessonId(res.session.userId, res.session.language, res.session.lessonId);
+        clearLastSessionKey(res.session.userId, res.session.language);
+        const feedbackDate = getTodayKey();
+        if (
+          !hasLessonFeedbackShown(
+            res.session.userId,
+            res.session.language,
+            res.session.lessonId,
+            feedbackDate
+          )
+        ) {
+          markLessonFeedbackShown(
+            res.session.userId,
+            res.session.language,
+            res.session.lessonId,
+            feedbackDate
+          );
+          setLessonFeedbackOpen(true);
         }
+        setLessonFeedbackContext({
+          userId: res.session.userId,
+          lessonId: res.session.lessonId,
+          language: res.session.language,
+          sessionId: `${res.session.userId}|${res.session.language}|${res.session.lessonId}`,
+          instructionLanguage,
+          supportLevel,
+        });
         if (statusChanged) {
           void refreshHomeData(res.session.userId, res.session.language);
         }
       } else if (res.progress?.status === "in_progress") {
+        setForceLessonComplete(false);
         updateLocalProgress(res.session.lessonId, "in_progress");
         setResumeLessonId(res.session.lessonId);
       }
@@ -1456,6 +2466,70 @@ export function Lesson() {
       setPending(null);
       setLoading(false);
     }
+  }
+
+  async function handleSubmitLessonFeedback(payload: {
+    rating?: number;
+    quickTags?: LessonFeedbackQuickTag[];
+    freeText?: string;
+    forcedChoice?: {
+      returnTomorrow?: "yes" | "maybe" | "no";
+      clarity?: "very_clear" | "mostly_clear" | "somewhat_confusing" | "very_confusing";
+      pace?: "too_slow" | "just_right" | "too_fast";
+      answerChecking?: "fair" | "mostly_fair" | "unfair" | "not_sure";
+    };
+  }) {
+    if (!lessonFeedbackContext) return;
+
+    await submitLessonFeedback({
+      userId: lessonFeedbackContext.userId,
+      targetLanguage: lessonFeedbackContext.language,
+      instructionLanguage: lessonFeedbackContext.instructionLanguage,
+      lessonId: lessonFeedbackContext.lessonId,
+      sessionId: lessonFeedbackContext.sessionId,
+      supportLevel: lessonFeedbackContext.supportLevel,
+      feedbackType: "lesson_end",
+      rating: payload.rating,
+      quickTags: payload.quickTags,
+      freeText: payload.freeText,
+      forcedChoice: payload.forcedChoice,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  async function handleSubmitFrictionFeedback(payload: {
+    frictionType: "instructions" | "vocab" | "grammar" | "evaluation_unfair" | "other";
+    freeText?: string;
+  }) {
+    const uid = session?.userId ?? userId;
+    const lessonLang = session?.language ?? language;
+    const lessonIdentifier = session?.lessonId ?? lessonId;
+    if (!uid || !lessonLang || !lessonIdentifier || !frictionContext) return;
+
+    await submitLessonFeedback({
+      userId: uid,
+      targetLanguage: lessonLang,
+      instructionLanguage,
+      lessonId: lessonIdentifier,
+      sessionId: `${uid}|${lessonLang}|${lessonIdentifier}`,
+      supportLevel,
+      feedbackType: "friction",
+      freeText: payload.freeText,
+      forcedChoice: {
+        frictionType: payload.frictionType,
+      },
+      context: {
+        questionId: frictionContext.questionId,
+        conceptTag: frictionContext.conceptTag,
+        attemptsOnQuestion: frictionContext.attempts,
+        promptStyle: frictionContext.promptStyle,
+        evaluationResult: frictionContext.evaluationResult,
+        reasonCode: frictionContext.reasonCode,
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    setFrictionContext(null);
   }
 
   async function handleSendPractice() {
@@ -1475,13 +2549,10 @@ export function Lesson() {
 
       setPracticeTutorMessage(sanitizePracticeTutorMessage(res.tutorMessage));
       setPracticeAttemptCount(res.attemptCount);
+      setPracticeResult(res.result);
 
       if (res.result === "correct") {
-        setPracticeId(null);
-        setPracticePrompt(null);
         setPracticeAnswer("");
-        setPracticeMode(null);
-        setPracticeScreenOpen(false);
       } else {
         setPracticeAnswer("");
       }
@@ -1491,6 +2562,17 @@ export function Lesson() {
       setPending(null);
       setLoading(false);
     }
+  }
+
+  function handlePracticeContinue() {
+    setPracticeId(null);
+    setPracticePrompt(null);
+    setPracticeAnswer("");
+    setPracticeTutorMessage(null);
+    setPracticeAttemptCount(null);
+    setPracticeResult(null);
+    setPracticeMode(null);
+    setPracticeScreenOpen(false);
   }
 
   async function handleSubmitReview() {
@@ -1545,14 +2627,14 @@ export function Lesson() {
 
   return (
     <LessonShell>
-      {showHome ? (
+      {showHomeContent ? (
         <div
-          className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 px-4 py-10"
+          className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white px-4 py-10"
           data-last-completed={lastCompletedLessonId || undefined}
           data-resume-lesson={resumeLessonId || undefined}
           data-next-lesson={nextLessonId || undefined}
         >
-          <div className="mx-auto w-full max-w-5xl">
+          <div className="mx-auto w-full max-w-[min(1200px,100%)]">
             <div className="rounded-2xl bg-white/90 shadow-lg ring-1 ring-slate-300/60 backdrop-blur p-6 sm:p-8">
               <div className="space-y-6">
                 {error && <div className="lessonError">{error}</div>}
@@ -1569,8 +2651,11 @@ export function Lesson() {
                       userId={userId}
                       language={language}
                       lessonId={lessonId}
-                      lessons={catalog}
+                      lessons={displayCatalog}
+                      onUserIdChange={(nextUserId) => setUserId(normalizeUserId(nextUserId))}
                       onLessonChange={setLessonId}
+                      languages={TARGET_LANGUAGES}
+                      onLanguageChange={handleTargetLanguageChange}
                       disabled={loading || practiceActive}
                     />
 
@@ -1622,54 +2707,61 @@ export function Lesson() {
                                 value={instructionLanguage}
                                 onChange={(e) =>
                                   setInstructionLanguage(
-                                    (normalizeInstructionLanguage(e.target.value) ?? "en") as SupportedLanguage
+                                    normalizeInstructionLanguagePreference(e.target.value)
                                   )
                                 }
                                 disabled={loading}
                                 className="lessonPrefsSelect"
                               >
                                 <option value="en">English</option>
-                                <option value="de">German</option>
+                                <option value="de" disabled>
+                                  German (will be added soon)
+                                </option>
                                 <option value="es" disabled>
-                                  Spanish (will be implemented later)
+                                  Spanish (will be added soon)
                                 </option>
                                 <option value="fr" disabled>
-                                  French (will be implemented later)
+                                  French (will be added soon)
                                 </option>
                               </select>
                             </label>
                           )}
 
                           {SUPPORT_LEVEL_ENABLED && (
-                            <div className="lessonPrefsField">
-                              <span className="lessonPrefsLabel">
-                                Support level ({supportMode === "manual" ? "Manual" : "Auto"})
-                              </span>
-                              <div className="lessonPrefsSupportActions">
-                                <button
-                                  type="button"
-                                  className="lessonPrefsSupportBtn"
-                                  onClick={() => adjustSupport(0.15)}
-                                  disabled={loading}
-                                >
-                                  More support
-                                </button>
-                                <button
-                                  type="button"
-                                  className="lessonPrefsSupportBtn"
-                                  onClick={() => adjustSupport(-0.15)}
-                                  disabled={loading}
-                                >
-                                  Less support
-                                </button>
-                              </div>
-                              <div className="lessonPrefsHelp">
-                                More support = more help in your instruction language
-                              </div>
-                              <div className="lessonPrefsHelp">
-                                Less support = more target-language immersion
-                              </div>
-                            </div>
+                            <label className="lessonPrefsField">
+                              <span className="lessonPrefsLabel">Support</span>
+                              <select
+                                value={supportLevel}
+                                onChange={(e) => setSupportLevel(normalizeSupportLevel(e.target.value))}
+                                disabled={loading}
+                                className="lessonPrefsSelect"
+                              >
+                                <option value="high">High (beginner)</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                              </select>
+                            </label>
+                          )}
+
+                          {IS_DEV && (
+                            <button
+                              type="button"
+                              className="lessonPrefsAction"
+                              onClick={handleResetFeedbackGateForTesting}
+                              disabled={!lessonFeedbackContext}
+                            >
+                              Dev: Reset lesson feedback gate
+                            </button>
+                          )}
+
+                          {IS_DEV && (
+                            <button
+                              type="button"
+                              className="lessonPrefsAction"
+                              onClick={handleResetUserForTesting}
+                            >
+                              Dev: Reset username
+                            </button>
                           )}
 
                           <button
@@ -1728,6 +2820,9 @@ export function Lesson() {
                     >
                       {heroPrimaryLabel}
                     </button>
+                    {userRequiredMessage && (
+                      <div className="mt-3 text-sm text-slate-600">{userRequiredMessage}</div>
+                    )}
                     <button
                       type="button"
                       className="mt-3 inline-flex text-sm font-medium text-blue-700 hover:text-blue-800"
@@ -1756,6 +2851,8 @@ export function Lesson() {
                           practiceInputRef={practiceInputRef}
                           canSubmitPractice={canSubmitPractice}
                           onSendPractice={handleSendPractice}
+                          practiceResult={practiceResult}
+                          onContinue={handlePracticeContinue}
                           uiStrings={uiStrings}
                         />
                       </div>
@@ -1771,19 +2868,16 @@ export function Lesson() {
 
                   <SuggestedReviewCard
                     visible={showSuggestedReview}
-                    items={suggestedReviewItems}
+                    items={
+                      suggestedReviewItems.length > 0
+                        ? suggestedReviewItems
+                        : reviewCandidates
+                    }
                     loading={loading}
                     onReviewNow={() => void beginSuggestedReview()}
                     onDismiss={() => setReviewDismissed(true)}
                     uiStrings={uiStrings}
                   />
-
-                  <div className="rounded-2xl border border-slate-300/70 bg-white p-5 shadow-sm ring-1 ring-slate-200/50">
-                    <div className="text-sm font-semibold text-slate-800">What's next</div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      Choose one lesson and settle in for a calm, focused session.
-                    </div>
-                  </div>
 
                   <div className="pt-1">
                     <FeedbackCard
@@ -1946,7 +3040,7 @@ export function Lesson() {
                       );
                     })}
                     {lessonUnits.length === 0 && (
-                      <div className="text-sm text-slate-500">{uiStrings.noLessonsLabel}</div>
+                      <div className="text-sm text-slate-500">{emptyLessonsMessage}</div>
                     )}
                   </div>
                 </section>
@@ -1984,9 +3078,9 @@ export function Lesson() {
                   </div>
 
                   <div className="lessonReviewPrompt">
-                    <div className="lessonReviewLabel">Tutor</div>
+                    <div className="lessonReviewLabel">{uiStrings.tutorLabel}</div>
                     <div className="lessonReviewPromptBubble">
-                      {currentReviewItem.prompt}
+                      {reviewPromptText}
                     </div>
                   </div>
 
@@ -2049,7 +3143,7 @@ export function Lesson() {
             </div>
           </div>
         </div>
-      ) : (
+      ) : showHome ? null : (
         <>
           {session && (
             <SessionHeader
@@ -2105,6 +3199,8 @@ export function Lesson() {
                   practiceInputRef={practiceInputRef}
                   canSubmitPractice={canSubmitPractice}
                   onSendPractice={handleSendPractice}
+                  practiceResult={practiceResult}
+                  onContinue={handlePracticeContinue}
                   uiStrings={uiStrings}
                 />
               </div>
@@ -2113,6 +3209,7 @@ export function Lesson() {
 
           {showConversation && (
             <>
+          <div className={sessionActive && !practiceScreenOpen ? "pb-28" : ""}>
           <ChatPane
             chatRef={chatRef}
             chatEndRef={chatEndRef}
@@ -2122,14 +3219,14 @@ export function Lesson() {
             showEmptyState={!practiceActive}
             uiStrings={uiStrings}
             instructionLanguage={instructionLanguage}
-            clozeActive={isClozePrompt}
-            clozePrompt={formattedPrompt}
+            clozeActive={isClozePrompt && !lessonCompleted}
+            clozePrompt={lessonCompleted ? "" : formattedPrompt}
             clozeValue={answer}
             onClozeChange={handleAnswerChange}
             onClozeSubmit={handleSendAnswer}
             clozeDisabled={!sessionActive || loading || practiceActive || lessonCompleted}
             clozeInputRef={clozeInputRef}
-            clozeHelperText={isClozePrompt ? clozeHelperText : ""}
+            clozeHelperText={isClozePrompt && !lessonCompleted ? clozeHelperText : ""}
             clozeErrorText={clozeEmptyError ?? ""}
           >
                 {practiceActive && practiceMode === "lesson" && (
@@ -2149,14 +3246,26 @@ export function Lesson() {
                           practiceInputRef={practiceInputRef}
                           canSubmitPractice={canSubmitPractice}
                           onSendPractice={handleSendPractice}
+                          practiceResult={practiceResult}
+                          onContinue={handlePracticeContinue}
                           uiStrings={uiStrings}
                         />
                   </div>
+                )}
+                {!practiceActive && !lessonCompleted && frictionContext && (
+                  <FrictionFeedback
+                    visible
+                    onSend={handleSubmitFrictionFeedback}
+                    onDismiss={() => setFrictionContext(null)}
+                  />
                 )}
                 {lessonCompleted && !practiceActive && (
                   <>
                     <div className="lessonCompletionCard">
                       <div className="lessonCompletionTitle">{uiStrings.lessonCompleteTitle}</div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        {uiStrings.lessonCompleteSubtitle}
+                      </div>
                       <div className="lessonCompletionSummary">
                         {reviewFocusNext.length > 0 && (
                           <div className="lessonCompletionBlock">
@@ -2169,6 +3278,116 @@ export function Lesson() {
                           </div>
                         )}
                       </div>
+
+                      {showQuickReviewCard && (
+                        <Card className="mt-4 border-slate-200 bg-white p-5 shadow-sm">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold text-slate-900">
+                                Quick review (optional)
+                              </div>
+                              <div className="mt-1 text-sm text-slate-600">
+                                30–60 seconds to reinforce what you just practiced.
+                              </div>
+                            </div>
+                            {quickReviewActive && (
+                              <div className="text-xs text-slate-500">
+                                {Math.min(quickReviewIndex + 1, Math.max(1, quickReviewItems.length))}/
+                                {Math.max(1, quickReviewItems.length)}
+                              </div>
+                            )}
+                          </div>
+
+                          {!quickReviewActive && !quickReviewComplete && (
+                            <div className="mt-4 flex flex-wrap gap-3">
+                              <Button onClick={() => void startQuickReview()} disabled={loading}>
+                                Start quick review
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                onClick={dismissQuickReview}
+                                disabled={loading}
+                              >
+                                Not now
+                              </Button>
+                            </div>
+                          )}
+
+                          {quickReviewActive && currentQuickReviewItem && (
+                            <div className="mt-4 space-y-3">
+                              <div className="text-sm text-slate-800">
+                                {quickReviewBlankActive && quickReviewPrompt.includes("___") ? (
+                                  <span className="inline-flex flex-wrap items-center">
+                                    <span>{quickReviewPromptBefore}</span>
+                                    <input
+                                      ref={quickReviewInputRef}
+                                      value={quickReviewAnswer}
+                                      onChange={(e) => setQuickReviewAnswer(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" && quickReviewCanSubmit) {
+                                          e.preventDefault();
+                                          void handleSendQuickReview();
+                                        }
+                                      }}
+                                      disabled={quickReviewInputDisabled}
+                                      className="mx-2 inline-block w-28 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+                                    />
+                                    <span>{quickReviewPromptAfter}</span>
+                                  </span>
+                                ) : (
+                                  <div>
+                                    <div className="whitespace-pre-wrap">{quickReviewPrompt}</div>
+                                    <input
+                                      ref={quickReviewInputRef}
+                                      value={quickReviewAnswer}
+                                      onChange={(e) => setQuickReviewAnswer(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" && quickReviewCanSubmit) {
+                                          e.preventDefault();
+                                          void handleSendQuickReview();
+                                        }
+                                      }}
+                                      disabled={quickReviewInputDisabled}
+                                      className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                              {quickReviewBlankActive && (
+                                <div className="text-sm text-slate-600">Type the missing word.</div>
+                              )}
+                              {quickReviewError && (
+                                <div className="text-sm text-rose-600">{quickReviewError}</div>
+                              )}
+                              {quickReviewTutorMessage && (
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                                  {quickReviewTutorMessage}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-3">
+                                {quickReviewResult !== "correct" ? (
+                                  <Button
+                                    onClick={() => void handleSendQuickReview()}
+                                    disabled={!quickReviewCanSubmit}
+                                  >
+                                    {uiStrings.sendLabel ?? "Send"}
+                                  </Button>
+                                ) : (
+                                  <Button variant="secondary" onClick={handleNextQuickReview}>
+                                    {quickReviewIndex + 1 < quickReviewItems.length
+                                      ? "Next"
+                                      : "Finish"}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {quickReviewComplete && (
+                            <div className="mt-4 text-sm text-slate-700">Done. Nice work.</div>
+                          )}
+                        </Card>
+                      )}
 
                       <div className="lessonCompletionActions">
                         {reviewItemsAvailable && (
@@ -2208,28 +3427,85 @@ export function Lesson() {
                 </>
                 )}
               </ChatPane>
+              </div>
             </>
           )}
 
           {sessionActive && !practiceScreenOpen && (
-            <AnswerBar
-              answer={answer}
-              onAnswerChange={handleAnswerChange}
-              answerInputRef={answerInputRef}
-              canSubmitAnswer={canSubmitAnswer}
-              onSendAnswer={handleSendAnswer}
-              sessionActive={sessionActive}
-              loading={loading}
-              practiceActive={practiceActive}
-              lessonCompleted={lessonCompleted}
-              hideInput={isClozePrompt}
-              helperText=""
-              errorText=""
-              uiStrings={uiStrings}
-            />
+            <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/90 backdrop-blur">
+              <div className="mx-auto w-full max-w-[min(1200px,100%)] px-4 pb-3">
+                <AnswerBar
+                  answer={answer}
+                  onAnswerChange={handleAnswerChange}
+                  answerInputRef={answerInputRef}
+                  canSubmitAnswer={canSubmitAnswer}
+                  onSendAnswer={handleSendAnswer}
+                  sessionActive={sessionActive}
+                  loading={loading}
+                  practiceActive={practiceActive}
+                  lessonCompleted={lessonCompleted}
+                  hideInput={isClozePrompt}
+                  helperText=""
+                  errorText=""
+                  uiStrings={uiStrings}
+                />
+              </div>
+            </div>
           )}
         </>
       )}
+      {!userReady && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm">
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Enter username"
+          >
+            <div className="text-center">
+              <div className="text-lg font-semibold text-slate-900">
+                Welcome to AI Language Tutor
+              </div>
+              <div className="mt-2 text-sm text-slate-600">
+                Please enter a username to get started.
+              </div>
+            </div>
+            <input
+              ref={userGateInputRef}
+              className="mt-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              value={userGateValue}
+              onChange={(e) => {
+                setUserGateValue(e.target.value);
+                if (userGateError) setUserGateError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleUserGateSave();
+                }
+              }}
+              placeholder="Your username"
+              autoComplete="username"
+            />
+            {userGateError && (
+              <div className="mt-2 text-sm text-rose-600">{userGateError}</div>
+            )}
+            <button
+              type="button"
+              className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+              onClick={handleUserGateSave}
+              disabled={!userGateValue.trim()}
+            >
+              Save and continue
+            </button>
+          </div>
+        </div>
+      )}
+      <LessonFeedbackModal
+        open={lessonFeedbackOpen}
+        onClose={() => setLessonFeedbackOpen(false)}
+        onSubmit={handleSubmitLessonFeedback}
+      />
     </LessonShell>
   );
 }

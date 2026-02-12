@@ -1,4 +1,10 @@
-import type { SupportedLanguage, TeachingPace, ExplanationDepth, TeachingPrefs } from "../api/lessonAPI";
+import type {
+  SupportedLanguage,
+  TeachingPace,
+  ExplanationDepth,
+  TeachingPrefs,
+  SupportLevel,
+} from "../api/lessonAPI";
 
 export function isInstructionLanguageEnabledFlag(value: unknown): boolean {
   const t = String(value ?? "").trim().toLowerCase();
@@ -16,16 +22,16 @@ export function buildTeachingPrefsPayload(args: {
   pace: TeachingPace;
   explanationDepth: ExplanationDepth;
   instructionLanguage?: unknown;
-  supportLevel?: number;
-  supportMode?: "auto" | "manual";
+  supportLevel?: SupportLevel;
   enableInstructionLanguage?: boolean;
 }): TeachingPrefs {
   const base: TeachingPrefs = {
     pace: args.pace,
     explanationDepth: args.explanationDepth,
   };
-  if (typeof args.supportLevel === "number") base.supportLevel = args.supportLevel;
-  if (args.supportMode === "auto" || args.supportMode === "manual") base.supportMode = args.supportMode;
+  if (args.supportLevel === "high" || args.supportLevel === "medium" || args.supportLevel === "low") {
+    base.supportLevel = args.supportLevel;
+  }
   if (!args.enableInstructionLanguage) return base;
   const normalized = normalizeInstructionLanguage(args.instructionLanguage);
   return normalized ? { ...base, instructionLanguage: normalized } : base;
@@ -43,8 +49,10 @@ export type UiStrings = {
   stopLabel: string;
   backToLessons: string;
   lessonCompleteTitle: string;
+  lessonCompleteSubtitle: string;
   focusNextLabel: string;
   reviewOptionalButton: string;
+  reviewIntroMessage: string;
   continueNextLesson: string;
   continueLabel: string;
   startLabel: string;
@@ -94,8 +102,10 @@ const UI_STRINGS: Record<SupportedLanguage, UiStrings> = {
     stopLabel: "Stop",
     backToLessons: "Back to lessons",
     lessonCompleteTitle: "Lesson complete",
+    lessonCompleteSubtitle: "Nice work. You're done for now.",
     focusNextLabel: "Focus next",
     reviewOptionalButton: "Review (optional)",
+    reviewIntroMessage: "Let's do a quick review.",
     continueNextLesson: "Continue to next lesson",
     continueLabel: "Continue",
     startLabel: "Start",
@@ -143,8 +153,10 @@ const UI_STRINGS: Record<SupportedLanguage, UiStrings> = {
     stopLabel: "Stopp",
     backToLessons: "Zurück zu den Lektionen",
     lessonCompleteTitle: "Lektion abgeschlossen",
+    lessonCompleteSubtitle: "Gut gemacht. Für jetzt bist du fertig.",
     focusNextLabel: "Nächster Fokus",
     reviewOptionalButton: "Wiederholen (optional)",
+    reviewIntroMessage: "Lass uns kurz wiederholen.",
     continueNextLesson: "Weiter zur nächsten Lektion",
     continueLabel: "Weiter",
     startLabel: "Start",
@@ -192,8 +204,10 @@ const UI_STRINGS: Record<SupportedLanguage, UiStrings> = {
     stopLabel: "Stop",
     backToLessons: "Back to lessons",
     lessonCompleteTitle: "Lesson complete",
+    lessonCompleteSubtitle: "Nice work. You're done for now.",
     focusNextLabel: "Focus next",
     reviewOptionalButton: "Review (optional)",
+    reviewIntroMessage: "Let's do a quick review.",
     continueNextLesson: "Continue to next lesson",
     continueLabel: "Continue",
     startLabel: "Start",
@@ -241,8 +255,10 @@ const UI_STRINGS: Record<SupportedLanguage, UiStrings> = {
     stopLabel: "Stop",
     backToLessons: "Back to lessons",
     lessonCompleteTitle: "Lesson complete",
+    lessonCompleteSubtitle: "Nice work. You're done for now.",
     focusNextLabel: "Focus next",
     reviewOptionalButton: "Review (optional)",
+    reviewIntroMessage: "Let's do a quick review.",
     continueNextLesson: "Continue to next lesson",
     continueLabel: "Continue",
     startLabel: "Start",

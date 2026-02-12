@@ -3,8 +3,19 @@
 import { LessonSession } from "../state/lessonState";
 import { LessonSessionModel } from "../state/sessionState";
 
-export async function getSession(userId: string): Promise<LessonSession | null> {
-  return await LessonSessionModel.findOne({ userId });
+export async function getSession(
+  userId: string,
+  language?: string,
+  lessonId?: string
+): Promise<LessonSession | null> {
+  const query: Record<string, string> = { userId };
+  if (typeof language === "string" && language.trim()) {
+    query.language = language.trim();
+  }
+  if (typeof lessonId === "string" && lessonId.trim()) {
+    query.lessonId = lessonId.trim();
+  }
+  return await LessonSessionModel.findOne(query, undefined, { sort: { updatedAt: -1 } });
 }
 
 export async function createSession(session: LessonSession): Promise<void> {
@@ -19,9 +30,20 @@ export async function updateSession(session: LessonSession): Promise<void> {
     return;
   }
 
-  await LessonSessionModel.updateOne({ userId: session.userId }, session);
+  const query: Record<string, string> = { userId: session.userId };
+  if (typeof session.language === "string" && session.language.trim()) {
+    query.language = session.language.trim();
+  }
+  if (typeof session.lessonId === "string" && session.lessonId.trim()) {
+    query.lessonId = session.lessonId.trim();
+  }
+  await LessonSessionModel.updateOne(query, session);
 }
 
-export async function deleteSession(userId: string): Promise<void> {
-  await LessonSessionModel.deleteOne({ userId });
+export async function deleteSession(userId: string, language?: string): Promise<void> {
+  const query: Record<string, string> = { userId };
+  if (typeof language === "string" && language.trim()) {
+    query.language = language.trim();
+  }
+  await LessonSessionModel.deleteOne(query);
 }

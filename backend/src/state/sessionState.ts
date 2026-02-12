@@ -10,7 +10,7 @@ const ChatMessageSchema = new mongoose.Schema({
 
 const LessonSessionSchema = new mongoose.Schema(
   {
-    userId: { type: String, required: true, unique: true },
+    userId: { type: String, required: true },
     lessonId: String,
     language: { type: String, required: true },
     state: { type: String, required: true },
@@ -77,6 +77,8 @@ const LessonSessionSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+LessonSessionSchema.index({ userId: 1, language: 1 }, { unique: true });
 
 export const LessonSessionModel =
   mongoose.models.LessonSession || mongoose.model("LessonSession", LessonSessionSchema);

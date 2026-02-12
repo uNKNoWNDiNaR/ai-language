@@ -7,6 +7,7 @@ import { SupportedLanguage } from "../types";
 import {
   normalizeLanguage as normalizeInstructionLanguage,
 } from "../utils/instructionLanguage";
+import { normalizeSupportLevel, type TeachingSupportLevel } from "../utils/supportLevel";
 
 function isMongoReady(): boolean {
   // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
@@ -40,12 +41,13 @@ export type TeachingExplanationDepth = "short" | "normal" | "detailed";
 export type TeachingProfilePrefs = {
   pace: TeachingPace;
   explanationDepth: TeachingExplanationDepth;
+  supportLevel: TeachingSupportLevel;
 };
 
 export type SupportMode = "auto" | "manual";
 
 export type SupportProfile = {
-  supportLevel: number;
+  supportLevel: TeachingSupportLevel;
   supportMode: SupportMode;
 };
 
@@ -61,14 +63,12 @@ function toSupportMode(v: unknown): SupportMode | undefined {
   return v === "auto" || v === "manual" ? v : undefined;
 }
 
-function toSupportLevel(v: unknown): number | undefined {
-  const n = typeof v === "number" ? v : Number(v);
-  if (!Number.isFinite(n)) return undefined;
-  return Math.max(0, Math.min(1, n));
+function toSupportLevel(v: unknown): TeachingSupportLevel | undefined {
+  return normalizeSupportLevel(v) ?? undefined;
 }
 
 const DEFAULT_INSTRUCTION_LANGUAGE: SupportedLanguage = "en";
-const DEFAULT_SUPPORT_LEVEL = 0.85;
+const DEFAULT_SUPPORT_LEVEL: TeachingSupportLevel = "high";
 const DEFAULT_SUPPORT_MODE: SupportMode = "auto";
 
 export async function updateTeachingProfilePrefs(args: {
@@ -207,6 +207,8 @@ function mistakeTagFromReasonCode(reasonCode: unknown): string | null {
   if (c === "ARTICLE") return "articles";
   if (c === "WORD_ORDER") return "word_order";
   if (c === "TYPO") return "typos";
+  if (c === "UMLAUT") return "umlauts";
+  if (c === "CAPITALIZATION") return "capitalization";
   if (c === "WRONG_LANGUAGE") return "wrong_language";
   if (c === "MISSING_SLOT") return "missing_slot";
   if (c === "OTHER") return "general";
@@ -746,6 +748,7 @@ function reasonLabel(code: string): string {
   if (c === "ARTICLE") return "articles";
   if (c === "WORD_ORDER") return "word order";
   if (c === "TYPO") return "spelling/typos";
+  if (c === "UMLAUT") return "umlauts";
   if (c === "WRONG_LANGUAGE") return "wrong language";
   if (c === "MISSING_SLOT") return "missing word/slot";
   if (c === "OTHER") return "general";
@@ -908,7 +911,7 @@ export async function getTeachingProfilePrefs(
 
   const doc = (await LearnerProfileModel.findOne(
     { userId, language },
-    { pace: 1, explanationDepth: 1, forcedAdvanceCount: 1 }
+    { pace: 1, explanationDepth: 1, supportLevel: 1, forcedAdvanceCount: 1 }
   ).lean()) as Record<string, unknown> | null;
 
   if (!doc) return null;
@@ -921,9 +924,11 @@ export async function getTeachingProfilePrefs(
   // If fields weren’t present on older docs, infer softly from behavior.
   const inferredPace: TeachingPace = forcedAdvanceCount >= 2 ? "slow" : "normal";
   const inferredDepth: TeachingExplanationDepth = forcedAdvanceCount >= 2 ? "detailed" : "normal";
+  const inferredSupportLevel: TeachingSupportLevel = forcedAdvanceCount >= 2 ? "high" : "medium";
 
   const pace = toPace(doc.pace) ?? inferredPace;
   const explanationDepth = toExplanationDepth(doc.explanationDepth) ?? inferredDepth;
+  const supportLevel = toSupportLevel((doc as any).supportLevel) ?? inferredSupportLevel;
 
-  return { pace, explanationDepth };
+  return { pace, explanationDepth, supportLevel };
 }

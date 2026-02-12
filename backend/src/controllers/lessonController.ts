@@ -16,6 +16,12 @@ import {
   getHintLeadIn,
   getFocusNudge,
   getDeterministicRetryExplanation,
+  getStartTransition,
+  getAdvanceTransition,
+  getNextQuestionLabel,
+  getEndLessonMessage,
+  getHintLabel,
+  getPacePrefix,
   type ExplanationDepth,
 } from "../ai/staticTutorMessages";
 
@@ -28,8 +34,6 @@ import {
   isTutorMessageAcceptable,
   buildTutorFallback,
   validatePrimaryLanguage,
-  validateSupportLanguage,
-  validateSupportLength,
   validateJsonShape,
 } from "../ai/tutorOutputGuard";
 import { randomUUID } from "crypto";
@@ -41,7 +45,6 @@ import {
   getConceptMistakeCount,
   getTeachingProfilePrefs,
   updateTeachingProfilePrefs,
-  getSupportProfile,
   getInstructionLanguage,
   setInstructionLanguage,
   enqueueReviewQueueItems,
@@ -65,17 +68,45 @@ import { mapLikeGetNumber, mapLikeHas, mapLikeSet } from "../utils/mapLike";
 import { sendError } from "../http/sendError";
 import { logServerError } from "../utils/logger";
 import { computeSupportLevelDelta, updateSupportLevel } from "../services/supportLevelService";
-import { resolveSupportText } from "../services/supportResolver";
-import { buildSupportFallback } from "../services/supportFallback";
-import {
-  clampSupportLevel,
-  getSupportCharLimit,
-  shouldIncludeSupportPolicy,
-  type SupportEventType,
-} from "../services/supportPolicy";
+import { buildSupportSection } from "../services/supportSectionBuilder";
+import { computeSupportPolicy } from "../ai/supportPolicy";
+import { type SupportEventType } from "../services/supportPolicy";
+import { normalizeSupportLevel, supportLevelToNumber, type TeachingSupportLevel } from "../utils/supportLevel";
 
 const FORCED_ADVANCE_PRACTICE_THRESHOLD = 2;
-const DEFAULT_SUPPORT_LEVEL = 0.85;
+
+function normalizeTransitionLanguage(
+  instructionLanguage: SupportedLanguage | null | undefined,
+  fallback: SupportedLanguage
+): SupportedLanguage {
+  return instructionLanguage ?? fallback;
+}
+
+function buildTransitionMessage(
+  intent: TutorIntent,
+  questionText: string,
+  language: SupportedLanguage
+): string {
+  const q = (questionText || "").trim();
+  if (intent === "ASK_QUESTION") {
+    return [getStartTransition(language), q].filter(Boolean).join("\n");
+  }
+  if (intent === "ADVANCE_LESSON") {
+    return [getAdvanceTransition(language), getNextQuestionLabel(language), q]
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (intent === "FORCED_ADVANCE") {
+    return [getForcedAdvanceMessage(language), getNextQuestionLabel(language), q]
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (intent === "END_LESSON") {
+    return getEndLessonMessage(language);
+  }
+  return q;
+}
+const DEFAULT_SUPPORT_LEVEL: TeachingSupportLevel = "high";
 
 function isExplicitSupportRequest(answer: string): boolean {
   const t = String(answer || "").trim().toLowerCase();
@@ -89,6 +120,18 @@ function isExplicitSupportRequest(answer: string): boolean {
     t.includes("spanish") ||
     t.includes("french")
   );
+}
+
+function normalizeTeachingPace(value: unknown): "slow" | "normal" {
+  return value === "slow" ? "slow" : "normal";
+}
+
+function normalizeExplanationDepthPref(value: unknown): ExplanationDepth {
+  return value === "short" || value === "detailed" ? value : "normal";
+}
+
+function normalizeSupportLevelPref(value: unknown): TeachingSupportLevel {
+  return normalizeSupportLevel(value) ?? DEFAULT_SUPPORT_LEVEL;
 }
 
 
@@ -132,55 +175,6 @@ function updateRecentConfusions(
   return forcedAdvance || count >= 2;
 }
 
-function resolveManualSupportState(session: any, supportMode: "auto" | "manual") {
-  const lastMode = session.lastSupportModeFromProfile ?? "auto";
-  if (supportMode !== lastMode) {
-    session.lastSupportModeFromProfile = supportMode;
-    session.manualSupportTurnsLeft = supportMode === "manual" ? 5 : 0;
-  }
-}
-
-function getEffectiveSupportLevel(
-  session: any,
-  supportLevel: number,
-  supportMode: "auto" | "manual"
-): { effectiveSupportLevel: number; manualBoostActive: boolean } {
-  resolveManualSupportState(session, supportMode);
-  const turnsLeft =
-    typeof session.manualSupportTurnsLeft === "number" ? session.manualSupportTurnsLeft : 0;
-  const manualBoostActive = supportMode === "manual" && turnsLeft > 0;
-  const effectiveSupportLevel = clampSupportLevel(supportLevel);
-  return { effectiveSupportLevel, manualBoostActive };
-}
-
-async function consumeManualSupportTurn(
-  session: any,
-  supportMode: "auto" | "manual",
-  userId: string,
-  language: SupportedLanguage
-) {
-  if (supportMode !== "manual") return;
-  const turnsLeft =
-    typeof session.manualSupportTurnsLeft === "number" ? session.manualSupportTurnsLeft : 0;
-  if (turnsLeft <= 0) return;
-
-  const next = Math.max(0, turnsLeft - 1);
-  session.manualSupportTurnsLeft = next;
-
-  if (next === 0) {
-    session.lastSupportModeFromProfile = "auto";
-    try {
-      await updateTeachingProfilePrefs({
-        userId,
-        language,
-        supportMode: "auto",
-      });
-    } catch {
-      // best-effort
-    }
-  }
-}
-
 function getConceptTag(question: any, lessonId?: string): string {
   if (question && typeof question.conceptTag === "string" && question.conceptTag.trim()) {
     return question.conceptTag.trim();
@@ -196,6 +190,8 @@ type QuestionMeta = {
   prompt: string;
   taskType: "typing" | "speaking";
   expectedInput?: "sentence" | "blank";
+  conceptTag?: string;
+  promptStyle?: string;
 };
 
 function buildQuestionMeta(question: any): QuestionMeta | null {
@@ -204,7 +200,7 @@ function buildQuestionMeta(question: any): QuestionMeta | null {
   const questionRaw = typeof question.question === "string" ? question.question.trim() : "";
   const prompt = promptRaw || questionRaw;
   if (!prompt) return null;
-  const taskType =
+  const taskType: "typing" | "speaking" =
     question?.taskType === "speaking" ? "speaking" : "typing";
   const expectedInputRaw =
     typeof question?.expectedInput === "string" ? question.expectedInput.trim().toLowerCase() : "";
@@ -213,7 +209,18 @@ function buildQuestionMeta(question: any): QuestionMeta | null {
       ? (expectedInputRaw as "blank" | "sentence")
       : undefined;
   const idRaw = question?.id ?? "";
-  return expectedInput ? { id: idRaw, prompt, taskType, expectedInput } : { id: idRaw, prompt, taskType };
+  const conceptTag =
+    typeof question?.conceptTag === "string" ? question.conceptTag.trim() : "";
+  const promptStyle =
+    typeof question?.promptStyle === "string" ? question.promptStyle.trim() : "";
+  const base = expectedInput
+    ? { id: idRaw, prompt, taskType, expectedInput }
+    : { id: idRaw, prompt, taskType };
+  return {
+    ...base,
+    ...(conceptTag ? { conceptTag } : {}),
+    ...(promptStyle ? { promptStyle } : {}),
+  };
 }
 function toMapLike(map: any): Map<string, number> {
   if (map instanceof Map) return map;
@@ -289,9 +296,12 @@ async function buildReviewQueueItems(
 
 async function ensureTutorPromptOnResume(
   session: any,
-  instructionLanguage?: SupportedLanguage | null,
-  supportLevel?: number,
-  supportMode: "auto" | "manual" = "auto"
+  instructionLanguage: SupportedLanguage | null,
+  teachingPrefs: {
+    pace: "slow" | "normal";
+    explanationDepth: ExplanationDepth;
+    supportLevel: TeachingSupportLevel;
+  }
 ): Promise<string | null> {
   const last = session.messages?.[session.messages.length - 1];
   if (last && last.role === "assistant") return null;
@@ -309,36 +319,35 @@ async function ensureTutorPromptOnResume(
   else if (session.state === "ADVANCE") intent = "ADVANCE_LESSON";
   else intent = "ASK_QUESTION";
 
-  const { effectiveSupportLevel, manualBoostActive } = getEffectiveSupportLevel(
-    session,
-    supportLevel ?? DEFAULT_SUPPORT_LEVEL,
-    supportMode
-  );
+  const pace = normalizeTeachingPace(teachingPrefs.pace);
+  const explanationDepth = normalizeExplanationDepthPref(teachingPrefs.explanationDepth);
+  const supportLevel = normalizeSupportLevelPref(teachingPrefs.supportLevel);
 
-  let includeSupport =
-    Boolean(instructionLanguage) &&
-    shouldIncludeSupportPolicy({
-      eventType: "SESSION_START",
-      supportLevel: effectiveSupportLevel,
-      questionIndex: idx,
-      repeatedConfusion: false,
-      explicitRequest: false,
-      forceNoSupport: Boolean(session.forceNoSupport),
-    });
+  const policy = computeSupportPolicy({
+    intent,
+    pace,
+    explanationDepth,
+    supportLevel,
+    instructionLanguage: instructionLanguage ?? undefined,
+    lessonLanguage: session.language as SupportedLanguage,
+    attemptCount: 1,
+    isFirstQuestion: idx === 0,
+  });
 
-  if (intent === "ASK_QUESTION" || intent === "ADVANCE_LESSON") {
-    includeSupport = false;
-  }
+  let includeSupport = policy.includeSupport;
+  if (session.forceNoSupport) includeSupport = false;
 
-  const supportCharLimit = getSupportCharLimit(effectiveSupportLevel);
   const tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
     ...(instructionLanguage ? { instructionLanguage } : {}),
-    supportLevel: effectiveSupportLevel,
-    supportTextDirective: "omit",
+    supportLevel,
+    supportTextDirective: includeSupport ? "include" : "omit",
     eventType: "SESSION_START",
     includeSupport,
-    supportCharLimit,
     conceptTag,
+    pace,
+    explanationDepth,
+    attemptCount: 1,
+    isFirstQuestion: idx === 0,
   });
 
   let tutorMessage: string;
@@ -370,31 +379,27 @@ async function ensureTutorPromptOnResume(
     });
   }
 
-  if (includeSupport && instructionLanguage) {
-    const supportResult = await resolveSupportText({
-      targetLanguage: session.language as SupportedLanguage,
-      instructionLanguage,
-      supportLevel: effectiveSupportLevel,
-      includeSupport,
-      supportCharLimit,
-      eventType: "SESSION_START",
-      conceptTag,
-      hintTarget: typeof q?.hintTarget === "string" ? q.hintTarget : undefined,
-      explanationTarget: typeof q?.explanationTarget === "string" ? q.explanationTarget : undefined,
-    });
-    supportText = supportResult.supportText;
+  const transitionLanguage = normalizeTransitionLanguage(
+    instructionLanguage,
+    session.language as SupportedLanguage
+  );
+  tutorMessage = buildTransitionMessage(intent, questionText, transitionLanguage);
 
-    const supportOk =
-      validateSupportLanguage(supportText, instructionLanguage) &&
-      validateSupportLength(supportText, supportCharLimit);
-    if (!supportOk) {
-      const fallback = buildSupportFallback(
-        instructionLanguage,
-        effectiveSupportLevel,
-        "SESSION_START"
-      );
-      supportText = validateSupportLanguage(fallback, instructionLanguage) ? fallback : "";
-    }
+  if (includeSupport) {
+      supportText = buildSupportSection({
+        lessonLanguage: session.language as SupportedLanguage,
+        instructionLanguage: instructionLanguage ?? undefined,
+        supportLanguageStyle: policy.supportLanguageStyle,
+        maxSupportBullets: policy.maxSupportBullets,
+        explanationDepth,
+        eventType: "SESSION_START",
+        conceptTag,
+        hintTarget: typeof q?.hintTarget === "string" ? q.hintTarget : undefined,
+        explanationTarget: typeof q?.explanationTarget === "string" ? q.explanationTarget : undefined,
+        hintSupport: typeof q?.hintSupport === "string" ? q.hintSupport : undefined,
+        explanationSupport:
+          typeof q?.explanationSupport === "string" ? q.explanationSupport : undefined,
+      });
   } else {
     supportText = "";
   }
@@ -403,15 +408,6 @@ async function ensureTutorPromptOnResume(
 
   session.messages = session.messages || [];
   session.messages.push({ role: "assistant", content: combinedMessage });
-
-  if (manualBoostActive) {
-    await consumeManualSupportTurn(
-      session,
-      supportMode,
-      session.userId,
-      session.language as SupportedLanguage
-    );
-  }
 
   await session.save();
 
@@ -471,17 +467,31 @@ export const startLesson = async (req: Request, res: Response) => {
       }
     }
 
-    let supportLevel = DEFAULT_SUPPORT_LEVEL;
-    let supportMode: "auto" | "manual" = "auto";
+    let storedTeachingPrefs: Awaited<ReturnType<typeof getTeachingProfilePrefs>> | null = null;
     try {
-      const supportProfile = await getSupportProfile(userId, lang);
-      supportLevel = clampSupportLevel(supportProfile.supportLevel);
-      supportMode = supportProfile.supportMode === "manual" ? "manual" : "auto";
+      storedTeachingPrefs =
+        typeof getTeachingProfilePrefs === "function"
+          ? await getTeachingProfilePrefs(userId, lang)
+          : null;
     } catch {
-      supportLevel = DEFAULT_SUPPORT_LEVEL;
+      storedTeachingPrefs = null;
     }
 
-    let session = await LessonSessionModel.findOne({ userId });
+    const resolvedTeachingPrefs = {
+      pace: normalizeTeachingPace(teachingPrefs?.pace ?? storedTeachingPrefs?.pace),
+      explanationDepth: normalizeExplanationDepthPref(
+        teachingPrefs?.explanationDepth ?? storedTeachingPrefs?.explanationDepth
+      ),
+      supportLevel: normalizeSupportLevelPref(
+        teachingPrefs?.supportLevel ?? storedTeachingPrefs?.supportLevel
+      ),
+    };
+
+    let session = await LessonSessionModel.findOne(
+      { userId, language: lang },
+      undefined,
+      { sort: { updatedAt: -1 } }
+    );
 
     if (session) {
       const sameLesson = session.lessonId === lessonId && session.language === lang;
@@ -497,8 +507,7 @@ export const startLesson = async (req: Request, res: Response) => {
           const tutorMessage = await ensureTutorPromptOnResume(
             session,
             instructionLanguage,
-            supportLevel,
-            supportMode
+            resolvedTeachingPrefs
           );
 
           return res.status(200).json({
@@ -510,7 +519,7 @@ export const startLesson = async (req: Request, res: Response) => {
         }
       }
 
-      await LessonSessionModel.deleteOne({ userId });
+      await LessonSessionModel.deleteOne({ userId, language: lang });
       session = null;
     }
 
@@ -542,38 +551,35 @@ export const startLesson = async (req: Request, res: Response) => {
 
     const intent: TutorIntent = "ASK_QUESTION";
 
-    const { effectiveSupportLevel, manualBoostActive } = getEffectiveSupportLevel(
-      newSession,
+    const pace = normalizeTeachingPace(resolvedTeachingPrefs.pace);
+    const explanationDepth = normalizeExplanationDepthPref(resolvedTeachingPrefs.explanationDepth);
+    const supportLevel = normalizeSupportLevelPref(resolvedTeachingPrefs.supportLevel);
+
+    const policy = computeSupportPolicy({
+      intent,
+      pace,
+      explanationDepth,
       supportLevel,
-      supportMode
-    );
+      instructionLanguage: instructionLanguage ?? undefined,
+      lessonLanguage: lang as SupportedLanguage,
+      attemptCount: 1,
+      isFirstQuestion: true,
+    });
 
-    let includeSupport =
-      Boolean(instructionLanguage) &&
-      shouldIncludeSupportPolicy({
-        eventType: "SESSION_START",
-        supportLevel: effectiveSupportLevel,
-        questionIndex: 0,
-        repeatedConfusion: false,
-        explicitRequest: false,
-        forceNoSupport: Boolean(newSession.forceNoSupport),
-      });
+    let includeSupport = policy.includeSupport;
+    if (newSession.forceNoSupport) includeSupport = false;
 
-    if (intent === "ASK_QUESTION" || intent === "ADVANCE_LESSON") {
-      includeSupport = false;
-    }
-
-    const supportCharLimit = getSupportCharLimit(effectiveSupportLevel);
     const tutorPrompt = buildTutorPrompt(newSession, intent, firstQuestionText, {
       ...(instructionLanguage ? { instructionLanguage } : {}),
-      supportLevel: effectiveSupportLevel,
-      supportTextDirective: "omit",
+      supportLevel,
+      supportTextDirective: includeSupport ? "include" : "omit",
       eventType: "SESSION_START",
       includeSupport,
-      supportCharLimit,
       conceptTag: firstConceptTag,
-      teachingPace: teachingPrefs?.pace,
-      explanationDepth: teachingPrefs?.explanationDepth,
+      pace,
+      explanationDepth,
+      attemptCount: 1,
+      isFirstQuestion: true,
     });
 
     let tutorMessage: string;
@@ -605,13 +611,16 @@ export const startLesson = async (req: Request, res: Response) => {
       });
     }
 
-    if (includeSupport && instructionLanguage) {
-      const supportResult = await resolveSupportText({
-        targetLanguage: lang as SupportedLanguage,
-        instructionLanguage,
-        supportLevel: effectiveSupportLevel,
-        includeSupport,
-        supportCharLimit,
+    const transitionLanguage = normalizeTransitionLanguage(instructionLanguage, lang as SupportedLanguage);
+    tutorMessage = buildTransitionMessage(intent, firstQuestionText, transitionLanguage);
+
+    if (includeSupport) {
+      supportText = buildSupportSection({
+        lessonLanguage: lang as SupportedLanguage,
+        instructionLanguage: instructionLanguage ?? undefined,
+        supportLanguageStyle: policy.supportLanguageStyle,
+        maxSupportBullets: policy.maxSupportBullets,
+        explanationDepth,
         eventType: "SESSION_START",
         conceptTag: firstConceptTag,
         hintTarget: typeof firstQuestion?.hintTarget === "string" ? firstQuestion.hintTarget : undefined,
@@ -619,29 +628,18 @@ export const startLesson = async (req: Request, res: Response) => {
           typeof firstQuestion?.explanationTarget === "string"
             ? firstQuestion.explanationTarget
             : undefined,
+        hintSupport:
+          typeof firstQuestion?.hintSupport === "string" ? firstQuestion.hintSupport : undefined,
+        explanationSupport:
+          typeof firstQuestion?.explanationSupport === "string"
+            ? firstQuestion.explanationSupport
+            : undefined,
       });
-      supportText = supportResult.supportText;
-
-      const supportOk =
-        validateSupportLanguage(supportText, instructionLanguage) &&
-        validateSupportLength(supportText, supportCharLimit);
-      if (!supportOk) {
-        const fallback = buildSupportFallback(
-          instructionLanguage,
-          effectiveSupportLevel,
-          "SESSION_START"
-        );
-        supportText = validateSupportLanguage(fallback, instructionLanguage) ? fallback : "";
-      }
     } else {
       supportText = "";
     }
 
     const combinedMessage = supportText ? `${tutorMessage}\n\n${supportText}` : tutorMessage;
-
-    if (manualBoostActive) {
-      await consumeManualSupportTurn(newSession as any, supportMode, userId, lang);
-    }
 
     const intitialMessage = { role: "assistant", content: combinedMessage };
     session = await LessonSessionModel.create({ ...newSession, messages: [intitialMessage] });
@@ -649,8 +647,8 @@ export const startLesson = async (req: Request, res: Response) => {
     await LessonProgressModel.updateOne(
       { userId, language: lang, lessonId },
       {
-        $setOnInsert: { status: "in_progress" },
         $set: {
+          status: "in_progress",
           currentQuestionIndex: 0,
           lastActiveAt: new Date(),
         },
@@ -688,11 +686,25 @@ export const submitAnswer = async (req: Request, res: Response) => {
       );
     }
 
-    const session = await LessonSessionModel.findOne({ userId });
+    const normalizedLanguage =
+      typeof language === "string" && language.trim() ? normalizeLanguage(language) : null;
+    if (language != null && !normalizedLanguage) {
+      return sendError(res, 400, "language must be one of: en, de, es, fr", "INVALID_REQUEST");
+    }
+
+    const sessionQuery: Record<string, string> = { userId };
+    if (normalizedLanguage) sessionQuery.language = normalizedLanguage;
+    if (typeof lessonId === "string" && lessonId.trim()) {
+      sessionQuery.lessonId = lessonId.trim();
+    }
+
+    const session = await LessonSessionModel.findOne(sessionQuery, undefined, {
+      sort: { updatedAt: -1 },
+    });
     if (!session) return sendError(res, 404, "No active session found", "NOT_FOUND");
 
-    if (!session.language && isSupportedLanguage(String(language || "").trim().toLowerCase())) {
-      session.language = String(language).trim().toLowerCase();
+    if (!session.language && normalizedLanguage) {
+      session.language = normalizedLanguage;
     }
     if (!session.lessonId && typeof lessonId === "string") session.lessonId = lessonId;
 
@@ -745,29 +757,35 @@ export const submitAnswer = async (req: Request, res: Response) => {
       }
     }
 
-    let supportLevel = DEFAULT_SUPPORT_LEVEL;
-    let supportMode: "auto" | "manual" = "auto";
+    let storedTeachingPrefs: Awaited<ReturnType<typeof getTeachingProfilePrefs>> | null = null;
     try {
-      const supportProfile = await getSupportProfile(
-        session.userId,
-        session.language as SupportedLanguage
-      );
-      supportLevel = clampSupportLevel(supportProfile.supportLevel);
-      supportMode = supportProfile.supportMode === "manual" ? "manual" : "auto";
+      storedTeachingPrefs =
+        typeof getTeachingProfilePrefs === "function"
+          ? await getTeachingProfilePrefs(session.userId, session.language as SupportedLanguage)
+          : null;
     } catch {
-      supportLevel = DEFAULT_SUPPORT_LEVEL;
+      storedTeachingPrefs = null;
     }
+
+    const resolvedTeachingPrefs = {
+      pace: normalizeTeachingPace(teachingPrefs?.pace ?? storedTeachingPrefs?.pace),
+      explanationDepth: normalizeExplanationDepthPref(
+        teachingPrefs?.explanationDepth ?? storedTeachingPrefs?.explanationDepth
+      ),
+      supportLevel: normalizeSupportLevelPref(
+        teachingPrefs?.supportLevel ?? storedTeachingPrefs?.supportLevel
+      ),
+    };
+
+    const pace = normalizeTeachingPace(resolvedTeachingPrefs.pace);
+    const explanationDepth = normalizeExplanationDepthPref(resolvedTeachingPrefs.explanationDepth);
+    const supportLevel = normalizeSupportLevelPref(resolvedTeachingPrefs.supportLevel);
+    const supportLevelNumber = supportLevelToNumber(supportLevel);
 
     if (typeof teachingPrefs?.forceNoSupport === "boolean") {
       session.forceNoSupport = teachingPrefs.forceNoSupport;
     }
 
-    const { effectiveSupportLevel, manualBoostActive } = getEffectiveSupportLevel(
-      session,
-      supportLevel,
-      supportMode
-    );
-    const supportCharLimit = getSupportCharLimit(effectiveSupportLevel);
     const forceNoSupport = Boolean(session.forceNoSupport);
 
     const lesson: Lesson | null = loadLesson(session.language, session.lessonId);
@@ -815,6 +833,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
 
     const evaluation = evaluateAnswer(currentQuestion, answer, session.language);
     const isCorrect = evaluation.result === "correct";
+    const reviewAfterAttempts = !isCorrect && attemptCount >= 3;
 
     const conceptTag = getConceptTag(currentQuestion, session.lessonId);
     const conceptMap: any = (session as any).mistakeCountByConceptTag ?? new Map();
@@ -905,7 +924,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
         result: evaluation.result,
         reasonCode: evaluation.reasonCode,
         forcedAdvance: markNeedsReview,
-        repeatedWrong: repeatedSameWrong,
+        repeatedWrong: repeatedSameWrong || reviewAfterAttempts,
         conceptTag: currentQuestion?.conceptTag,
         lessonId: session.lessonId,
         questionId: String(currentQuestion?.id ?? ""),
@@ -950,7 +969,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
           forcedAdvanceCount: Number((session as any).forcedAdvanceCount || 0),
           hintsUsedCount: Number((session as any).hintsUsedCount || 0),
         };
-        const delta = computeSupportLevelDelta(stats, supportLevel);
+        const delta = computeSupportLevelDelta(stats, supportLevelNumber);
         if (delta !== 0) {
           await updateSupportLevel(session.userId, session.language as SupportedLanguage, delta);
         }
@@ -990,25 +1009,24 @@ export const submitAnswer = async (req: Request, res: Response) => {
       repeatedConfusion,
     });
 
-    let includeSupport =
-      Boolean(instructionLanguage) &&
-      shouldIncludeSupportPolicy({
-        eventType,
-        supportLevel: effectiveSupportLevel,
-        questionIndex: currentIndex,
-        repeatedConfusion,
-        explicitRequest: explicitSupportRequest,
-        forceNoSupport,
-      });
+    const policy = computeSupportPolicy({
+      intent,
+      pace,
+      explanationDepth,
+      supportLevel,
+      instructionLanguage: instructionLanguage ?? undefined,
+      lessonLanguage: session.language as SupportedLanguage,
+      attemptCount,
+      isFirstQuestion: currentIndex === 0,
+    });
 
-    if (intent === "ASK_QUESTION" || intent === "ADVANCE_LESSON") {
-      includeSupport = false;
-    }
+    let includeSupport = policy.includeSupport;
+    if (forceNoSupport) includeSupport = false;
 
     const hintObj = chooseHintForAttempt(currentQuestion, attemptCount, {
       instructionLanguage: instructionLanguage ?? undefined,
       targetLanguage: session.language as SupportedLanguage,
-      supportLevel: effectiveSupportLevel,
+      supportLevel: supportLevelNumber,
       recentConfusion: repeatedConfusion,
       includeSupport,
     });
@@ -1023,37 +1041,28 @@ export const submitAnswer = async (req: Request, res: Response) => {
 
     const revealAnswer = intent === "FORCED_ADVANCE" ? String(currentQuestion.answer || "").trim() : "";
 
+    const transitionLanguage = normalizeTransitionLanguage(
+      instructionLanguage,
+      session.language as SupportedLanguage
+    );
+
     const retryMessage =
       intent === "ENCOURAGE_RETRY"
         ? getDeterministicRetryMessage({
             reasonCode: evaluation.reasonCode,
             attemptCount,
             repeatedSameWrong,
+            language: transitionLanguage,
           })
         : "";
 
-    const isEnglishTarget = session.language === "en";
     const forcedAdvanceMessage =
-      intent === "FORCED_ADVANCE" && isEnglishTarget ? getForcedAdvanceMessage() : "";
+      intent === "FORCED_ADVANCE" ? getForcedAdvanceMessage(transitionLanguage) : "";
 
-    const hintLeadIn = intent === "ENCOURAGE_RETRY" && hintTextForPrompt ? getHintLeadIn(attemptCount) : "";
-
-    let teachingPace: "slow" | "normal" = "normal";
-    let explanationDepth: ExplanationDepth = "normal";
-
-    try {
-      const prefs =
-        typeof getTeachingProfilePrefs === "function"
-          ? await getTeachingProfilePrefs(session.userId, session.language as SupportedLanguage)
-          : null;
-
-      if (prefs) {
-        teachingPace = prefs.pace;
-        explanationDepth = prefs.explanationDepth;
-      }
-    } catch {
-      // ignore
-    }
+    const hintLeadIn =
+      intent === "ENCOURAGE_RETRY" && hintTextForPrompt
+        ? getHintLeadIn(attemptCount, transitionLanguage)
+        : "";
 
     let learnerProfileSummary: string | null = null;
     let topFocusReason: string | null = null;
@@ -1071,20 +1080,17 @@ export const submitAnswer = async (req: Request, res: Response) => {
     let focusNudge = "";
     try {
       if (typeof topFocusReason === "string" && topFocusReason.trim()) {
-        focusNudge = getFocusNudge(topFocusReason);
+        focusNudge = getFocusNudge(topFocusReason, transitionLanguage);
       }
     } catch {
       focusNudge = "";
     }
 
-    const pacePrefix = teachingPace === "slow" ? "Take your time." : "";
+    const pacePrefix = pace === "slow" ? getPacePrefix(transitionLanguage) : "";
 
     const hintLeadInWithFocus =
       intent === "ENCOURAGE_RETRY" && hintTextForPrompt
-        ? [pacePrefix, focusNudge, hintLeadIn]
-            .filter((s): s is string => Boolean(s && s.trim()))
-            .join(" ")
-            .trim()
+        ? (pacePrefix || focusNudge || hintLeadIn)
         : hintLeadIn;
 
     const forcedAdvanceMessageWithFocus = intent === "FORCED_ADVANCE" ? forcedAdvanceMessage : forcedAdvanceMessage;
@@ -1124,13 +1130,14 @@ export const submitAnswer = async (req: Request, res: Response) => {
 
     if (intent === "ENCOURAGE_RETRY") {
       const lines: string[] = [];
-      const retryLine = isEnglishTarget ? retryMessage : "";
+      const retryLine = retryMessage;
       if (retryLine) lines.push(retryLine);
 
       const showPrimaryHint = !includeSupport && Boolean(hintTextForPrompt);
       if (showPrimaryHint) {
-        if (isEnglishTarget && hintLeadInWithFocus) lines.push(hintLeadInWithFocus);
-        const hintLine = `${isEnglishTarget ? "Hint: " : ""}${hintTextForPrompt}`.trim();
+        if (hintLeadInWithFocus) lines.push(hintLeadInWithFocus);
+        const hintLabel = getHintLabel(transitionLanguage);
+        const hintLine = `${hintLabel} ${hintTextForPrompt}`.trim();
         if (hintLine) lines.push(hintLine);
       }
 
@@ -1151,14 +1158,15 @@ export const submitAnswer = async (req: Request, res: Response) => {
           learnerProfileSummary: learnerProfileSummary ?? undefined,
           explanationText: "",
           instructionLanguage: instructionLanguage ?? undefined,
-          supportLevel: effectiveSupportLevel,
-          supportTextDirective: "omit",
+          supportLevel,
+          supportTextDirective: includeSupport ? "include" : "omit",
           eventType,
           includeSupport,
-          supportCharLimit,
           conceptTag: eventConceptTag,
-          teachingPace,
+          pace,
           explanationDepth,
+          attemptCount,
+          isFirstQuestion: currentIndex === 0,
         });
       } catch {
         tutorPrompt = buildTutorPrompt(session as any, intent, questionText, {
@@ -1170,14 +1178,15 @@ export const submitAnswer = async (req: Request, res: Response) => {
           learnerProfileSummary: learnerProfileSummary ?? undefined,
           explanationText: intent === "FORCED_ADVANCE" ? (currentQuestion?.explanation ?? "") : "",
           instructionLanguage: instructionLanguage ?? undefined,
-          supportLevel: effectiveSupportLevel,
-          supportTextDirective: "omit",
+          supportLevel,
+          supportTextDirective: includeSupport ? "include" : "omit",
           eventType,
           includeSupport,
-          supportCharLimit,
           conceptTag: eventConceptTag,
-          teachingPace,
+          pace,
           explanationDepth,
+          attemptCount,
+          isFirstQuestion: currentIndex === 0,
         });
       }
 
@@ -1192,7 +1201,7 @@ export const submitAnswer = async (req: Request, res: Response) => {
       }
     }
 
-    const retryMessageForGuard = isEnglishTarget ? retryMessage : "";
+    const retryMessageForGuard = retryMessage;
 
     if (
       !validatePrimaryLanguage(tutorMessage, session.language as SupportedLanguage) ||
@@ -1221,6 +1230,10 @@ export const submitAnswer = async (req: Request, res: Response) => {
       });
     }
 
+    if (intent !== "ENCOURAGE_RETRY") {
+      tutorMessage = buildTransitionMessage(intent, questionText, transitionLanguage);
+    }
+
     const completionDetected = /completed this (lesson|session)/i.test(tutorMessage);
     if (completionDetected && baseStatus !== "completed") {
       session.state = "COMPLETE";
@@ -1242,15 +1255,15 @@ export const submitAnswer = async (req: Request, res: Response) => {
       }
     }
 
-    if (includeSupport && instructionLanguage) {
+    if (includeSupport) {
       const supportQuestion =
         intent === "ENCOURAGE_RETRY" || intent === "FORCED_ADVANCE" ? currentQuestion : nextQuestion;
-      const supportResult = await resolveSupportText({
-        targetLanguage: session.language as SupportedLanguage,
-        instructionLanguage,
-        supportLevel: effectiveSupportLevel,
-        includeSupport,
-        supportCharLimit,
+      supportText = buildSupportSection({
+        lessonLanguage: session.language as SupportedLanguage,
+        instructionLanguage: instructionLanguage ?? undefined,
+        supportLanguageStyle: policy.supportLanguageStyle,
+        maxSupportBullets: policy.maxSupportBullets,
+        explanationDepth,
         eventType,
         conceptTag: eventConceptTag,
         hintTarget:
@@ -1259,30 +1272,13 @@ export const submitAnswer = async (req: Request, res: Response) => {
           typeof supportQuestion?.explanationTarget === "string"
             ? supportQuestion.explanationTarget
             : undefined,
-        repeatedConfusion,
+        hintSupport:
+          typeof supportQuestion?.hintSupport === "string" ? supportQuestion.hintSupport : undefined,
+        explanationSupport:
+          typeof supportQuestion?.explanationSupport === "string"
+            ? supportQuestion.explanationSupport
+            : undefined,
       });
-      supportText = supportResult.supportText;
-
-      const supportOk =
-        validateSupportLanguage(supportText, instructionLanguage) &&
-        validateSupportLength(supportText, supportCharLimit);
-      if (!supportOk) {
-        const fallback = buildSupportFallback(
-          instructionLanguage,
-          effectiveSupportLevel,
-          eventType
-        );
-        supportText = validateSupportLanguage(fallback, instructionLanguage) ? fallback : "";
-      }
-
-      if (!supportText && intent !== "FORCED_ADVANCE") {
-        const fallback = buildSupportFallback(
-          instructionLanguage,
-          effectiveSupportLevel,
-          eventType
-        );
-        supportText = validateSupportLanguage(fallback, instructionLanguage) ? fallback : "";
-      }
     } else {
       supportText = "";
     }
@@ -1290,14 +1286,6 @@ export const submitAnswer = async (req: Request, res: Response) => {
     const combinedMessage = supportText ? `${tutorMessage}\n\n${supportText}` : tutorMessage;
     session.messages.push({ role: "assistant", content: combinedMessage });
 
-    if (manualBoostActive) {
-      await consumeManualSupportTurn(
-        session,
-        supportMode,
-        session.userId,
-        session.language as SupportedLanguage
-      );
-    }
     await session.save();
 
     let practice: { practiceId: string; prompt: string } | undefined;
@@ -1403,11 +1391,28 @@ export const submitAnswer = async (req: Request, res: Response) => {
 //----------------------
 export const getSessionHandler = async (req: Request, res: Response) => {
   const { userId } = req.params;
+  const { language, lessonId } = req.query ?? {};
 
   if (!userId) return sendError(res, 400, "UserId is required", "INVALID_REQUEST");
 
   try {
-    const session = await LessonSessionModel.findOne({ userId });
+    let normalizedLanguage: SupportedLanguage | null = null;
+    if (typeof language === "string" && language.trim()) {
+      normalizedLanguage = normalizeLanguage(language);
+      if (!normalizedLanguage) {
+        return sendError(res, 400, "language must be one of: en, de, es, fr", "INVALID_REQUEST");
+      }
+    }
+
+    const sessionQuery: Record<string, string> = { userId };
+    if (normalizedLanguage) sessionQuery.language = normalizedLanguage;
+    if (typeof lessonId === "string" && lessonId.trim()) {
+      sessionQuery.lessonId = lessonId.trim();
+    }
+
+    const session = await LessonSessionModel.findOne(sessionQuery, undefined, {
+      sort: { updatedAt: -1 },
+    });
     if (!session) return sendError(res, 404, "No active sessions found", "NOT_FOUND");
 
     let instructionLanguage: SupportedLanguage | null = null;
@@ -1422,24 +1427,26 @@ export const getSessionHandler = async (req: Request, res: Response) => {
       }
     }
 
-    let supportLevel = DEFAULT_SUPPORT_LEVEL;
-    let supportMode: "auto" | "manual" = "auto";
+    let storedTeachingPrefs: Awaited<ReturnType<typeof getTeachingProfilePrefs>> | null = null;
     try {
-      const supportProfile = await getSupportProfile(
-        session.userId,
-        session.language as SupportedLanguage
-      );
-      supportLevel = clampSupportLevel(supportProfile.supportLevel);
-      supportMode = supportProfile.supportMode === "manual" ? "manual" : "auto";
+      storedTeachingPrefs =
+        typeof getTeachingProfilePrefs === "function"
+          ? await getTeachingProfilePrefs(session.userId, session.language as SupportedLanguage)
+          : null;
     } catch {
-      supportLevel = DEFAULT_SUPPORT_LEVEL;
+      storedTeachingPrefs = null;
     }
+
+    const resolvedTeachingPrefs = {
+      pace: normalizeTeachingPace(storedTeachingPrefs?.pace),
+      explanationDepth: normalizeExplanationDepthPref(storedTeachingPrefs?.explanationDepth),
+      supportLevel: normalizeSupportLevelPref(storedTeachingPrefs?.supportLevel),
+    };
 
     const tutorMessage = await ensureTutorPromptOnResume(
       session,
       instructionLanguage,
-      supportLevel,
-      supportMode
+      resolvedTeachingPrefs
     );
 
     const lesson = loadLesson(session.language, session.lessonId);

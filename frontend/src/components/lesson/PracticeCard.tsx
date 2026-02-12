@@ -2,6 +2,13 @@ import type { RefObject } from "react";
 
 type PracticeMode = "lesson" | "review" | null;
 
+function stripPracticePrefix(value: string): string {
+  const raw = (value ?? "").trim();
+  if (!raw) return raw;
+  const stripped = raw.replace(/^\s*practice\s*[:\-–—]?\s*/i, "").trim();
+  return stripped || raw;
+}
+
 type PracticeCardProps = {
   practicePrompt: string | null;
   practiceId: string | null;
@@ -17,6 +24,8 @@ type PracticeCardProps = {
   practiceInputRef: RefObject<HTMLInputElement | null>;
   canSubmitPractice: boolean;
   onSendPractice: () => void | Promise<void>;
+  practiceResult?: "correct" | "almost" | "wrong" | null;
+  onContinue?: () => void;
   uiStrings?: {
     reviewLabel?: string;
     practiceLabel?: string;
@@ -25,6 +34,7 @@ type PracticeCardProps = {
     practiceCompleteToContinue?: string;
     practicePlaceholder?: string;
     sendLabel?: string;
+    continueLabel?: string;
   };
 };
 
@@ -43,6 +53,8 @@ export function PracticeCard({
   practiceInputRef,
   canSubmitPractice,
   onSendPractice,
+  practiceResult,
+  onContinue,
   uiStrings,
 }: PracticeCardProps) {
   if (!practicePrompt || !practiceId) return null;
@@ -55,6 +67,9 @@ export function PracticeCard({
     uiStrings?.practiceCompleteToContinue ?? "Complete this to continue";
   const practicePlaceholder = uiStrings?.practicePlaceholder ?? "Answer the practice...";
   const sendLabel = uiStrings?.sendLabel ?? "Send";
+  const continueLabel = uiStrings?.continueLabel ?? "Continue";
+  const isComplete = practiceResult === "correct";
+  const displayPrompt = stripPracticePrefix(practicePrompt);
 
   return (
     <div
@@ -99,7 +114,7 @@ export function PracticeCard({
           {practiceMode === "review" ? optionalReviewLabel : practiceCompleteToContinue}
         </div>
       </div>
-      <div style={{ whiteSpace: "pre-wrap", marginBottom: 10 }}>{practicePrompt}</div>
+      <div style={{ whiteSpace: "pre-wrap", marginBottom: 10 }}>{displayPrompt}</div>
 
       {pending === "practice" && (
         <div style={{ marginBottom: 10 }}>
@@ -125,31 +140,57 @@ export function PracticeCard({
           value={practiceAnswer}
           onChange={(e) => onPracticeAnswerChange(e.target.value)}
           placeholder={practicePlaceholder}
+          readOnly={isComplete}
+          disabled={loading}
           style={{
             flex: 1,
             padding: 10,
             borderRadius: 12,
             border: "1px solid var(--border)",
+            opacity: isComplete ? 0.7 : 1,
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && canSubmitPractice) void onSendPractice();
+            if (e.key !== "Enter") return;
+            if (isComplete && onContinue) {
+              e.preventDefault();
+              onContinue();
+              return;
+            }
+            if (canSubmitPractice) void onSendPractice();
           }}
         />
-        <button
-          onClick={() => void onSendPractice()}
-          disabled={!canSubmitPractice}
-          style={{
-            padding: "10px 14px",
-            borderRadius: 12,
-            border: "1px solid",
-            borderColor: canSubmitPractice ? "var(--accent)" : "var(--border)",
-            background: canSubmitPractice ? "var(--accent)" : "var(--surface-muted)",
-            color: canSubmitPractice ? "white" : "var(--text-muted)",
-            cursor: canSubmitPractice ? "pointer" : "not-allowed",
-          }}
-        >
-          {sendLabel}
-        </button>
+        {isComplete && onContinue ? (
+          <button
+            onClick={onContinue}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1px solid",
+              borderColor: "var(--accent)",
+              background: "var(--accent)",
+              color: "white",
+              cursor: "pointer",
+            }}
+          >
+            {continueLabel}
+          </button>
+        ) : (
+          <button
+            onClick={() => void onSendPractice()}
+            disabled={!canSubmitPractice}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1px solid",
+              borderColor: canSubmitPractice ? "var(--accent)" : "var(--border)",
+              background: canSubmitPractice ? "var(--accent)" : "var(--surface-muted)",
+              color: canSubmitPractice ? "white" : "var(--text-muted)",
+              cursor: canSubmitPractice ? "pointer" : "not-allowed",
+            }}
+          >
+            {sendLabel}
+          </button>
+        )}
       </div>
     </div>
   );

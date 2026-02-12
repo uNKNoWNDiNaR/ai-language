@@ -1,0 +1,342 @@
+{
+  "lessonId": "basic-4",
+  "title": "Polite requests and ordering",
+  "description": "Make polite requests and ask for common items in German.",
+  "questions": [
+    {
+      "id": 1,
+      "conceptTag": "order_coffee_polite",
+      "question": "Order politely: you want a coffee.",
+      "prompt": "Order politely: you want a coffee.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Ich hätte gern einen Kaffee.",
+      "acceptedAnswers": [
+        "Ich hätte gern einen Kaffee.",
+        "Ich hätte gern einen Kaffee",
+        "Ich hätte gern einen Kaffee, bitte."
+      ],
+      "hintTarget": "Use “Ich hätte gern …”.",
+      "explanationTarget": "A polite way to order is “Ich hätte gern einen Kaffee.”",
+      "hints": [
+        "Start with “Ich hätte gern …”."
+      ],
+      "examples": [
+        "Ich hätte gern einen Kaffee."
+      ]
+    },
+    {
+      "id": 2,
+      "conceptTag": "want_verb_blank",
+      "question": "Complete the sentence.",
+      "prompt": "Complete: Ich ___ einen Tee.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "möchte"
+      ],
+      "answer": "Ich möchte einen Tee.",
+      "acceptedAnswers": [
+        "Ich möchte einen Tee.",
+        "Ich möchte einen Tee"
+      ],
+      "hintTarget": "Use the verb for “want” (I form).",
+      "explanationTarget": "Use “möchte”: “Ich möchte einen Tee.”",
+      "hints": [
+        "It starts with “möch-”."
+      ],
+      "examples": [
+        "Ich möchte einen Tee."
+      ]
+    },
+    {
+      "id": 3,
+      "conceptTag": "have_water_formal",
+      "question": "Ask if they have water (formal).",
+      "prompt": "Ask if they have water (formal).",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Haben Sie Wasser?",
+      "acceptedAnswers": [
+        "Haben Sie Wasser?",
+        "Haben Sie Wasser"
+      ],
+      "hintTarget": "Use the formal “Sie”.",
+      "explanationTarget": "Formal question: “Haben Sie Wasser?”",
+      "hints": [
+        "Starts with “Haben Sie …”."
+      ],
+      "examples": [
+        "Haben Sie Wasser?"
+      ]
+    },
+    {
+      "id": 4,
+      "conceptTag": "can_help_informal",
+      "question": "Ask: Can you help me? (informal)",
+      "prompt": "Ask: Can you help me? (informal)",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Kannst du mir helfen?",
+      "acceptedAnswers": [
+        "Kannst du mir helfen?",
+        "Kannst du mir helfen"
+      ],
+      "hintTarget": "Use the informal “du”.",
+      "explanationTarget": "Informal: “Kannst du mir helfen?”",
+      "hints": [
+        "Starts with “Kannst du …”."
+      ],
+      "examples": [
+        "Kannst du mir helfen?"
+      ]
+    },
+    {
+      "id": 5,
+      "conceptTag": "can_help_blank",
+      "question": "Complete the sentence.",
+      "prompt": "Complete: Kannst du mir ___?",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "helfen"
+      ],
+      "answer": "Kannst du mir helfen?",
+      "acceptedAnswers": [
+        "Kannst du mir helfen?",
+        "Kannst du mir helfen"
+      ],
+      "hintTarget": "Use the verb for “to help”.",
+      "explanationTarget": "Use “helfen”: “Kannst du mir helfen?”",
+      "hints": [
+        "It starts with “helf-”."
+      ],
+      "examples": [
+        "Kannst du mir helfen?"
+      ]
+    },
+    {
+      "id": 6,
+      "conceptTag": "take_bill",
+      "question": "Make a sentence using the words.",
+      "prompt": "Make a sentence: Ich / nehme / die / Rechnung",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "Ich nehme die Rechnung.",
+      "acceptedAnswers": [
+        "Ich nehme die Rechnung.",
+        "Ich nehme die Rechnung"
+      ],
+      "hintTarget": "Put the words in normal sentence order.",
+      "explanationTarget": "Sentence: “Ich nehme die Rechnung.”",
+      "hints": [
+        "Start with “Ich …”."
+      ],
+      "examples": [
+        "Ich nehme die Rechnung."
+      ]
+    },
+    {
+      "id": 7,
+      "conceptTag": "want_water_polite",
+      "question": "Say you would like water.",
+      "prompt": "Say you would like water.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Ich hätte gern Wasser.",
+      "acceptedAnswers": [
+        "Ich hätte gern Wasser.",
+        "Ich hätte gern Wasser"
+      ],
+      "hintTarget": "Use “Ich hätte gern …”.",
+      "explanationTarget": "Say: “Ich hätte gern Wasser.”",
+      "hints": [
+        "Start with “Ich hätte gern …”."
+      ],
+      "examples": [
+        "Ich hätte gern Wasser."
+      ]
+    },
+    {
+      "id": 8,
+      "conceptTag": "can_menu_formal",
+      "question": "Ask politely: Can you bring the menu? (formal)",
+      "prompt": "Ask politely: Can you bring the menu? (formal)",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Können Sie die Karte bringen?",
+      "acceptedAnswers": [
+        "Können Sie die Karte bringen?",
+        "Können Sie die Karte bringen",
+        "Koennen Sie die Karte bringen?"
+      ],
+      "hintTarget": "Use the formal “Sie”.",
+      "explanationTarget": "Formal request: “Können Sie die Karte bringen?”",
+      "hints": [
+        "Start with “Können Sie …”."
+      ],
+      "examples": [
+        "Können Sie die Karte bringen?"
+      ]
+    },
+    {
+      "id": 9,
+      "conceptTag": "have_tea_informal",
+      "question": "Make a question using the words.",
+      "prompt": "Make a question: Hast / du / Tee",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "Hast du Tee?",
+      "acceptedAnswers": [
+        "Hast du Tee?",
+        "Hast du Tee"
+      ],
+      "hintTarget": "Use the informal “du”.",
+      "explanationTarget": "Question: “Hast du Tee?”",
+      "hints": [
+        "Starts with “Hast du …”."
+      ],
+      "examples": [
+        "Hast du Tee?"
+      ]
+    },
+    {
+      "id": 10,
+      "conceptTag": "excuse_take_bill_blank",
+      "question": "Complete the sentence.",
+      "prompt": "Complete: Entschuldigung, ich ___ die Rechnung.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "nehme"
+      ],
+      "answer": "Entschuldigung, ich nehme die Rechnung.",
+      "acceptedAnswers": [
+        "Entschuldigung, ich nehme die Rechnung.",
+        "Entschuldigung, ich nehme die Rechnung"
+      ],
+      "hintTarget": "Use the verb “nehmen” (I form).",
+      "explanationTarget": "Use “nehme”: “Entschuldigung, ich nehme die Rechnung.”",
+      "hints": [
+        "It starts with “nehm-”."
+      ],
+      "examples": [
+        "Entschuldigung, ich nehme die Rechnung."
+      ]
+    },
+    {
+      "id": 11,
+      "conceptTag": "thanks",
+      "question": "Say thank you.",
+      "prompt": "Say thank you.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Danke.",
+      "acceptedAnswers": [
+        "Danke.",
+        "Danke",
+        "Danke!"
+      ],
+      "hintTarget": "One short word.",
+      "explanationTarget": "The common thanks is “Danke.”",
+      "hints": [
+        "Short and common."
+      ],
+      "examples": [
+        "Danke."
+      ]
+    },
+    {
+      "id": 12,
+      "conceptTag": "please",
+      "question": "Say please.",
+      "prompt": "Say please.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Bitte.",
+      "acceptedAnswers": [
+        "Bitte.",
+        "Bitte",
+        "Bitte!"
+      ],
+      "hintTarget": "One short word.",
+      "explanationTarget": "The common “please” is “Bitte.”",
+      "hints": [
+        "Short and common."
+      ],
+      "examples": [
+        "Bitte."
+      ]
+    },
+    {
+      "id": 13,
+      "conceptTag": "can_i_have_coffee",
+      "question": "Ask: Can I have a coffee?",
+      "prompt": "Ask: Can I have a coffee?",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Kann ich einen Kaffee haben?",
+      "acceptedAnswers": [
+        "Kann ich einen Kaffee haben?",
+        "Kann ich einen Kaffee haben"
+      ],
+      "hintTarget": "Start with “Kann ich …”.",
+      "explanationTarget": "Question: “Kann ich einen Kaffee haben?”",
+      "hints": [
+        "Start with “Kann ich …”."
+      ],
+      "examples": [
+        "Kann ich einen Kaffee haben?"
+      ]
+    },
+    {
+      "id": 14,
+      "conceptTag": "would_like_help_blank",
+      "question": "Complete the sentence.",
+      "prompt": "Complete: Ich ___ gern Hilfe.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "hätte"
+      ],
+      "answer": "Ich hätte gern Hilfe.",
+      "acceptedAnswers": [
+        "Ich hätte gern Hilfe.",
+        "Ich hätte gern Hilfe"
+      ],
+      "hintTarget": "Use the verb from “ich hätte gern”.",
+      "explanationTarget": "Use “hätte”: “Ich hätte gern Hilfe.”",
+      "hints": [
+        "It starts with “hät-”."
+      ],
+      "examples": [
+        "Ich hätte gern Hilfe."
+      ]
+    },
+    {
+      "id": 15,
+      "conceptTag": "want_tea",
+      "question": "Say you want a tea.",
+      "prompt": "Say you want a tea.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Ich möchte einen Tee.",
+      "acceptedAnswers": [
+        "Ich möchte einen Tee.",
+        "Ich möchte einen Tee"
+      ],
+      "hintTarget": "Use “Ich möchte …”.",
+      "explanationTarget": "Say: “Ich möchte einen Tee.”",
+      "hints": [
+        "Start with “Ich möchte …”."
+      ],
+      "examples": [
+        "Ich möchte einen Tee."
+      ]
+    }
+  ]
+}

@@ -26,6 +26,8 @@ app.use(cors());
 app.use(requestContextMiddleware);
 app.use(rateLimitMiddleware);
 
+app.get("/health", (_req, res) => res.status(200).send("ok"));
+
 // Apply JSON parsing with a sane size limit.
 // This replaces the broken jsonSizeLimit usage + avoids double-parsing.
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "64kb" }));
@@ -37,8 +39,6 @@ app.use("/progress", progressRoutes);
 app.use("/practice", practiceRoutes);
 app.use("/feedback", feedbackRoutes);
 app.use("/review", reviewRoutes);
-
-app.get("/health", (_req, res) => res.status(200).send("ok"));
 
 app.use(errorEnvelopeMiddleware);
 

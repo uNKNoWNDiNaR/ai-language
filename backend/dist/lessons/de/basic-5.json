@@ -1,0 +1,362 @@
+{
+  "lessonId": "basic-5",
+  "title": "Numbers and time basics",
+  "description": "Use simple numbers, ask the time, and talk about prices.",
+  "questions": [
+    {
+      "id": 1,
+      "conceptTag": "number_five",
+      "question": "You see the number 5. Write it in German.",
+      "prompt": "You see the number 5. Write it in German.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Fünf.",
+      "acceptedAnswers": [
+        "Fünf.",
+        "Fünf",
+        "5",
+        "5."
+      ],
+      "hintTarget": "A single word is enough.",
+      "explanationTarget": "The number 5 is \"fünf\".",
+      "hints": [
+        "One short word."
+      ],
+      "examples": [
+        "Fünf."
+      ]
+    },
+    {
+      "id": 2,
+      "conceptTag": "number_twelve",
+      "question": "You see the number 12. Write it in German.",
+      "prompt": "You see the number 12. Write it in German.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Zwölf.",
+      "acceptedAnswers": [
+        "Zwölf.",
+        "Zwölf",
+        "12",
+        "12."
+      ],
+      "hintTarget": "A single word.",
+      "explanationTarget": "The number 12 is \"zwölf\".",
+      "hints": [
+        "It starts with Z."
+      ],
+      "examples": [
+        "Zwölf."
+      ]
+    },
+    {
+      "id": 3,
+      "conceptTag": "time_full_hour_blank_three",
+      "question": "Complete the time sentence.",
+      "prompt": "Complete: Es ist ___ Uhr.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "drei",
+        "3"
+      ],
+      "answer": "Es ist drei Uhr.",
+      "acceptedAnswers": [
+        "Es ist drei Uhr.",
+        "Es ist drei Uhr",
+        "Es ist 3 Uhr.",
+        "Es ist 3 Uhr"
+      ],
+      "hintTarget": "Use the number for the hour.",
+      "explanationTarget": "A full hour uses: \"Es ist drei Uhr.\"",
+      "hints": [
+        "Use a simple number."
+      ],
+      "examples": [
+        "Es ist drei Uhr."
+      ]
+    },
+    {
+      "id": 4,
+      "conceptTag": "ask_time",
+      "question": "You want to know the time. Ask the question.",
+      "prompt": "You want to know the time. Ask the question.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Wie spät ist es?",
+      "acceptedAnswers": [
+        "Wie spät ist es?",
+        "Wie spät ist es"
+      ],
+      "hintTarget": "Start with \"Wie spät ...\".",
+      "explanationTarget": "Ask: \"Wie spät ist es?\"",
+      "hints": [
+        "Starts with \"Wie spät\"."
+      ],
+      "examples": [
+        "Wie spät ist es?"
+      ]
+    },
+    {
+      "id": 5,
+      "conceptTag": "ask_time_word_bank",
+      "question": "Make a question using the words.",
+      "prompt": "Make a question: ist / es / wie / spät",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "Wie spät ist es?",
+      "acceptedAnswers": [
+        "Wie spät ist es?",
+        "Wie spät ist es"
+      ],
+      "hintTarget": "Put the words in question order.",
+      "explanationTarget": "Question: \"Wie spät ist es?\"",
+      "hints": [
+        "Start with \"Wie\"."
+      ],
+      "examples": [
+        "Wie spät ist es?"
+      ]
+    },
+    {
+      "id": 6,
+      "conceptTag": "time_full_hour_eight",
+      "question": "It is eight o'clock. Tell the time.",
+      "prompt": "It is eight o'clock. Tell the time.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Es ist acht Uhr.",
+      "acceptedAnswers": [
+        "Es ist acht Uhr.",
+        "Es ist acht Uhr",
+        "Es ist 8 Uhr.",
+        "Es ist 8 Uhr"
+      ],
+      "hintTarget": "Use \"Es ist ... Uhr\".",
+      "explanationTarget": "Full hour: \"Es ist acht Uhr.\"",
+      "hints": [
+        "Start with \"Es ist ... Uhr\"."
+      ],
+      "examples": [
+        "Es ist acht Uhr."
+      ]
+    },
+    {
+      "id": 7,
+      "conceptTag": "time_full_hour_blank_nine",
+      "question": "Complete the time sentence.",
+      "prompt": "Complete: Es ist ___ Uhr.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "neun",
+        "9"
+      ],
+      "answer": "Es ist neun Uhr.",
+      "acceptedAnswers": [
+        "Es ist neun Uhr.",
+        "Es ist neun Uhr",
+        "Es ist 9 Uhr.",
+        "Es ist 9 Uhr"
+      ],
+      "hintTarget": "Use a simple number.",
+      "explanationTarget": "Full hour: \"Es ist neun Uhr.\"",
+      "hints": [
+        "It is a small number."
+      ],
+      "examples": [
+        "Es ist neun Uhr."
+      ]
+    },
+    {
+      "id": 8,
+      "conceptTag": "ask_price",
+      "question": "You want to know the price. Ask the question.",
+      "prompt": "You want to know the price. Ask the question.",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Wie viel kostet das?",
+      "acceptedAnswers": [
+        "Wie viel kostet das?",
+        "Wie viel kostet das"
+      ],
+      "hintTarget": "Start with \"Wie viel ...\".",
+      "explanationTarget": "Ask: \"Wie viel kostet das?\"",
+      "hints": [
+        "Starts with \"Wie viel\"."
+      ],
+      "examples": [
+        "Wie viel kostet das?"
+      ]
+    },
+    {
+      "id": 9,
+      "conceptTag": "ask_price_word_bank",
+      "question": "Make a question using the words.",
+      "prompt": "Make a question: kostet / wie / das / viel",
+      "taskType": "typing",
+      "promptStyle": "WORD_BANK",
+      "answer": "Wie viel kostet das?",
+      "acceptedAnswers": [
+        "Wie viel kostet das?",
+        "Wie viel kostet das"
+      ],
+      "hintTarget": "Put the words in question order.",
+      "explanationTarget": "Question: \"Wie viel kostet das?\"",
+      "hints": [
+        "Start with \"Wie\"."
+      ],
+      "examples": [
+        "Wie viel kostet das?"
+      ]
+    },
+    {
+      "id": 10,
+      "conceptTag": "price_statement",
+      "question": "The price is five euros. State the price.",
+      "prompt": "The price is five euros. State the price.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Das kostet fünf Euro.",
+      "acceptedAnswers": [
+        "Das kostet fünf Euro.",
+        "Das kostet fünf Euro",
+        "Das kostet 5 Euro.",
+        "Das kostet 5 Euro"
+      ],
+      "hintTarget": "Use \"Das kostet ... Euro\".",
+      "explanationTarget": "Price statement: \"Das kostet fünf Euro.\"",
+      "hints": [
+        "Start with \"Das kostet ...\"."
+      ],
+      "examples": [
+        "Das kostet fünf Euro."
+      ]
+    },
+    {
+      "id": 11,
+      "conceptTag": "price_blank",
+      "question": "Complete the sentence.",
+      "prompt": "Complete: Das kostet ___ Euro.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "fünf",
+        "fuenf",
+        "5"
+      ],
+      "answer": "Das kostet fünf Euro.",
+      "acceptedAnswers": [
+        "Das kostet fünf Euro.",
+        "Das kostet fünf Euro",
+        "Das kostet 5 Euro.",
+        "Das kostet 5 Euro"
+      ],
+      "hintTarget": "Use a small number.",
+      "explanationTarget": "Price statement: \"Das kostet fünf Euro.\"",
+      "hints": [
+        "It is the number 5."
+      ],
+      "examples": [
+        "Das kostet fünf Euro."
+      ]
+    },
+    {
+      "id": 12,
+      "conceptTag": "phone_number_statement",
+      "question": "You are asked for your phone number. Reply.",
+      "prompt": "You are asked for your phone number. Reply.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Meine Nummer ist [Zahl].",
+      "acceptedAnswers": [
+        "Meine Nummer ist [Zahl].",
+        "Meine Nummer ist [Zahl]"
+      ],
+      "hintTarget": "Start with \"Meine Nummer ist ...\".",
+      "explanationTarget": "A simple reply is: \"Meine Nummer ist [Zahl].\"",
+      "hints": [
+        "Start with \"Meine Nummer ist ...\"."
+      ],
+      "examples": [
+        "Meine Nummer ist 24."
+      ]
+    },
+    {
+      "id": 13,
+      "conceptTag": "phone_number_blank",
+      "question": "Complete the sentence.",
+      "prompt": "Complete: Meine Nummer ist ___.",
+      "taskType": "typing",
+      "promptStyle": "BLANK_AUX",
+      "expectedInput": "blank",
+      "blankAnswers": [
+        "7",
+        "sieben"
+      ],
+      "answer": "Meine Nummer ist sieben.",
+      "acceptedAnswers": [
+        "Meine Nummer ist sieben.",
+        "Meine Nummer ist sieben",
+        "Meine Nummer ist 7.",
+        "Meine Nummer ist 7"
+      ],
+      "hintTarget": "Use a single number.",
+      "explanationTarget": "Example: \"Meine Nummer ist sieben.\"",
+      "hints": [
+        "A single number is enough."
+      ],
+      "examples": [
+        "Meine Nummer ist sieben."
+      ]
+    },
+    {
+      "id": 14,
+      "conceptTag": "ask_number_informal",
+      "question": "Ask for someone's phone number (informal).",
+      "prompt": "Ask for someone's phone number (informal).",
+      "taskType": "typing",
+      "promptStyle": "MAKE_QUESTION",
+      "answer": "Wie ist deine Nummer?",
+      "acceptedAnswers": [
+        "Wie ist deine Nummer?",
+        "Wie ist deine Nummer"
+      ],
+      "hintTarget": "Use \"deine Nummer\".",
+      "explanationTarget": "Informal question: \"Wie ist deine Nummer?\"",
+      "hints": [
+        "Use \"deine Nummer\".",
+        "Starts with \"Wie ist ...\"."
+      ],
+      "examples": [
+        "Wie ist deine Nummer?"
+      ]
+    },
+    {
+      "id": 15,
+      "conceptTag": "number_twenty",
+      "question": "You see the number 20. Write it in German.",
+      "prompt": "You see the number 20. Write it in German.",
+      "taskType": "typing",
+      "promptStyle": "REPLY_SHORT",
+      "answer": "Zwanzig.",
+      "acceptedAnswers": [
+        "Zwanzig.",
+        "Zwanzig",
+        "20",
+        "20."
+      ],
+      "hintTarget": "A single word.",
+      "explanationTarget": "The number 20 is \"zwanzig\".",
+      "hints": [
+        "One short word."
+      ],
+      "examples": [
+        "Zwanzig."
+      ]
+    }
+  ]
+}

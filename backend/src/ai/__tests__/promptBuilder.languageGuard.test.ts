@@ -24,11 +24,11 @@ describe("buildTutorPrompt language guard", () => {
       "How do you say 'Hello' in English?"
     );
 
-    expect(prompt).toMatch(/LANGUAGE GUARD:/i);
+    expect(prompt).toMatch(/LANGUAGE RULES:/i);
     expect(prompt).toMatch(/lesson language is "en"/i);
     expect(prompt).toMatch(/primaryText MUST be in the lesson language/i);
+    expect(prompt).toMatch(/Never translate tokens inside quotes/i);
     expect(prompt).toMatch(/do NOT introduce other languages/i);
-    expect(prompt).toMatch(/ONLY quote foreign words/i);
     expect(prompt).toMatch(/do NOT turn the prompt into a translation task/i);
   });
 
@@ -44,15 +44,14 @@ describe("buildTutorPrompt language guard", () => {
       messages: [],
     };
 
-    const prompt = buildTutorPrompt(
-      session,
-      "ASK_QUESTION" as any,
-      "Q?",
-      { instructionLanguage: "de" }
-    );
+    const prompt = buildTutorPrompt(session, "ASK_QUESTION" as any, "Q?", {
+      instructionLanguage: "de",
+      supportLevel: "high",
+    });
 
-    expect(prompt).toMatch(/INSTRUCTION LANGUAGE:/i);
-    expect(prompt).toMatch(/"de"/i);
-    expect(prompt).toMatch(/supportText must use the instruction language/i);
+    expect(prompt).toMatch(/SUPPORT RULES:/i);
+    expect(prompt).toMatch(/supportLanguageStyle/i);
+    expect(prompt).toMatch(/Support:/i);
+    expect(prompt).toMatch(/Never translate tokens inside quotes/i);
   });
 });

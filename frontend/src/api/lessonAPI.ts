@@ -17,12 +17,13 @@ export type SupportedLanguage = "en" | "de" | "es" | "fr";
 
 export type TeachingPace = "slow" | "normal";
 export type ExplanationDepth = "short" | "normal" | "detailed";
+export type SupportLevel = "high" | "medium" | "low";
 
 export type TeachingPrefs = {
   pace: TeachingPace;
   explanationDepth: ExplanationDepth;
   instructionLanguage?: SupportedLanguage;
-  supportLevel?: number;
+  supportLevel?: SupportLevel;
   supportMode?: "auto" | "manual";
 };
 
@@ -33,6 +34,8 @@ export type LessonQuestionMeta = {
   prompt: string;
   taskType?: LessonTaskType;
   expectedInput?: "sentence" | "blank";
+  conceptTag?: string;
+  promptStyle?: string;
 };
 
 export type TutorRole = "user" | "assistant";
@@ -73,6 +76,17 @@ export type HintPayload = {
 export type PracticePayload = {
   practiceId: string;
   prompt: string;
+};
+
+export type MicroPracticeItem = {
+  id: string;
+  conceptTag: string;
+  kind: "blank" | "word_bank" | "short_answer";
+  prompt: string;
+  expectedInput: "blank" | "sentence";
+  answer: string;
+  acceptedAnswers?: string[];
+  blankAnswers?: string[];
 };
 
 export type LessonProgressPayload = {
@@ -158,6 +172,50 @@ export type FeedbackRequest = {
 
 export type FeedbackResponse = {ok: true}
 
+export type LessonFeedbackType = "lesson_end" | "friction";
+export type LessonFeedbackQuickTag =
+  | "too_hard"
+  | "too_easy"
+  | "confusing_instructions"
+  | "answer_checking_unfair"
+  | "good_pace"
+  | "helpful_hints";
+
+export type LessonFeedbackForcedChoice = {
+  returnTomorrow?: "yes" | "maybe" | "no";
+  clarity?: "very_clear" | "mostly_clear" | "somewhat_confusing" | "very_confusing";
+  pace?: "too_slow" | "just_right" | "too_fast";
+  answerChecking?: "fair" | "mostly_fair" | "unfair" | "not_sure";
+  frictionType?: "instructions" | "vocab" | "grammar" | "evaluation_unfair" | "other";
+};
+
+export type LessonFeedbackContext = {
+  questionId?: string | number;
+  conceptTag?: string;
+  attemptsOnQuestion?: number;
+  promptStyle?: string;
+  evaluationResult?: EvaluationResult;
+  reasonCode?: string;
+};
+
+export type LessonFeedbackRequest = {
+  userId: string;
+  targetLanguage: SupportedLanguage;
+  instructionLanguage?: SupportedLanguage;
+  lessonId: string;
+  sessionId?: string;
+  supportLevel?: SupportLevel;
+  feedbackType: LessonFeedbackType;
+  rating?: number;
+  quickTags?: LessonFeedbackQuickTag[];
+  freeText?: string;
+  forcedChoice?: LessonFeedbackForcedChoice;
+  context?: LessonFeedbackContext;
+  createdAt?: string;
+};
+
+export type LessonFeedbackResponse = { ok: true };
+
 
 export const API_BASE: string =
   import.meta.env.VITE_API_BASE ?? "http://localhost:3000";
@@ -196,8 +254,17 @@ export async function submitAnswer(params: {
   return data;
 }
 
-export async function getSession(userId: string): Promise<GetSessionResponse> {
-  const { data } = await http.get<GetSessionResponse>(`/lesson/${encodeURIComponent(userId)}`);
+export async function getSession(
+  userId: string,
+  language?: SupportedLanguage,
+  lessonId?: string
+): Promise<GetSessionResponse> {
+  const params: Record<string, string> = {};
+  if (language) params.language = language;
+  if (lessonId) params.lessonId = lessonId;
+  const { data } = await http.get<GetSessionResponse>(`/lesson/${encodeURIComponent(userId)}`, {
+    params: Object.keys(params).length ? params : undefined,
+  });
   return data;
 }
 
@@ -343,6 +410,10 @@ export type GeneratePracticeResponse = {
   };
 };
 
+export type GenerateQuickReviewResponse = {
+  items: MicroPracticeItem[];
+};
+
 export async function generatePractice(params: {
   userId: string;
   language: SupportedLanguage;
@@ -352,6 +423,18 @@ export async function generatePractice(params: {
   type?: "variation";
 }): Promise<GeneratePracticeResponse> {
   const { data } = await http.post<GeneratePracticeResponse>("/practice/generate", params);
+  return data;
+}
+
+export async function generateQuickReview(params: {
+  userId: string;
+  language: SupportedLanguage;
+  lessonId: string;
+}): Promise<GenerateQuickReviewResponse> {
+  const { data } = await http.post<GenerateQuickReviewResponse>("/practice/generate", {
+    ...params,
+    mode: "quick_review",
+  });
   return data;
 }
 
@@ -376,6 +459,13 @@ export async function generateReviewPractice(params: {
 
 export async function submitFeedback(params:FeedbackRequest): Promise<FeedbackResponse> {
   const { data } = await http.post<FeedbackResponse>("/feedback", params);
+  return data;
+}
+
+export async function submitLessonFeedback(
+  params: LessonFeedbackRequest
+): Promise<LessonFeedbackResponse> {
+  const { data } = await http.post<LessonFeedbackResponse>("/feedback/lesson", params);
   return data;
 }
 

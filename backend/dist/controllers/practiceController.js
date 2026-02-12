@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateReview = exports.generatePractice = void 0;
 const lessonLoader_1 = require("../state/lessonLoader");
 const practiceGenerator_1 = require("../services/practiceGenerator");
+const quickReviewGenerator_1 = require("../services/quickReviewGenerator");
 const openaiClient_1 = require("../ai/openaiClient");
 const sessionStore_1 = require("../storage/sessionStore");
 const learnerProfileStore_1 = require("../storage/learnerProfileStore");
@@ -15,8 +16,25 @@ function isSupportedLanguage(v) {
 function isPracticeMetaType(v) {
     return v === "variation" || v === "dialogue_turn" || v === "cloze";
 }
+function isPracticeMode(v) {
+    return v === "normal" || v === "quick_review";
+}
+function extractQuestionHints(q) {
+    const hintTarget = typeof q.hintTarget === "string" ? q.hintTarget.trim() : "";
+    const hintLegacy = typeof q.hint === "string" ? q.hint.trim() : "";
+    const hints = Array.isArray(q.hints)
+        ? q.hints
+            .map((h) => (typeof h === "string" ? h.trim() : ""))
+            .filter(Boolean)
+        : [];
+    const hint = hintTarget || hintLegacy;
+    return {
+        ...(hint ? { hint } : {}),
+        ...(hints.length ? { hints } : {}),
+    };
+}
 const generatePractice = async (req, res) => {
-    const { userId, lessonId, language, sourceQuestionId, type, conceptTag } = req.body ?? {};
+    const { userId, lessonId, language, sourceQuestionId, type, conceptTag, mode } = req.body ?? {};
     if (typeof userId !== "string" || userId.trim() === "") {
         return (0, sendError_1.sendError)(res, 400, "userId is required", "INVALID_REQUEST");
     }
@@ -29,6 +47,38 @@ const generatePractice = async (req, res) => {
     const lesson = (0, lessonLoader_1.loadLesson)(language, lessonId);
     if (!lesson) {
         return (0, sendError_1.sendError)(res, 404, "Lesson not found", "NOT_FOUND");
+    }
+    const practiceMode = isPracticeMode(mode) ? mode : "normal";
+    if (practiceMode === "quick_review") {
+        const session = await (0, sessionStore_1.getSession)(userId);
+        if (!session) {
+            return (0, sendError_1.sendError)(res, 404, "Session not found. Start a lesson first.", "NOT_FOUND");
+        }
+        const { items, practiceItems } = (0, quickReviewGenerator_1.generateQuickReviewItems)({
+            lesson,
+            language,
+            attemptCountByQuestionId: session.attemptCountByQuestionId,
+            maxItems: 3,
+        });
+        if (items.length === 0) {
+            return (0, sendError_1.sendError)(res, 404, "Quick review items not found", "NOT_FOUND");
+        }
+        let pb = session.practiceById ?? new Map();
+        let pa = session.practiceAttempts ?? new Map();
+        for (const practiceItem of practiceItems) {
+            pb = (0, mapLike_1.mapLikeSet)(pb, practiceItem.practiceId, practiceItem);
+            if (!(0, mapLike_1.mapLikeHas)(pa, practiceItem.practiceId)) {
+                pa = (0, mapLike_1.mapLikeSet)(pa, practiceItem.practiceId, 0);
+            }
+        }
+        session.practiceById = pb;
+        session.practiceAttempts = pa;
+        if (typeof session.markModified === "function") {
+            session.markModified("practiceById");
+            session.markModified("practiceAttempts");
+        }
+        await (0, sessionStore_1.updateSession)(session);
+        return res.status(200).json({ items });
     }
     let q = typeof sourceQuestionId === "number"
         ? lesson.questions.find((x) => x.id === sourceQuestionId)
@@ -76,12 +126,17 @@ const generatePractice = async (req, res) => {
     const { item: practiceItem, source } = await (0, practiceGenerator_1.generatePracticeItem)({
         language,
         lessonId,
-        sourceQuestionText: q.question,
+        sourceQuestionText: q.question || q.prompt || "",
         expectedAnswerRaw: q.answer,
         examples: q.examples,
         conceptTag: tag,
         type: practiceType,
     }, aiClient, { forceEnabled: true });
+    const questionHints = extractQuestionHints(q);
+    if (questionHints.hint)
+        practiceItem.hint = questionHints.hint;
+    if (questionHints.hints)
+        practiceItem.hints = questionHints.hints;
     const session = await (0, sessionStore_1.getSession)(userId);
     if (!session) {
         return (0, sendError_1.sendError)(res, 404, "Session not found. Start a lesson first.", "NOT_FOUND");
@@ -181,6 +236,11 @@ const generateReview = async (req, res) => {
                 conceptTag,
                 type: "variation",
             }, aiClient, { forceEnabled: true });
+            const questionHints = extractQuestionHints(q);
+            if (questionHints.hint)
+                practiceItem.hint = questionHints.hint;
+            if (questionHints.hints)
+                practiceItem.hints = questionHints.hints;
             practiceItem.meta = {
                 ...practiceItem.meta,
                 reviewRef: { lessonId: reqItem.lessonId, questionId: reqItem.questionId },

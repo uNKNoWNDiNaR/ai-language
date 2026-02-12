@@ -208,6 +208,26 @@ export function LessonShell({ children }: LessonShellProps) {
           opacity: 0.7;
         }
 
+        .lessonTextInput {
+          border: none;
+          background: transparent;
+          font-size: 13px;
+          color: var(--text);
+          padding: 0;
+          min-width: 120px;
+          max-width: 180px;
+          cursor: text;
+        }
+
+        .lessonTextInput::placeholder {
+          color: var(--text-muted);
+        }
+
+        .lessonTextInput:disabled {
+          cursor: not-allowed;
+          opacity: 0.7;
+        }
+
         .lessonPrefsArea {
           justify-self: end;
           position: relative;

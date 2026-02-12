@@ -5,3 +5,5 @@ export { ChatPane } from "./ChatPane";
 export { SuggestedReviewCard } from "./SuggestedReviewCard";
 export { PracticeCard } from "./PracticeCard";
 export { AnswerBar } from "./AnswerBar";
+export { LessonFeedbackModal } from "./LessonFeedbackModal";
+export { FrictionFeedback } from "./FrictionFeedback";

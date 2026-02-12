@@ -87,15 +87,17 @@ function resolveHelp(question, attemptCount, targetLanguage, instructionLanguage
     const supportHint2 = hintSupport || (pack.hint2 || pack.hint1 || "").trim();
     const targetHint1 = hintTarget || legacyHints[0] || targetFallback.hint;
     const targetHint2 = hintTarget || legacyHints[1] || legacyHints[0] || targetFallback.hint;
+    const questionHint1 = targetHint1;
+    const questionHint2 = targetHint2;
     let hintText = "";
     if (attemptCount === 2) {
-        hintText = includeSupport ? supportHint1 : targetHint1;
+        hintText = includeSupport ? supportHint1 || questionHint1 : targetHint1;
     }
     else if (attemptCount === 3) {
-        hintText = includeSupport ? supportHint2 : targetHint2;
+        hintText = includeSupport ? supportHint2 || questionHint2 : targetHint2;
     }
     if (includeSupport && !hintText) {
-        hintText = supportFallback.hint;
+        hintText = questionHint1 || supportFallback.hint;
     }
     let explanationText = "";
     if (forcedAdvance) {
@@ -103,7 +105,7 @@ function resolveHelp(question, attemptCount, targetLanguage, instructionLanguage
         const targetExplanation = explanationTarget ||
             (typeof question?.explanation === "string" ? question.explanation.trim() : "");
         if (includeSupport) {
-            explanationText = supportExplanation || supportFallback.explanation;
+            explanationText = supportExplanation || targetExplanation || supportFallback.explanation;
         }
         else {
             explanationText = targetExplanation || targetFallback.explanation;

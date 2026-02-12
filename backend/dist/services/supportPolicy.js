@@ -4,7 +4,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.clampSupportLevel = clampSupportLevel;
 exports.getSupportCharLimit = getSupportCharLimit;
 exports.shouldIncludeSupportPolicy = shouldIncludeSupportPolicy;
+const supportLevel_1 = require("../utils/supportLevel");
 function clampSupportLevel(value) {
+    const normalized = (0, supportLevel_1.normalizeSupportLevel)(value);
+    if (normalized)
+        return (0, supportLevel_1.supportLevelToNumber)(normalized, 0.85);
     const n = typeof value === "number" ? value : Number(value);
     if (!Number.isFinite(n))
         return 0.85;

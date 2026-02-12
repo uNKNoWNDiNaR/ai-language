@@ -81,7 +81,7 @@ describe("startLesson restart/continue behavior", () => {
       language: "en",
       lessonId: "basic-1",
     });
-    expect(LessonSessionModel.deleteOne).toHaveBeenCalledWith({ userId: "u1" });
+    expect(LessonSessionModel.deleteOne).toHaveBeenCalledWith({ userId: "u1", language: "en" });
     expect(LessonSessionModel.create).toHaveBeenCalled();
     // new session path in your handler returns 201
     expect(res.status).toHaveBeenCalledWith(201);

@@ -1,0 +1,217 @@
+lessonId: basic-3
+title: "Personal info: origin, living, languages"
+description: "Share where you are from, where you live, and which languages you speak."
+questions:
+  - id: 1
+    conceptTag: origin_statement
+    question: "Say where you are from."
+    prompt: "Say where you are from."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich komme aus [Land]."
+    acceptedAnswers:
+      - "Ich komme aus [Land]."
+      - "Ich komme aus [Land]"
+      - "Ich komme aus [Land]!"
+    hintTarget: "Start with “Ich komme aus …”."
+    explanationTarget: "To say where you are from, use “Ich komme aus …”."
+    hints: ["Start with “Ich komme …”."]
+    examples: ["Ich komme aus Kanada."]
+
+  - id: 2
+    conceptTag: origin_verb_blank
+    question: "Complete the sentence."
+    prompt: "Complete the sentence: Ich ___ aus Deutschland."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["komme"]
+    answer: "Ich komme aus Deutschland."
+    acceptedAnswers: ["Ich komme aus Deutschland.", "Ich komme aus Deutschland"]
+    hintTarget: "Use the verb for “to come” (I form)."
+    explanationTarget: "The verb is “kommen”: “Ich komme aus …”."
+    hints: ["It starts with “komm-”.", "Use the I-form of “kommen”."]
+    examples: ["Ich komme aus Deutschland."]
+
+  - id: 3
+    conceptTag: origin_question_du
+    question: "Ask someone where they are from (informal)."
+    prompt: "Ask someone where they are from (informal)."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Woher kommst du?"
+    acceptedAnswers: ["Woher kommst du?", "Woher kommst du", "Woher kommst du?"]
+    hintTarget: "Start with “Woher …”."
+    explanationTarget: "Informal: “Woher kommst du?”"
+    hints: ["Starts with “Woher”.", "Ends with “du?”."]
+    examples: ["Woher kommst du?"]
+
+  - id: 4
+    conceptTag: origin_reply_city
+    question: "Answer: You are from Berlin."
+    prompt: "Answer: You are from Berlin."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich komme aus Berlin."
+    acceptedAnswers: ["Ich komme aus Berlin.", "Ich komme aus Berlin", "Ich komme aus Berlin!"]
+    hintTarget: "Use “Ich komme aus …”."
+    explanationTarget: "Say: “Ich komme aus Berlin.”"
+    hints: ["Start with “Ich komme …”."]
+    examples: ["Ich komme aus Berlin."]
+
+  - id: 5
+    conceptTag: live_verb_blank
+    question: "Complete the sentence."
+    prompt: "Complete: Ich ___ in Berlin."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["wohne"]
+    answer: "Ich wohne in Berlin."
+    acceptedAnswers: ["Ich wohne in Berlin.", "Ich wohne in Berlin"]
+    hintTarget: "Use the verb for “to live” (I form)."
+    explanationTarget: "The verb is “wohnen”: “Ich wohne in …”."
+    hints: ["It starts with “wohn-”.", "Use the I-form of “wohnen”."]
+    examples: ["Ich wohne in Berlin."]
+
+  - id: 6
+    conceptTag: live_question_du
+    question: "Ask someone where they live (informal)."
+    prompt: "Ask someone where they live (informal)."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Wo wohnst du?"
+    acceptedAnswers: ["Wo wohnst du?", "Wo wohnst du"]
+    hintTarget: "Start with “Wo …”."
+    explanationTarget: "Informal: “Wo wohnst du?”"
+    hints: ["It starts with “Wo”.", "Ends with “du?”."] 
+    examples: ["Wo wohnst du?"]
+
+  - id: 7
+    conceptTag: live_statement
+    question: "Say where you live."
+    prompt: "Say where you live."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich wohne in [Stadt]."
+    acceptedAnswers:
+      - "Ich wohne in [Stadt]."
+      - "Ich wohne in [Stadt]"
+      - "Ich wohne in [Stadt]!"
+    hintTarget: "Start with “Ich wohne in …”."
+    explanationTarget: "To say where you live, use “Ich wohne in …”."
+    hints: ["Start with “Ich wohne …”."]
+    examples: ["Ich wohne in Hamburg."]
+
+  - id: 8
+    conceptTag: live_word_bank
+    question: "Make a sentence using the words."
+    prompt: "Make a sentence: ich / wohne / in / Hamburg"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "Ich wohne in Hamburg."
+    acceptedAnswers: ["Ich wohne in Hamburg.", "Ich wohne in Hamburg"]
+    hintTarget: "Put the words in normal sentence order."
+    explanationTarget: "Sentence: “Ich wohne in Hamburg.”"
+    hints: ["Start with “Ich …”."]
+    examples: ["Ich wohne in Hamburg."]
+
+  - id: 9
+    conceptTag: live_question_formal
+    question: "Ask someone where they live (formal)."
+    prompt: "Ask someone where they live (formal)."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Wo wohnen Sie?"
+    acceptedAnswers: ["Wo wohnen Sie?", "Wo wohnen Sie"]
+    hintTarget: "Use the formal “Sie”."
+    explanationTarget: "Formal: “Wo wohnen Sie?”"
+    hints: ["Use “Sie”.", "Starts with “Wo”."] 
+    examples: ["Wo wohnen Sie?"]
+
+  - id: 10
+    conceptTag: language_verb_blank
+    question: "Complete the sentence."
+    prompt: "Complete: Ich ___ Deutsch."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["spreche"]
+    answer: "Ich spreche Deutsch."
+    acceptedAnswers: ["Ich spreche Deutsch.", "Ich spreche Deutsch"]
+    hintTarget: "Use the verb for “to speak” (I form)."
+    explanationTarget: "The verb is “sprechen”: “Ich spreche Deutsch.”"
+    hints: ["It starts with “sprech-”.", "Use the I-form of “sprechen”."] 
+    examples: ["Ich spreche Deutsch."]
+
+  - id: 11
+    conceptTag: language_statement
+    question: "Say which language you speak."
+    prompt: "Say which language you speak."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich spreche [Sprache]."
+    acceptedAnswers:
+      - "Ich spreche [Sprache]."
+      - "Ich spreche [Sprache]"
+      - "Ich spreche [Sprache]!"
+    hintTarget: "Start with “Ich spreche …”."
+    explanationTarget: "To say a language you speak, use “Ich spreche …”."
+    hints: ["Start with “Ich spreche …”."]
+    examples: ["Ich spreche Englisch."]
+
+  - id: 12
+    conceptTag: language_question_du
+    question: "Ask someone which languages they speak."
+    prompt: "Ask someone which languages they speak."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Welche Sprachen sprichst du?"
+    acceptedAnswers: ["Welche Sprachen sprichst du?", "Welche Sprachen sprichst du"]
+    hintTarget: "Start with “Welche Sprachen …”."
+    explanationTarget: "Ask: “Welche Sprachen sprichst du?”"
+    hints: ["Starts with “Welche Sprachen”.", "Ends with “du?”."] 
+    examples: ["Welche Sprachen sprichst du?"]
+
+  - id: 13
+    conceptTag: language_word_bank
+    question: "Make a question using the words."
+    prompt: "Make a question: sprichst / du / Englisch"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "Sprichst du Englisch?"
+    acceptedAnswers: ["Sprichst du Englisch?", "Sprichst du Englisch"]
+    hintTarget: "Start with the verb."
+    explanationTarget: "Question: “Sprichst du Englisch?”"
+    hints: ["It starts with “Sprichst …”."] 
+    examples: ["Sprichst du Englisch?"]
+
+  - id: 14
+    conceptTag: language_reply_two
+    question: "Answer: You speak German and English."
+    prompt: "Answer: You speak German and English."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich spreche Deutsch und Englisch."
+    acceptedAnswers:
+      - "Ich spreche Deutsch und Englisch."
+      - "Ich spreche Deutsch und Englisch"
+    hintTarget: "Use “Ich spreche … und …”."
+    explanationTarget: "Say: “Ich spreche Deutsch und Englisch.”"
+    hints: ["Use “und” to connect the languages."] 
+    examples: ["Ich spreche Deutsch und Englisch."]
+
+  - id: 15
+    conceptTag: live_plural_blank
+    question: "Complete the sentence."
+    prompt: "Complete: Wir ___ in Wien."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["wohnen"]
+    answer: "Wir wohnen in Wien."
+    acceptedAnswers: ["Wir wohnen in Wien.", "Wir wohnen in Wien"]
+    hintTarget: "Use the verb for “to live” (we form)."
+    explanationTarget: "We-form of “wohnen”: “Wir wohnen in …”."
+    hints: ["It ends with “-en”.", "Use the we-form of “wohnen”."] 
+    examples: ["Wir wohnen in Wien."]

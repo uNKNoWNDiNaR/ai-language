@@ -3,6 +3,12 @@
 import mongoose from "mongoose";
 import { LearnerProfileModel } from "../state/learnerProfileState";
 import type { SupportedLanguage } from "../types";
+import {
+  normalizeSupportLevel,
+  supportLevelFromNumber,
+  supportLevelToNumber,
+  type TeachingSupportLevel,
+} from "../utils/supportLevel";
 
 export type SupportStats = {
   wrongCount: number;
@@ -11,16 +17,17 @@ export type SupportStats = {
   hintsUsedCount: number;
 };
 
-const DEFAULT_SUPPORT_LEVEL = 0.85;
+const DEFAULT_SUPPORT_LEVEL: TeachingSupportLevel = "high";
+const DEFAULT_SUPPORT_NUMBER = supportLevelToNumber(DEFAULT_SUPPORT_LEVEL);
 
 function clampLevel(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
 function normalizeLevel(value: unknown): number {
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return DEFAULT_SUPPORT_LEVEL;
-  return clampLevel(n);
+  const normalized = normalizeSupportLevel(value);
+  const base = supportLevelToNumber(normalized, DEFAULT_SUPPORT_NUMBER);
+  return clampLevel(base);
 }
 
 export function computeSupportLevelDelta(
@@ -58,7 +65,7 @@ export async function updateSupportLevel(
 ): Promise<number> {
   // Skip DB writes if not connected (avoid buffering in tests)
   if (mongoose.connection.readyState !== 1) {
-    return clampLevel(DEFAULT_SUPPORT_LEVEL + delta);
+    return clampLevel(DEFAULT_SUPPORT_NUMBER + delta);
   }
 
   const doc = (await LearnerProfileModel.findOne(
@@ -74,12 +81,13 @@ export async function updateSupportLevel(
   }
 
   const next = clampLevel(current + delta);
+  const nextLevel = supportLevelFromNumber(next, DEFAULT_SUPPORT_LEVEL);
 
   await LearnerProfileModel.updateOne(
     { userId, language },
     {
       $setOnInsert: { userId, language },
-      $set: { supportLevel: next, supportMode, lastActiveAt: new Date() },
+      $set: { supportLevel: nextLevel, supportMode, lastActiveAt: new Date() },
     },
     { upsert: true }
   );

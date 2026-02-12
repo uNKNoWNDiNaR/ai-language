@@ -1,0 +1,206 @@
+lessonId: basic-6
+title: "Daily routine and simple verbs"
+description: "Talk about daily routines using simple present-tense verbs."
+questions:
+  - id: 1
+    conceptTag: learn_statement
+    question: "You are studying German right now. Write a short sentence."
+    prompt: "You are studying German right now. Write a short sentence."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich lerne Deutsch."
+    acceptedAnswers: ["Ich lerne Deutsch.", "Ich lerne Deutsch"]
+    hintTarget: "Start with \"Ich lerne ...\"."
+    explanationTarget: "To say this, use: \"Ich lerne Deutsch.\""
+    hints: ["Start with \"Ich lerne ...\"."]
+    examples: ["Ich lerne Deutsch."]
+
+  - id: 2
+    conceptTag: learn_blank
+    question: "Complete the sentence."
+    prompt: "Complete: Ich ___ Deutsch."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["lerne"]
+    answer: "Ich lerne Deutsch."
+    acceptedAnswers: ["Ich lerne Deutsch.", "Ich lerne Deutsch"]
+    hintTarget: "Use the I-form of \"lernen\"."
+    explanationTarget: "The verb is \"lernen\": \"Ich lerne Deutsch.\""
+    hints: ["It starts with \"lern-\"."]
+    examples: ["Ich lerne Deutsch."]
+
+  - id: 3
+    conceptTag: ask_today_activity
+    question: "Ask someone what they are doing today."
+    prompt: "Ask someone what they are doing today."
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Was machst du heute?"
+    acceptedAnswers: ["Was machst du heute?", "Was machst du heute"]
+    hintTarget: "Start with \"Was machst du ...\"."
+    explanationTarget: "Ask: \"Was machst du heute?\""
+    hints: ["Starts with \"Was machst du\"."]
+    examples: ["Was machst du heute?"]
+
+  - id: 4
+    conceptTag: work_today_statement
+    question: "You are working today. Write a short sentence."
+    prompt: "You are working today. Write a short sentence."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich arbeite heute."
+    acceptedAnswers: ["Ich arbeite heute.", "Ich arbeite heute"]
+    hintTarget: "Start with \"Ich arbeite ...\"."
+    explanationTarget: "Say: \"Ich arbeite heute.\""
+    hints: ["Start with \"Ich arbeite ...\"."]
+    examples: ["Ich arbeite heute."]
+
+  - id: 5
+    conceptTag: work_blank
+    question: "Complete the sentence."
+    prompt: "Complete: Ich ___ heute."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["arbeite"]
+    answer: "Ich arbeite heute."
+    acceptedAnswers: ["Ich arbeite heute.", "Ich arbeite heute"]
+    hintTarget: "Use the I-form of \"arbeiten\"."
+    explanationTarget: "Use \"arbeite\": \"Ich arbeite heute.\""
+    hints: ["It starts with \"arbeit-\"."]
+    examples: ["Ich arbeite heute."]
+
+  - id: 6
+    conceptTag: go_home_word_bank
+    question: "Make a sentence using the words."
+    prompt: "Make a sentence: nach / ich / Hause / gehe"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "Ich gehe nach Hause."
+    acceptedAnswers: ["Ich gehe nach Hause.", "Ich gehe nach Hause"]
+    hintTarget: "Put the words in normal sentence order."
+    explanationTarget: "Sentence: \"Ich gehe nach Hause.\""
+    hints: ["Start with \"Ich ...\"."]
+    examples: ["Ich gehe nach Hause."]
+
+  - id: 7
+    conceptTag: ask_when_learn
+    question: "Ask: When do you study? (informal)"
+    prompt: "Ask: When do you study? (informal)"
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Wann lernst du?"
+    acceptedAnswers: ["Wann lernst du?", "Wann lernst du"]
+    hintTarget: "Start with \"Wann ...\"."
+    explanationTarget: "Ask: \"Wann lernst du?\""
+    hints: ["Starts with \"Wann\"."]
+    examples: ["Wann lernst du?"]
+
+  - id: 8
+    conceptTag: learn_today_blank_du
+    question: "Complete the sentence."
+    prompt: "Complete: Du ___ heute."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["lernst"]
+    answer: "Du lernst heute."
+    acceptedAnswers: ["Du lernst heute.", "Du lernst heute"]
+    hintTarget: "Use the du-form of \"lernen\"."
+    explanationTarget: "Du-form: \"Du lernst heute.\""
+    hints: ["It ends with -st."]
+    examples: ["Du lernst heute."]
+
+  - id: 9
+    conceptTag: not_work_today
+    question: "You do not work today. Write the sentence."
+    prompt: "You do not work today. Write the sentence."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich arbeite heute nicht."
+    acceptedAnswers: ["Ich arbeite heute nicht.", "Ich arbeite heute nicht"]
+    hintTarget: "Place \"nicht\" at the end."
+    explanationTarget: "Negation: \"Ich arbeite heute nicht.\""
+    hints: ["Put \"nicht\" at the end."]
+    examples: ["Ich arbeite heute nicht."]
+
+  - id: 10
+    conceptTag: eat_and_drink
+    question: "You are eating and drinking now. Write one sentence."
+    prompt: "You are eating and drinking now. Write one sentence."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich esse und trinke."
+    acceptedAnswers: ["Ich esse und trinke.", "Ich esse und trinke"]
+    hintTarget: "Use \"und\" to connect the verbs."
+    explanationTarget: "Use: \"Ich esse und trinke.\""
+    hints: ["Connect the verbs with \"und\"."]
+    examples: ["Ich esse und trinke."]
+
+  - id: 11
+    conceptTag: sleep_today_word_bank
+    question: "Make a sentence using the words."
+    prompt: "Make a sentence: heute / ich / schlafe"
+    taskType: typing
+    promptStyle: WORD_BANK
+    answer: "Ich schlafe heute."
+    acceptedAnswers: ["Ich schlafe heute.", "Ich schlafe heute"]
+    hintTarget: "Put the words in normal sentence order."
+    explanationTarget: "Sentence: \"Ich schlafe heute.\""
+    hints: ["Start with \"Ich ...\"."]
+    examples: ["Ich schlafe heute."]
+
+  - id: 12
+    conceptTag: ask_work_today
+    question: "Ask: Do you work today? (informal)"
+    prompt: "Ask: Do you work today? (informal)"
+    taskType: typing
+    promptStyle: MAKE_QUESTION
+    answer: "Arbeitest du heute?"
+    acceptedAnswers: ["Arbeitest du heute?", "Arbeitest du heute"]
+    hintTarget: "Start with the verb."
+    explanationTarget: "Ask: \"Arbeitest du heute?\""
+    hints: ["Starts with \"Arbeitest\"."]
+    examples: ["Arbeitest du heute?"]
+
+  - id: 13
+    conceptTag: come_not_today_blank
+    question: "Complete the sentence."
+    prompt: "Complete: Ich ___ heute nicht."
+    taskType: typing
+    promptStyle: BLANK_AUX
+    expectedInput: blank
+    blankAnswers: ["komme"]
+    answer: "Ich komme heute nicht."
+    acceptedAnswers: ["Ich komme heute nicht.", "Ich komme heute nicht"]
+    hintTarget: "Use the I-form of \"kommen\"."
+    explanationTarget: "Use \"komme\": \"Ich komme heute nicht.\""
+    hints: ["It starts with \"komm-\"."]
+    examples: ["Ich komme heute nicht."]
+
+  - id: 14
+    conceptTag: drink_water
+    question: "You are thirsty. Write a short sentence with water."
+    prompt: "You are thirsty. Write a short sentence with water."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich trinke Wasser."
+    acceptedAnswers: ["Ich trinke Wasser.", "Ich trinke Wasser"]
+    hintTarget: "Start with \"Ich trinke ...\"."
+    explanationTarget: "Use: \"Ich trinke Wasser.\""
+    hints: ["Start with \"Ich trinke ...\"."]
+    examples: ["Ich trinke Wasser."]
+
+  - id: 15
+    conceptTag: go_home_today
+    question: "It is late. You are going home today. Write a short sentence."
+    prompt: "It is late. You are going home today. Write a short sentence."
+    taskType: typing
+    promptStyle: REPLY_SHORT
+    answer: "Ich gehe heute nach Hause."
+    acceptedAnswers: ["Ich gehe heute nach Hause.", "Ich gehe heute nach Hause"]
+    hintTarget: "Use \"Ich gehe ... nach Hause\"."
+    explanationTarget: "Sentence: \"Ich gehe heute nach Hause.\""
+    hints: ["Use \"nach Hause\"."]
+    examples: ["Ich gehe heute nach Hause."]

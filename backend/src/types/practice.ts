@@ -20,11 +20,25 @@ export type PracticeItem = {
     language: SupportedLanguage;
     prompt:string;     //Tutor question(What the tutor asks)
     expectedAnswerRaw: string;            //deterministic evaluator with allowed place holders
+    acceptedAnswers?: string[];
+    expectedInput?: "sentence" | "blank";
+    blankAnswers?: string[];
     examples?: string[];
     hint?:string;
     hints?: string[];
     meta: PracticeItemMeta;
 }; 
+
+export type MicroPracticeItem = {
+    id: string;
+    conceptTag: string;
+    kind: "blank" | "word_bank" | "short_answer";
+    prompt: string;
+    expectedInput: "blank" | "sentence";
+    answer: string;
+    acceptedAnswers?: string[];
+    blankAnswers?: string[];
+};
 
 export type PracticeGenerateRequest = {
     userId: string;
@@ -34,4 +48,3 @@ export type PracticeGenerateRequest = {
     type?: PracticeMetaType;
     conceptTag?: string;
 };
-

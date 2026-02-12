@@ -1,9 +1,10 @@
 //backend/src/controllers/practiceController.ts
 
 import type { Request, Response } from "express";
-import { loadLesson } from "../state/lessonLoader";
+import { loadLesson, type LessonQuestion } from "../state/lessonLoader";
 import type { PracticeMetaType, SupportedLanguage } from "../types";
 import { generatePracticeItem } from "../services/practiceGenerator";
+import { generateQuickReviewItems } from "../services/quickReviewGenerator";
 import { generatePracticeJSON } from "../ai/openaiClient";
 import { getSession, updateSession, createSession } from "../storage/sessionStore";
 import { getWeakestConceptTag, getRecentConfusionConceptTag } from "../storage/learnerProfileStore";
@@ -18,8 +19,30 @@ function isPracticeMetaType(v: unknown): v is PracticeMetaType {
   return v === "variation" || v === "dialogue_turn" || v === "cloze";
 }
 
+type PracticeMode = "normal" | "quick_review";
+
+function isPracticeMode(v: unknown): v is PracticeMode {
+  return v === "normal" || v === "quick_review";
+}
+
+function extractQuestionHints(q: LessonQuestion): { hint?: string; hints?: string[] } {
+  const hintTarget =
+    typeof (q as any).hintTarget === "string" ? (q as any).hintTarget.trim() : "";
+  const hintLegacy = typeof q.hint === "string" ? q.hint.trim() : "";
+  const hints = Array.isArray((q as any).hints)
+    ? (q as any).hints
+        .map((h: unknown) => (typeof h === "string" ? h.trim() : ""))
+        .filter(Boolean)
+    : [];
+  const hint = hintTarget || hintLegacy;
+  return {
+    ...(hint ? { hint } : {}),
+    ...(hints.length ? { hints } : {}),
+  };
+}
+
 export const generatePractice = async (req: Request, res: Response) => {
-  const { userId, lessonId, language, sourceQuestionId, type, conceptTag } = req.body ?? {};
+  const { userId, lessonId, language, sourceQuestionId, type, conceptTag, mode } = req.body ?? {};
 
   if (typeof userId !== "string" || userId.trim() === "") {
     return sendError(res, 400, "userId is required", "INVALID_REQUEST");
@@ -36,6 +59,47 @@ export const generatePractice = async (req: Request, res: Response) => {
   const lesson = loadLesson(language, lessonId);
   if (!lesson) {
     return sendError(res, 404, "Lesson not found", "NOT_FOUND");
+  }
+
+  const practiceMode: PracticeMode = isPracticeMode(mode) ? mode : "normal";
+
+  if (practiceMode === "quick_review") {
+    const session = await getSession(userId);
+    if (!session) {
+      return sendError(res, 404, "Session not found. Start a lesson first.", "NOT_FOUND");
+    }
+
+    const { items, practiceItems } = generateQuickReviewItems({
+      lesson,
+      language,
+      attemptCountByQuestionId: (session as any).attemptCountByQuestionId,
+      maxItems: 3,
+    });
+
+    if (items.length === 0) {
+      return sendError(res, 404, "Quick review items not found", "NOT_FOUND");
+    }
+
+    let pb: any = (session as any).practiceById ?? new Map();
+    let pa: any = (session as any).practiceAttempts ?? new Map();
+
+    for (const practiceItem of practiceItems) {
+      pb = mapLikeSet(pb, practiceItem.practiceId, practiceItem);
+      if (!mapLikeHas(pa, practiceItem.practiceId)) {
+        pa = mapLikeSet(pa, practiceItem.practiceId, 0);
+      }
+    }
+
+    (session as any).practiceById = pb;
+    (session as any).practiceAttempts = pa;
+    if (typeof (session as any).markModified === "function") {
+      (session as any).markModified("practiceById");
+      (session as any).markModified("practiceAttempts");
+    }
+
+    await updateSession(session as any);
+
+    return res.status(200).json({ items });
   }
 
   let q =
@@ -100,7 +164,7 @@ export const generatePractice = async (req: Request, res: Response) => {
     {
       language,
       lessonId,
-      sourceQuestionText: q.question,
+      sourceQuestionText: q.question || q.prompt || "",
       expectedAnswerRaw: q.answer,
       examples: q.examples,
       conceptTag: tag,
@@ -109,6 +173,10 @@ export const generatePractice = async (req: Request, res: Response) => {
     aiClient,
     { forceEnabled: true },
   );
+
+  const questionHints = extractQuestionHints(q);
+  if (questionHints.hint) practiceItem.hint = questionHints.hint;
+  if (questionHints.hints) practiceItem.hints = questionHints.hints;
 
   const session = await getSession(userId);
   if (!session) {
@@ -240,6 +308,10 @@ export const generateReview = async (req: Request, res: Response) => {
         aiClient,
         { forceEnabled: true },
       );
+
+      const questionHints = extractQuestionHints(q);
+      if (questionHints.hint) practiceItem.hint = questionHints.hint;
+      if (questionHints.hints) practiceItem.hints = questionHints.hints;
 
       practiceItem.meta = {
         ...practiceItem.meta,

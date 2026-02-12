@@ -21,6 +21,26 @@ function normalizeForCompare(text: string): string {
     .trim();
 }
 
+function countPromptWords(text: string): number {
+  const cleaned = (text || "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .trim();
+  if (!cleaned) return 0;
+  return cleaned.split(/\s+/).filter(Boolean).length;
+}
+
+const GENERIC_PROMPT_RE =
+  /^(short response|write a short sentence|write a sentence|make a sentence)$/i;
+
+function isPromptTooGeneric(prompt: string): boolean {
+  const raw = (prompt || "").trim();
+  if (!raw) return true;
+  const normalized = raw.replace(/[.!?]+$/g, "").trim();
+  if (GENERIC_PROMPT_RE.test(normalized)) return true;
+  if (countPromptWords(normalized) < 3) return true;
+  return false;
+}
+
 function normalizeForLeakCheck(text: string): string {
   return (text || "")
     .toLowerCase()
@@ -55,50 +75,27 @@ function titleCase(input: string): string {
 export function buildReviewFallbackPrompt(args: {
   sourceQuestionText: string;
   conceptTag?: string;
+  expectedAnswerRaw?: string;
 }): string {
   const raw = (args.sourceQuestionText || "").trim();
-  if (!raw) return "Practice: Respond naturally.";
+  const conceptLabel = args.conceptTag
+    ? titleCase(args.conceptTag.replace(/_/g, " ").trim())
+    : "";
+  const expected = (args.expectedAnswerRaw || "").trim();
 
-  const stripped = raw.replace(/[?]+$/g, "").trim();
-  const lower = stripped.toLowerCase();
-  let prompt = stripped;
+  if (raw) return ensureTerminalPunctuation(`Review: ${raw}`);
 
-  if (lower.startsWith("how do you say")) {
-    const rest = stripped.slice("How do you say".length).trim();
-    prompt = `Say ${rest}`.trim();
-  } else if (lower.startsWith("how do you ask")) {
-    const rest = stripped.slice("How do you ask".length).trim();
-    prompt = rest ? `Ask ${rest}` : "Ask in a natural way";
-  } else if (lower.startsWith("how do you introduce")) {
-    prompt = "Introduce yourself politely";
-  } else if (lower.startsWith("reply to")) {
-    const rest = stripped.slice("Reply to".length).trim();
-    prompt = rest ? `Reply naturally to ${rest}` : "Reply naturally";
-  } else if (lower.startsWith("respond to")) {
-    const rest = stripped.slice("Respond to".length).trim();
-    prompt = rest ? `Respond naturally to ${rest}` : "Respond naturally";
-  } else if (lower.startsWith("how do you")) {
-    const rest = stripped.slice("How do you".length).trim();
-    prompt = rest ? `Please ${rest}` : "Please respond naturally";
-  }
+  const situationCue = buildSituationCuePrompt(expected);
+  if (situationCue) return situationCue;
 
-  prompt = prompt.replace(/\s+/g, " ").trim();
-  if (prompt && !/[.!?]$/.test(prompt)) {
-    prompt = `${prompt}.`;
-  }
+  const wordBank = buildWordBankPrompt(expected);
+  if (wordBank) return wordBank;
 
-  const normalizedPrompt = normalizeForCompare(prompt);
-  const normalizedRaw = normalizeForCompare(raw);
+  const masked = buildMaskedTokenPrompt(expected);
+  if (masked) return masked;
 
-  if (!normalizedPrompt || normalizedPrompt === normalizedRaw) {
-    const conceptLabel = args.conceptTag
-      ? titleCase(args.conceptTag.replace(/_/g, " ").trim())
-      : "";
-    if (conceptLabel) return `Practice: ${conceptLabel}.`;
-    return "Practice: Respond naturally.";
-  }
-
-  return prompt;
+  if (conceptLabel) return ensureTerminalPunctuation(`Review: ${conceptLabel}`);
+  return "Review: respond in one short sentence.";
 }
 
 const REVIEW_STYLE_ALTS: Record<string, string[]> = {
@@ -120,19 +117,11 @@ function extractQuestion(text: string): string | null {
   return raw ? raw : null;
 }
 
-function buildReplyShortPrompt(answerRaw: string, sourceQuestionText: string): string | null {
+function buildReplyShortPrompt(answerRaw: string): string | null {
   const answer = (answerRaw || "").trim();
   const lower = answer.toLowerCase();
   const polarity = lower.startsWith("yes") ? "yes" : lower.startsWith("no") ? "no" : "";
   if (!polarity) return null;
-
-  const question = extractQuestion(sourceQuestionText);
-  if (question) {
-    return polarity === "yes"
-      ? `Reply yes to: ${question}`
-      : `Reply no to: ${question}`;
-  }
-
   return polarity === "yes" ? "Reply with yes." : "Reply with no.";
 }
 
@@ -233,6 +222,31 @@ function buildWordBankPrompt(answerRaw: string): string | null {
   return ensureTerminalPunctuation(`Make a sentence: ${reordered.join(" / ")}`);
 }
 
+function extractTokens(answer: string): string[] {
+  if (!answer) return [];
+  return answer
+    .split(/\s+/)
+    .map((token) => token.replace(/[.,!?;:"'()\[\]{}]/g, ""))
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function maskToken(token: string): string {
+  const cleaned = token.replace(/[^\p{L}\p{N}]/gu, "");
+  if (!cleaned) return "";
+  if (cleaned.length === 1) return "_";
+  if (cleaned.length === 2) return `${cleaned[0]}_`;
+  return `${cleaned[0]}${"_".repeat(cleaned.length - 2)}${cleaned[cleaned.length - 1]}`;
+}
+
+function buildMaskedTokenPrompt(answerRaw: string): string | null {
+  const tokens = extractTokens(answerRaw);
+  if (tokens.length === 0) return null;
+  const masked = tokens.map(maskToken).filter(Boolean);
+  if (masked.length === 0) return null;
+  return ensureTerminalPunctuation(`Write a short sentence using: ${masked.join(" / ")}`);
+}
+
 function buildSituationCuePrompt(answerRaw: string): string | null {
   const answer = (answerRaw || "").trim();
   if (!answer) return null;
@@ -271,7 +285,7 @@ function buildPromptForStyle(style: string, params: ReviewPromptParams): string 
     case "SITUATION_CUE":
       return buildSituationCuePrompt(params.expectedAnswerRaw);
     case "REPLY_SHORT":
-      return buildReplyShortPrompt(params.expectedAnswerRaw, params.sourceQuestionText);
+      return buildReplyShortPrompt(params.expectedAnswerRaw);
     default:
       return null;
   }
@@ -283,22 +297,21 @@ function isUsablePrompt(
   expectedAnswerRaw: string
 ): prompt is string {
   if (!prompt) return false;
+  if (isPromptTooGeneric(prompt)) return false;
   const normalizedPrompt = normalizeForCompare(prompt);
   if (!normalizedPrompt) return false;
-  if (normalizedPrompt === normalizeForCompare(sourceQuestionText)) return false;
+  const normalizedSource = normalizeForCompare(sourceQuestionText);
+  if (normalizedPrompt === normalizedSource) return false;
+  if (normalizedSource && normalizedPrompt.includes(normalizedSource)) return false;
   if (normalizedPrompt === normalizeForCompare(expectedAnswerRaw)) return false;
   if (containsAnswer(prompt, expectedAnswerRaw)) return false;
   return true;
 }
 
 function buildReviewPromptDeterministic(params: ReviewPromptParams): string | null {
-  if (params.language !== "en") return null;
   if (!params.expectedAnswerRaw) return null;
 
-  const yesNoPrompt = buildReplyShortPrompt(
-    params.expectedAnswerRaw,
-    params.sourceQuestionText
-  );
+  const yesNoPrompt = buildReplyShortPrompt(params.expectedAnswerRaw);
   if (isUsablePrompt(yesNoPrompt, params.sourceQuestionText, params.expectedAnswerRaw)) {
     return yesNoPrompt;
   }
@@ -337,13 +350,19 @@ export async function buildReviewPrompt(params: ReviewPromptParams): Promise<str
         conceptTag: params.conceptTag,
         type: "variation",
       },
-      { generatePracticeJSON },
-      { forceEnabled: true }
+      { generatePracticeJSON }
     );
 
     if (source === "ai" && item?.prompt) {
       const trimmed = String(item.prompt).trim();
-      if (trimmed) return trimmed;
+      if (trimmed) {
+        const normalizedPrompt = normalizeForCompare(trimmed);
+        const normalizedSource = normalizeForCompare(params.sourceQuestionText);
+        if ((!normalizedSource || !normalizedPrompt.includes(normalizedSource)) &&
+            isUsablePrompt(trimmed, params.sourceQuestionText, params.expectedAnswerRaw)) {
+          return trimmed;
+        }
+      }
     }
   } catch {
     // fall through to deterministic fallback
@@ -352,5 +371,6 @@ export async function buildReviewPrompt(params: ReviewPromptParams): Promise<str
   return buildReviewFallbackPrompt({
     sourceQuestionText: params.sourceQuestionText,
     conceptTag: params.conceptTag,
+    expectedAnswerRaw: params.expectedAnswerRaw,
   });
 }

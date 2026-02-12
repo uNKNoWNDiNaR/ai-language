@@ -65,6 +65,12 @@ vi.mock("../../ai/staticTutorMessages", () => ({
   getHintLeadIn: vi.fn(() => "Hint:"),
   getFocusNudge: vi.fn(() => ""),
   getDeterministicRetryExplanation: vi.fn(() => ""),
+  getStartTransition: vi.fn(() => "start"),
+  getAdvanceTransition: vi.fn(() => "advance"),
+  getNextQuestionLabel: vi.fn(() => "Next question:"),
+  getEndLessonMessage: vi.fn(() => "Lesson complete."),
+  getHintLabel: vi.fn(() => "Hint:"),
+  getPacePrefix: vi.fn(() => "Take your time."),
 }));
 
 vi.mock("../../ai/openaiClient", () => ({

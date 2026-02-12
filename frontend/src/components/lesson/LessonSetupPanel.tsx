@@ -1,11 +1,23 @@
+import { useEffect, useState } from "react";
 import type { LessonCatalogItem, SupportedLanguage } from "../../api/lessonAPI";
+
+type LanguageOption = {
+  code: SupportedLanguage;
+  label: string;
+  flag: string;
+  disabled?: boolean;
+  note?: string;
+};
 
 type LessonSetupPanelProps = {
   userId: string;
   language: SupportedLanguage;
   lessonId: string;
   lessons?: LessonCatalogItem[];
+  languages?: LanguageOption[];
+  onUserIdChange?: (userId: string) => void;
   onLessonChange?: (lessonId: string) => void;
+  onLanguageChange?: (language: SupportedLanguage) => void;
   disabled?: boolean;
 };
 
@@ -14,54 +26,83 @@ export function LessonSetupPanel({
   language,
   lessonId,
   lessons = [],
+  languages = [],
+  onUserIdChange,
   onLessonChange,
+  onLanguageChange,
   disabled = false,
 }: LessonSetupPanelProps) {
-  const trimmedUserId = userId.trim() || "user-1";
-  const trimmedLessonId = lessonId.trim() || "basic-1";
+  const trimmedUserId = userId.trim();
+  const trimmedLessonId = lessonId.trim();
+  const [draftUserId, setDraftUserId] = useState(userId);
+  const userInputDisabled = disabled || Boolean(trimmedUserId);
 
-  const languageLabel = (() => {
-    switch (language) {
-      case "de":
-        return "German";
-      case "es":
-        return "Spanish";
-      case "fr":
-        return "French";
-      case "en":
-      default:
-        return "English";
-    }
-  })();
+  useEffect(() => {
+    setDraftUserId(userId);
+  }, [userId]);
 
-  const languageFlag = (() => {
-    switch (language) {
-      case "de":
-        return "🇩🇪";
-      case "es":
-        return "🇪🇸";
-      case "fr":
-        return "🇫🇷";
-      case "en":
-      default:
-        return "🇺🇸";
+  const commitUserId = () => {
+    if (!onUserIdChange) return;
+    const next = draftUserId.trim();
+    if (next !== userId) {
+      onUserIdChange(next);
+    } else if (draftUserId !== userId) {
+      setDraftUserId(userId);
     }
-  })();
+  };
+
+  const languageOption =
+    languages.find((opt) => opt.code === language) ??
+    ({ code: language, label: language.toUpperCase(), flag: "🌐" } as LanguageOption);
 
   return (
     <div className="lessonInfoGroup">
-      <div className="lessonInfoPill" aria-label="Profile" aria-readonly="true">
+      <div className="lessonInfoPill" aria-label="Profile">
         <span className="lessonInfoIcon" aria-hidden="true">
           👤
         </span>
-        <span className="lessonInfoText">{trimmedUserId}</span>
+        {onUserIdChange ? (
+          <input
+            className="lessonTextInput"
+            value={draftUserId}
+            onChange={(e) => setDraftUserId(e.target.value)}
+            onBlur={commitUserId}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+            }}
+            placeholder="Enter username"
+            disabled={userInputDisabled}
+            aria-label="Username"
+            autoComplete="username"
+          />
+        ) : (
+          <span className="lessonInfoText">{trimmedUserId}</span>
+        )}
       </div>
 
-      <div className="lessonInfoPill" aria-label="Language" aria-readonly="true">
+      <div className="lessonInfoPill" aria-label="Language">
         <span className="lessonInfoIcon" aria-hidden="true">
-          {languageFlag}
+          {languageOption.flag}
         </span>
-        <span className="lessonInfoText">{languageLabel}</span>
+        {languages.length > 0 && onLanguageChange ? (
+          <select
+            className="lessonSelect"
+            value={language}
+            onChange={(e) => onLanguageChange(e.target.value as SupportedLanguage)}
+            disabled={disabled}
+            aria-label="Target language"
+          >
+            {languages.map((option) => (
+              <option key={option.code} value={option.code} disabled={option.disabled}>
+                {option.note ? `${option.label} (${option.note})` : option.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="lessonInfoText">{languageOption.label}</span>
+        )}
       </div>
 
       <div className="lessonInfoPill" aria-label="Lesson" aria-readonly="true">
@@ -83,7 +124,9 @@ export function LessonSetupPanel({
             ))}
           </select>
         ) : (
-          <span className="lessonInfoText">{trimmedLessonId}</span>
+          <span className="lessonInfoText">
+            {lessons.length === 0 ? "No lessons yet" : trimmedLessonId || "Select a lesson"}
+          </span>
         )}
       </div>
     </div>

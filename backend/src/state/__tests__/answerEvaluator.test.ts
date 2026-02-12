@@ -59,12 +59,12 @@ describe("evaluateAnswer - regression tests", () => {
     expect(r.result).toBe("correct");
   });
 
-  it("accepts 'heisst' for 'heißt'", () => {
+  it("does not penalize sentence-initial capitalization in German", () => {
     const q = {
         answer: "Wie heißt du?",
         examples: ["Wie heißt du?", "Wie ist dein Name?", "Wie heisst du?"]
     };
-    const r = evaluateAnswer(q as any, "Wie heißt du", "de");
+    const r = evaluateAnswer(q as any, "wie heißt du", "de");
     expect(r.result).toBe("correct");
   });
 
@@ -75,6 +75,31 @@ describe("evaluateAnswer - regression tests", () => {
     };
     const r = evaluateAnswer(q as any, "Mir geht es gut", "de");
     expect(r.result).toBe("correct")
+  });
+
+  it("accepts umlaut equivalence (ae/ä)", () => {
+    const q = { answer: "Schüler" };
+    const r = evaluateAnswer(q as any, "Schueler", "de");
+    expect(r.result).toBe("correct");
+  });
+
+  it("accepts umlaut digraph equivalence in sentences", () => {
+    const q = { answer: "Ich wohne in München." };
+    const r = evaluateAnswer(q as any, "Ich wohne in Muenchen.", "de");
+    expect(r.result).toBe("correct");
+  });
+
+  it("accepts ß/ss equivalence", () => {
+    const q = { answer: "Straße" };
+    const r = evaluateAnswer(q as any, "Strasse", "de");
+    expect(r.result).toBe("correct");
+  });
+
+  it("treats capitalization-only difference as almost in German", () => {
+    const q = { answer: "Ich bin Student." };
+    const r = evaluateAnswer(q as any, "ich bin student.", "de");
+    expect(r.result).toBe("almost");
+    expect(r.reasonCode).toBe("CAPITALIZATION");
   });
 
   it("keeps article mismatch as almost", () => {
@@ -132,6 +157,19 @@ describe("evaluateAnswer - regression tests", () => {
     });
     const r = evaluateAnswer(q as any, "I am here.", "en");
     expect(r.result).toBe("correct");
+  });
+
+  it("treats missing umlaut in blank answers as almost (German)", () => {
+    const q = makeQ({
+      prompt: "Complete: Ich ___ Wasser.",
+      question: "Complete: Ich ___ Wasser.",
+      expectedInput: "blank",
+      blankAnswers: ["möchte"],
+      answer: "Ich möchte Wasser.",
+    });
+    const r = evaluateAnswer(q as any, "mochte", "de");
+    expect(r.result).toBe("almost");
+    expect(r.reasonCode).toBe("UMLAUT");
   });
 
   it("does not accept single words for non-blank prompts", () => {

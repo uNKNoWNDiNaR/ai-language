@@ -16,7 +16,30 @@ function parseQuestionIdFromConceptTag(tag) {
     const m = tag.match(/\bq(\d+)\b/i);
     return m ? String(Number(m[1])) : null;
 }
-function getHintForAttempt(item, attemptCount) {
+function normalizeFeedbackLanguage(value, fallback) {
+    if (value === "en" || value === "de" || value === "es" || value === "fr")
+        return value;
+    return fallback;
+}
+function getFeedbackStrings(language) {
+    if (language === "de") {
+        return {
+            correct: "Gut gemacht.",
+            almost: "Fast.",
+            wrong: "Noch nicht.",
+            tryAgain: "Versuch's nochmal.",
+            answerLabel: "Antwort",
+        };
+    }
+    return {
+        correct: "Nice — that’s correct.",
+        almost: "Almost.",
+        wrong: "Not quite.",
+        tryAgain: "Try again.",
+        answerLabel: "Answer",
+    };
+}
+function getHintForAttempt(item, attemptCount, language) {
     // attemptCount is 1-based
     if (attemptCount <= 1)
         return null;
@@ -29,14 +52,16 @@ function getHintForAttempt(item, attemptCount) {
     if (attemptCount === 3)
         return hints[1] || hints[0] || hint || null;
     // Attempt 4+
-    return `Answer: ${item.expectedAnswerRaw}`;
+    const label = getFeedbackStrings(language).answerLabel;
+    return `${label}: ${item.expectedAnswerRaw}`;
 }
-function buildTutorMessage(result, hint) {
+function buildTutorMessage(result, hint, language) {
+    const strings = getFeedbackStrings(language);
     if (result === "correct")
-        return "Nice — that’s correct.";
+        return strings.correct;
     if (result === "almost")
-        return hint ? `Almost. ${hint}` : "Almost. Try again.";
-    return hint ? `Not quite. ${hint}` : "Not quite. Try again.";
+        return hint ? `${strings.almost} ${hint}` : `${strings.almost} ${strings.tryAgain}`;
+    return hint ? `${strings.wrong} ${hint}` : `${strings.wrong} ${strings.tryAgain}`;
 }
 function stripDebugPrefixes(text) {
     if (!text)
@@ -102,14 +127,15 @@ const submitPractice = async (req, res) => {
         answer: item.expectedAnswerRaw,
         hint: typeof item.hint === "string" ? item.hint : undefined,
         examples: item.examples,
+        acceptedAnswers: item.acceptedAnswers,
+        expectedInput: item.expectedInput,
+        blankAnswers: item.blankAnswers,
     };
-    const evalRes = (0, answerEvaluator_1.evaluateAnswer)(q, answer, item.language);
-    const hint = getHintForAttempt(item, attemptCount);
-    const baseMessage = buildTutorMessage(evalRes.result, hint);
     let explanation = null;
     let instructionLanguage = null;
     let includeSupport = false;
     let supportLevel = 0.85;
+    const evalRes = (0, answerEvaluator_1.evaluateAnswer)(q, answer, item.language);
     if ((0, featureFlags_1.isInstructionLanguageEnabled)()) {
         try {
             const lang = (typeof session.language === "string" && session.language.trim()
@@ -121,6 +147,9 @@ const submitPractice = async (req, res) => {
             instructionLanguage = null;
         }
     }
+    const feedbackLanguage = normalizeFeedbackLanguage(instructionLanguage, "en");
+    const hint = getHintForAttempt(item, attemptCount, feedbackLanguage);
+    const baseMessage = buildTutorMessage(evalRes.result, hint, feedbackLanguage);
     if (instructionLanguage) {
         const eventType = evalRes.result === "correct"
             ? "CORRECT_FEEDBACK"

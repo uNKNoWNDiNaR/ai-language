@@ -12,7 +12,7 @@ const ChatMessageSchema = new mongoose_1.default.Schema({
     timestamp: { type: Date, default: Date.now },
 });
 const LessonSessionSchema = new mongoose_1.default.Schema({
-    userId: { type: String, required: true, unique: true },
+    userId: { type: String, required: true },
     lessonId: String,
     language: { type: String, required: true },
     state: { type: String, required: true },
@@ -72,4 +72,5 @@ const LessonSessionSchema = new mongoose_1.default.Schema({
     lastSupportModeFromProfile: { type: String, default: "auto" },
     forceNoSupport: { type: Boolean, default: false },
 }, { timestamps: true });
+LessonSessionSchema.index({ userId: 1, language: 1 }, { unique: true });
 exports.LessonSessionModel = mongoose_1.default.models.LessonSession || mongoose_1.default.model("LessonSession", LessonSessionSchema);

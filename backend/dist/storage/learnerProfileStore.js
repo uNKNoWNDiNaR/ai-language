@@ -23,6 +23,7 @@ exports.getTeachingProfilePrefs = getTeachingProfilePrefs;
 const mongoose_1 = __importDefault(require("mongoose"));
 const learnerProfileState_1 = require("../state/learnerProfileState");
 const instructionLanguage_1 = require("../utils/instructionLanguage");
+const supportLevel_1 = require("../utils/supportLevel");
 function isMongoReady() {
     // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
     // We skip writes unless connected to avoid buffering/hanging in tests.
@@ -57,13 +58,10 @@ function toSupportMode(v) {
     return v === "auto" || v === "manual" ? v : undefined;
 }
 function toSupportLevel(v) {
-    const n = typeof v === "number" ? v : Number(v);
-    if (!Number.isFinite(n))
-        return undefined;
-    return Math.max(0, Math.min(1, n));
+    return (0, supportLevel_1.normalizeSupportLevel)(v) ?? undefined;
 }
 const DEFAULT_INSTRUCTION_LANGUAGE = "en";
-const DEFAULT_SUPPORT_LEVEL = 0.85;
+const DEFAULT_SUPPORT_LEVEL = "high";
 const DEFAULT_SUPPORT_MODE = "auto";
 async function updateTeachingProfilePrefs(args) {
     if (!isMongoReady())
@@ -153,6 +151,10 @@ function mistakeTagFromReasonCode(reasonCode) {
         return "word_order";
     if (c === "TYPO")
         return "typos";
+    if (c === "UMLAUT")
+        return "umlauts";
+    if (c === "CAPITALIZATION")
+        return "capitalization";
     if (c === "WRONG_LANGUAGE")
         return "wrong_language";
     if (c === "MISSING_SLOT")
@@ -531,6 +533,8 @@ function reasonLabel(code) {
         return "word order";
     if (c === "TYPO")
         return "spelling/typos";
+    if (c === "UMLAUT")
+        return "umlauts";
     if (c === "WRONG_LANGUAGE")
         return "wrong language";
     if (c === "MISSING_SLOT")
@@ -650,7 +654,7 @@ async function getTeachingProfilePrefs(userId, language) {
     // Only read when connected (avoid buffering in tests/CI)
     if (mongoose_1.default.connection.readyState !== 1)
         return null;
-    const doc = (await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { pace: 1, explanationDepth: 1, forcedAdvanceCount: 1 }).lean());
+    const doc = (await learnerProfileState_1.LearnerProfileModel.findOne({ userId, language }, { pace: 1, explanationDepth: 1, supportLevel: 1, forcedAdvanceCount: 1 }).lean());
     if (!doc)
         return null;
     const forcedAdvanceCount = typeof doc.forcedAdvanceCount === "number" && Number.isFinite(doc.forcedAdvanceCount)
@@ -659,7 +663,9 @@ async function getTeachingProfilePrefs(userId, language) {
     // If fields weren’t present on older docs, infer softly from behavior.
     const inferredPace = forcedAdvanceCount >= 2 ? "slow" : "normal";
     const inferredDepth = forcedAdvanceCount >= 2 ? "detailed" : "normal";
+    const inferredSupportLevel = forcedAdvanceCount >= 2 ? "high" : "medium";
     const pace = toPace(doc.pace) ?? inferredPace;
     const explanationDepth = toExplanationDepth(doc.explanationDepth) ?? inferredDepth;
-    return { pace, explanationDepth };
+    const supportLevel = toSupportLevel(doc.supportLevel) ?? inferredSupportLevel;
+    return { pace, explanationDepth, supportLevel };
 }

@@ -41,7 +41,7 @@ const LearnerProfileSchema = new mongoose.Schema(
     pace: { type: String, default: "normal" }, // "slow" | "normal"
     explanationDepth: { type: String, default: "normal" }, // "short" | "normal" | "detailed"
     instructionLanguage: { type: String, default: "en" }, // "en" | "de" | "es" | "fr"
-    supportLevel: { type: Number, default: 0.85 }, // 0..1
+    supportLevel: { type: String, default: "high" }, // "high" | "medium" | "low"
     supportMode: { type: String, default: "auto" }, // "auto" | "manual"
 
     attemptsTotal: { type: Number, default: 0 },

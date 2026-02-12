@@ -1,5 +1,7 @@
 // backend/src/services/supportPolicy.ts
 
+import { normalizeSupportLevel, supportLevelToNumber } from "../utils/supportLevel";
+
 export type SupportEventType =
   | "SESSION_START"
   | "INTRO_NEW_CONCEPT"
@@ -14,6 +16,8 @@ export type SupportEventType =
   | "SESSION_SUMMARY";
 
 export function clampSupportLevel(value: unknown): number {
+  const normalized = normalizeSupportLevel(value);
+  if (normalized) return supportLevelToNumber(normalized, 0.85);
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return 0.85;
   return Math.max(0, Math.min(1, n));

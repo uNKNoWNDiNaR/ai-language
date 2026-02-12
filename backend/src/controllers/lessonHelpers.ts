@@ -77,30 +77,50 @@ export function chooseHintForAttempt(
   // - hints?: string[] (new)
   const hintsArr: string[] = Array.isArray(question.hints) ? question.hints : [];
   const legacyHint: string = typeof question.hint === "string" ? question.hint : "";
+  const hintTarget =
+    typeof question.hintTarget === "string" ? question.hintTarget.trim() : "";
+  const explanationTarget =
+    typeof question.explanationTarget === "string" ? question.explanationTarget.trim() : "";
+  const hintLegacy =
+    typeof question.hint === "string" ? question.hint.trim() : "";
+  const hintList: string[] = Array.isArray(question.hints)
+    ? question.hints.map((h: unknown) => (typeof h === "string" ? h.trim() : "")).filter(Boolean)
+    : [];
   const resolvedHint = (help.hintText || "").trim();
-  const hint1 = (pack.hint1 || hintsArr[0] || legacyHint || "").trim();
-  const hint2 = (pack.hint2 || hintsArr[1] || hintsArr[0] || legacyHint || "").trim();
+  const hintFromQuestion1 = (hintsArr[0] || hintTarget || legacyHint || "").trim();
+  const hintFromQuestion2 = (hintsArr[1] || hintsArr[0] || hintTarget || legacyHint || "").trim();
+  const hint1 = (hintFromQuestion1 || resolvedHint || pack.hint1 || "").trim();
+  const hint2 = (hintFromQuestion2 || resolvedHint || pack.hint2 || pack.hint1 || "").trim();
 
   // Attempt 2 -> light hint
   if (attemptCount === 2) {
-    const text = resolvedHint || hint1;
+    const text = hint1;
     if (!text) return undefined;
     return { level: 1, text };
   }
 
   // Attempt 3 -> stronger hint
   if (attemptCount === 3) {
-    const text = resolvedHint || hint2;
+    const text = hint2;
     if (!text) return undefined;
     return { level: 2, text };
   }
 
   // Attempt 4+ -> reveal explanation + answer (Explanation first)
   const rawExplanation =
+    (explanationTarget && explanationTarget.trim()) ||
+    (typeof question.explanation === "string" ? question.explanation.trim() : "") ||
     (help.explanationText && help.explanationText.trim()) ||
     (pack.explanation && pack.explanation.trim()) ||
-    (typeof question.explanation === "string" ? question.explanation.trim() : "");
-  const explanation = rawExplanation || "This is the expected structure for this question.";
+    "";
+
+  const explanation =
+    rawExplanation ||
+    explanationTarget ||
+    hintTarget ||
+    hintLegacy ||
+    hintList[0] ||
+    "This is the expected structure for this question.";
 
   const rawAnswer = typeof question.answer === "string" ? question.answer.trim() : String(question.answer ?? "").trim();
   const answer = rawAnswer || "—";

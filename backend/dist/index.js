@@ -24,6 +24,7 @@ const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(requestContext_1.requestContextMiddleware);
 app.use(rateLimit_1.rateLimitMiddleware);
+app.get("/health", (_req, res) => res.status(200).send("ok"));
 // Apply JSON parsing with a sane size limit.
 // This replaces the broken jsonSizeLimit usage + avoids double-parsing.
 app.use(express_1.default.json({ limit: process.env.JSON_BODY_LIMIT || "64kb" }));
@@ -33,7 +34,6 @@ app.use("/progress", progress_1.default);
 app.use("/practice", practice_1.default);
 app.use("/feedback", feedback_1.default);
 app.use("/review", review_1.default);
-app.get("/health", (_req, res) => res.status(200).send("ok"));
 app.use(errorEnvelope_1.errorEnvelopeMiddleware);
 const PORT = Number(process.env.PORT || 3000);
 // Backward-compatible env support (keeps old working setups)
