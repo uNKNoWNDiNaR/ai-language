@@ -116,6 +116,8 @@ const FRICTION_TYPE_OPTIONS = new Set([
   "evaluation_unfair",
   "other",
 ]);
+const TESTER_LEVEL_OPTIONS = new Set(["A1", "A2", "B1_PLUS"]);
+const TESTER_GOAL_OPTIONS = new Set(["SPEAKING", "GRAMMAR", "TRAVEL", "OTHER"]);
 const SUPPORT_LEVEL_OPTIONS = new Set(["high", "medium", "low"]);
 const EVAL_RESULTS = new Set(["correct", "almost", "wrong"]);
 
@@ -314,6 +316,34 @@ export async function submitLessonFeedback(req: Request, res: Response) {
     }
   }
 
+  let testerContext:
+    | {
+        version: 1;
+        selfReportedLevel: string;
+        goal: string;
+        updatedAtISO?: string;
+      }
+    | undefined;
+  if (body.testerContext !== undefined) {
+    if (!body.testerContext || typeof body.testerContext !== "object" || Array.isArray(body.testerContext)) {
+      return sendError(res, 400, "testerContext must be an object", "INVALID_TESTER_CONTEXT");
+    }
+    const raw = body.testerContext as Record<string, unknown>;
+    if (raw.version !== 1) {
+      return sendError(res, 400, "testerContext version is invalid", "INVALID_TESTER_CONTEXT");
+    }
+    const selfReportedLevel = toEnumOrUndefined(raw.selfReportedLevel, TESTER_LEVEL_OPTIONS);
+    if (!selfReportedLevel) {
+      return sendError(res, 400, "testerContext level is invalid", "INVALID_TESTER_CONTEXT");
+    }
+    const goal = toEnumOrUndefined(raw.goal, TESTER_GOAL_OPTIONS);
+    if (!goal) {
+      return sendError(res, 400, "testerContext goal is invalid", "INVALID_TESTER_CONTEXT");
+    }
+    const updatedAtISO = toShortTextOrUndefined(raw.updatedAtISO, 40);
+    testerContext = { version: 1, selfReportedLevel, goal, updatedAtISO };
+  }
+
   const hasAnyField =
     typeof rating === "number" || typeof freeText === "string" || (quickTags?.length ?? 0) > 0;
 
@@ -358,6 +388,7 @@ export async function submitLessonFeedback(req: Request, res: Response) {
     quickTags,
     freeText,
     forcedChoice,
+    testerContext,
     questionId,
     conceptTag,
     attemptsOnQuestion,

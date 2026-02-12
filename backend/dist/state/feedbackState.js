@@ -44,6 +44,12 @@ const FeedbackSchema = new mongoose_1.default.Schema({
         answerChecking: { type: String },
         frictionType: { type: String },
     },
+    testerContext: {
+        version: { type: Number },
+        selfReportedLevel: { type: String },
+        goal: { type: String },
+        updatedAtISO: { type: String },
+    },
     questionId: { type: String },
     attemptsOnQuestion: { type: Number },
     promptStyle: { type: String },

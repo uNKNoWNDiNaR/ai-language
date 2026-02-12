@@ -44,6 +44,14 @@ import {
   getUiStrings,
 } from "../utils/instructionLanguage";
 import { applyInstructionLanguageMeta } from "../utils/lessonMetaByIL";
+import { getAnonUserId } from "../utils/anonId";
+import {
+  readTesterContext,
+  saveTesterContext,
+  dismissTesterContext,
+  shouldShowTesterContext,
+  type TesterContext,
+} from "../utils/testerContext";
 import {
   LessonShell,
   LessonSetupPanel,
@@ -949,6 +957,11 @@ export function Lesson() {
     supportLevel?: SupportLevel;
   } | null>(null);
   const [frictionContext, setFrictionContext] = useState<FrictionContext | null>(null);
+  const [anonUserId] = useState(() => getAnonUserId());
+  const [testerContext, setTesterContext] = useState<TesterContext | null>(null);
+  const [showTesterContext, setShowTesterContext] = useState(false);
+  const [testerLevel, setTesterLevel] = useState<TesterContext["selfReportedLevel"] | "">("");
+  const [testerGoal, setTesterGoal] = useState<TesterContext["goal"] | "">("");
 
   const clozeInputRef = useRef<HTMLInputElement | null>(null);
   const quickReviewInputRef = useRef<HTMLInputElement | null>(null);
@@ -1151,6 +1164,16 @@ export function Lesson() {
   useEffect(() => {
     writeUserId(userId);
   }, [userId]);
+
+  useEffect(() => {
+    const stored = readTesterContext(anonUserId);
+    setTesterContext(stored);
+    if (stored) {
+      setTesterLevel(stored.selfReportedLevel);
+      setTesterGoal(stored.goal);
+    }
+    setShowTesterContext(shouldShowTesterContext(anonUserId));
+  }, [anonUserId]);
 
   useEffect(() => {
     if (!userReady) {
@@ -1976,6 +1999,26 @@ export function Lesson() {
     setLessonFeedbackOpen(true);
   }
 
+  function handleSaveTesterContext() {
+    if (!anonUserId) return;
+    if (!testerLevel || !testerGoal) return;
+    const next: TesterContext = {
+      version: 1,
+      selfReportedLevel: testerLevel,
+      goal: testerGoal,
+      updatedAtISO: new Date().toISOString(),
+    };
+    saveTesterContext(anonUserId, next);
+    setTesterContext(next);
+    setShowTesterContext(false);
+  }
+
+  function handleDismissTesterContext() {
+    if (!anonUserId) return;
+    dismissTesterContext(anonUserId, new Date().toISOString());
+    setShowTesterContext(false);
+  }
+
   async function startLessonFlow(targetLessonId: string, restart: boolean) {
     const uid = userId.trim();
     if (!uid) return;
@@ -2480,6 +2523,7 @@ export function Lesson() {
     };
   }) {
     if (!lessonFeedbackContext) return;
+    const currentTesterContext = testerContext ?? readTesterContext(anonUserId);
 
     await submitLessonFeedback({
       userId: lessonFeedbackContext.userId,
@@ -2493,6 +2537,7 @@ export function Lesson() {
       quickTags: payload.quickTags,
       freeText: payload.freeText,
       forcedChoice: payload.forcedChoice,
+      testerContext: currentTesterContext ?? undefined,
       createdAt: new Date().toISOString(),
     });
   }
@@ -2505,6 +2550,7 @@ export function Lesson() {
     const lessonLang = session?.language ?? language;
     const lessonIdentifier = session?.lessonId ?? lessonId;
     if (!uid || !lessonLang || !lessonIdentifier || !frictionContext) return;
+    const currentTesterContext = testerContext ?? readTesterContext(anonUserId);
 
     await submitLessonFeedback({
       userId: uid,
@@ -2518,6 +2564,7 @@ export function Lesson() {
       forcedChoice: {
         frictionType: payload.frictionType,
       },
+      testerContext: currentTesterContext ?? undefined,
       context: {
         questionId: frictionContext.questionId,
         conceptTag: frictionContext.conceptTag,
@@ -2781,6 +2828,74 @@ export function Lesson() {
 
               <div className="mt-6 grid gap-6 lg:grid-cols-[380px_1fr] lg:items-start">
                 <aside className="space-y-6 lg:sticky lg:top-8 lg:max-h-[calc(100vh-80px)] lg:overflow-y-auto lg:pr-1">
+                  {showTesterContext && (
+                    <div className="rounded-2xl border border-slate-300/70 bg-white p-5 shadow-sm ring-1 ring-slate-200/50">
+                      <div className="text-sm font-semibold text-slate-800">
+                        Help tailor this pilot (optional)
+                      </div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        Help us tailor lessons to you.
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        <label className="block text-sm text-slate-600">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Your level
+                          </span>
+                          <select
+                            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            value={testerLevel}
+                            onChange={(e) =>
+                              setTesterLevel(e.target.value as TesterContext["selfReportedLevel"])
+                            }
+                          >
+                            <option value="" disabled>
+                              Select a level
+                            </option>
+                            <option value="A1">A1 beginner</option>
+                            <option value="A2">A2 early</option>
+                            <option value="B1_PLUS">B1+</option>
+                          </select>
+                        </label>
+                        <label className="block text-sm text-slate-600">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Main goal
+                          </span>
+                          <select
+                            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            value={testerGoal}
+                            onChange={(e) =>
+                              setTesterGoal(e.target.value as TesterContext["goal"])
+                            }
+                          >
+                            <option value="" disabled>
+                              Select a goal
+                            </option>
+                            <option value="SPEAKING">Speaking confidence</option>
+                            <option value="GRAMMAR">Grammar basics</option>
+                            <option value="TRAVEL">Travel</option>
+                            <option value="OTHER">Other</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                          onClick={handleSaveTesterContext}
+                          disabled={!testerLevel || !testerGoal}
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                          onClick={handleDismissTesterContext}
+                        >
+                          Not now
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div className="rounded-2xl border border-blue-200/80 bg-white p-5 shadow-sm ring-1 ring-blue-100/60">
                     <div className="flex items-start justify-between gap-3">
                       <div className="mt-0.5 text-xs text-slate-500">

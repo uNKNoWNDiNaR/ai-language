@@ -1,6 +1,7 @@
 // frontend/src/api/lessonAPI.ts
 
 import axios from "axios";
+import type { TesterContext } from "../utils/testerContext";
 
 type ErrorPayload = {
   error?: unknown;
@@ -210,6 +211,7 @@ export type LessonFeedbackRequest = {
   quickTags?: LessonFeedbackQuickTag[];
   freeText?: string;
   forcedChoice?: LessonFeedbackForcedChoice;
+  testerContext?: TesterContext;
   context?: LessonFeedbackContext;
   createdAt?: string;
 };

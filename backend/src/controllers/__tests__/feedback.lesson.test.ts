@@ -43,6 +43,12 @@ describe("submitLessonFeedback", () => {
           pace: "just_right",
           answerChecking: "fair",
         },
+        testerContext: {
+          version: 1,
+          selfReportedLevel: "A1",
+          goal: "SPEAKING",
+          updatedAtISO: "2026-02-12T09:00:00.000Z",
+        },
       },
     };
 
@@ -63,6 +69,12 @@ describe("submitLessonFeedback", () => {
           clarity: "very_clear",
           pace: "just_right",
           answerChecking: "fair",
+        },
+        testerContext: {
+          version: 1,
+          selfReportedLevel: "A1",
+          goal: "SPEAKING",
+          updatedAtISO: "2026-02-12T09:00:00.000Z",
         },
         supportLevel: "medium",
       }),
@@ -131,6 +143,31 @@ describe("submitLessonFeedback", () => {
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ code: "INVALID_FORCED_CHOICE" }),
+    );
+  });
+
+  it("rejects invalid tester context values", async () => {
+    const req: any = {
+      body: {
+        userId: "u1",
+        targetLanguage: "en",
+        lessonId: "basic-1",
+        feedbackType: "lesson_end",
+        rating: 3,
+        testerContext: {
+          version: 1,
+          selfReportedLevel: "A3",
+          goal: "SPEAKING",
+        },
+      },
+    };
+
+    const res = mockRes();
+    await submitLessonFeedback(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "INVALID_TESTER_CONTEXT" }),
     );
   });
 });

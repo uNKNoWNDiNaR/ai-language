@@ -121,6 +121,8 @@ const FRICTION_TYPE_OPTIONS = new Set([
     "evaluation_unfair",
     "other",
 ]);
+const TESTER_LEVEL_OPTIONS = new Set(["A1", "A2", "B1_PLUS"]);
+const TESTER_GOAL_OPTIONS = new Set(["SPEAKING", "GRAMMAR", "TRAVEL", "OTHER"]);
 const SUPPORT_LEVEL_OPTIONS = new Set(["high", "medium", "low"]);
 const EVAL_RESULTS = new Set(["correct", "almost", "wrong"]);
 function toAnonSessionIdOrGenerated(v) {
@@ -269,6 +271,26 @@ async function submitLessonFeedback(req, res) {
             forcedChoice = { returnTomorrow, clarity, pace, answerChecking, frictionType };
         }
     }
+    let testerContext;
+    if (body.testerContext !== undefined) {
+        if (!body.testerContext || typeof body.testerContext !== "object" || Array.isArray(body.testerContext)) {
+            return (0, sendError_1.sendError)(res, 400, "testerContext must be an object", "INVALID_TESTER_CONTEXT");
+        }
+        const raw = body.testerContext;
+        if (raw.version !== 1) {
+            return (0, sendError_1.sendError)(res, 400, "testerContext version is invalid", "INVALID_TESTER_CONTEXT");
+        }
+        const selfReportedLevel = toEnumOrUndefined(raw.selfReportedLevel, TESTER_LEVEL_OPTIONS);
+        if (!selfReportedLevel) {
+            return (0, sendError_1.sendError)(res, 400, "testerContext level is invalid", "INVALID_TESTER_CONTEXT");
+        }
+        const goal = toEnumOrUndefined(raw.goal, TESTER_GOAL_OPTIONS);
+        if (!goal) {
+            return (0, sendError_1.sendError)(res, 400, "testerContext goal is invalid", "INVALID_TESTER_CONTEXT");
+        }
+        const updatedAtISO = toShortTextOrUndefined(raw.updatedAtISO, 40);
+        testerContext = { version: 1, selfReportedLevel, goal, updatedAtISO };
+    }
     const hasAnyField = typeof rating === "number" || typeof freeText === "string" || (quickTags?.length ?? 0) > 0;
     if (!hasAnyField && !forcedChoice) {
         return (0, sendError_1.sendError)(res, 400, "Please fill at least one feedback field.", "EMPTY_FEEDBACK");
@@ -304,6 +326,7 @@ async function submitLessonFeedback(req, res) {
         quickTags,
         freeText,
         forcedChoice,
+        testerContext,
         questionId,
         conceptTag,
         attemptsOnQuestion,
