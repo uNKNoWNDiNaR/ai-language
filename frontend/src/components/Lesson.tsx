@@ -1,6 +1,6 @@
 // frontend/src/components/Lesson.tsx
 
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import {
   startLesson,
   submitAnswer,
@@ -45,7 +45,7 @@ import {
   getUiStrings,
 } from "../utils/instructionLanguage";
 import { applyInstructionLanguageMeta } from "../utils/lessonMetaByIL";
-import { getAnonUserId } from "../utils/anonId";
+import { getAnonUserId, getDisplayName } from "../utils/anonUser";
 import {
   readTesterContext,
   saveTesterContext,
@@ -85,6 +85,7 @@ const QUICK_REVIEW_DISMISS_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const TEACHING_PREFS_PREFIX = "ai-language:teachingPrefs:";
 const WARMUP_THROTTLE_MS = 10 * 60 * 1000;
 let lastWarmupAt = 0;
+type WarmupState = "idle" | "warming" | "ready" | "failed";
 
 type TargetLanguage = "en" | "de";
 type LanguageOption = {
@@ -116,13 +117,6 @@ function makeTeachingPrefsKey(userId: string, language: string): string {
   return makeScopedKey(TEACHING_PREFS_PREFIX, userId, language);
 }
 
-async function runWarmupIfNeeded() {
-  const now = Date.now();
-  if (now - lastWarmupAt < WARMUP_THROTTLE_MS) return;
-  lastWarmupAt = now;
-  await warmupBackend();
-}
-
 function makeLegacyTeachingPrefsKey(userId: string, language: string): string {
   const u = userId.trim();
   const l = language.trim();
@@ -145,17 +139,13 @@ function readUserId(): string {
   } catch {
     // ignore
   }
-  return "";
+  return getAnonUserId();
 }
 
 function writeUserId(userId: string) {
-  const normalized = normalizeUserId(userId);
+  const normalized = normalizeUserId(userId) || getAnonUserId();
   try {
-    if (!normalized) {
-      localStorage.removeItem(USER_ID_KEY);
-    } else {
-      localStorage.setItem(USER_ID_KEY, normalized);
-    }
+    localStorage.setItem(USER_ID_KEY, normalized);
   } catch {
     // ignore
   }
@@ -899,9 +889,7 @@ function applyQuestionMetaToMessages(
 
 export function Lesson() {
   const [userId, setUserId] = useState<string>(() => readUserId());
-  const [userGateValue, setUserGateValue] = useState("");
-  const [userGateError, setUserGateError] = useState<string | null>(null);
-  const userGateInputRef = useRef<HTMLInputElement | null>(null);
+  const [displayName] = useState<string>(() => getDisplayName());
   const [language, setLanguage] = useState<SupportedLanguage>(() => readTargetLanguage());
   const [lessonId, setLessonId] = useState(() => {
     const initialLang = readTargetLanguage();
@@ -986,6 +974,7 @@ export function Lesson() {
   const [homeDataError, setHomeDataError] = useState<string | null>(null);
   const [openUnits, setOpenUnits] = useState<Record<string, boolean>>({});
   const [forceLessonComplete, setForceLessonComplete] = useState(false);
+  const [warmupState, setWarmupState] = useState<WarmupState>("idle");
 
   const [lastSessionStatus, setLastSessionStatus] = useState<"in_progress" | "completed" | "">(
     () => readLastSessionStatus(readUserId(), readTargetLanguage())
@@ -1006,16 +995,16 @@ export function Lesson() {
   const prefsMenuRef = useRef<HTMLDivElement | null>(null);
   const scrollOnEnterRef = useRef(false);
   const lessonListRef = useRef<HTMLDivElement | null>(null);
+  const warmupInFlightRef = useRef<Promise<void> | null>(null);
 
   const practiceActive = useMemo(() => {
     return Boolean(practiceId && practicePrompt);
   }, [practiceId, practicePrompt]);
 
-  const userReady = Boolean(userId.trim());
   const sessionActive = Boolean(session);
   const showHome = !sessionActive && !practiceScreenOpen && !reviewScreenOpen;
   const showConversation = sessionActive && !practiceScreenOpen && !reviewScreenOpen;
-  const showHomeContent = showHome && userReady;
+  const showHomeContent = showHome;
   const lessonCompleted = useMemo(() => {
     if (forceLessonComplete) return true;
     const status = (progress?.status ?? "").toLowerCase();
@@ -1028,7 +1017,8 @@ export function Lesson() {
     suggestedReviewItems.length > 0 || reviewCandidates.length > 0;
   const showResumePractice = practiceActive && !practiceScreenOpen;
   const busy = loading || pending !== null;
-  const disableStartResume = busy || practiceActive || sessionActive || !userReady;
+  const isWarmupPending = warmupState === "warming";
+  const disableStartResume = busy || practiceActive || sessionActive || isWarmupPending;
   const displayCatalog = useMemo(
     () => applyInstructionLanguageMeta(catalog, instructionLanguage, language),
     [catalog, instructionLanguage, language]
@@ -1145,6 +1135,35 @@ export function Lesson() {
     [userId, language]
   );
 
+  const runWarmup = useCallback(
+    async (options?: { force?: boolean }) => {
+      const force = Boolean(options?.force);
+      const now = Date.now();
+      if (!force && now - lastWarmupAt < WARMUP_THROTTLE_MS) {
+        return;
+      }
+      if (warmupInFlightRef.current) {
+        await warmupInFlightRef.current;
+        return;
+      }
+
+      lastWarmupAt = now;
+      setWarmupState("warming");
+
+      const task = (async () => {
+        const result = await warmupBackend();
+        setWarmupState(result.ok ? "ready" : "failed");
+      })();
+      warmupInFlightRef.current = task;
+      try {
+        await task;
+      } finally {
+        warmupInFlightRef.current = null;
+      }
+    },
+    []
+  );
+
   const currentLessonMeta = useMemo(() => {
     if (!session?.lessonId) return null;
     return displayCatalog.find((lesson) => lesson.lessonId === session.lessonId) ?? null;
@@ -1176,19 +1195,22 @@ export function Lesson() {
   }, [userId]);
 
   useEffect(() => {
-    void runWarmupIfNeeded();
-    const handler = () => {
+    void runWarmup();
+    const handleFocus = () => {
+      void runWarmup();
+    };
+    const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void runWarmupIfNeeded();
+        void runWarmup();
       }
     };
-    window.addEventListener("focus", handler);
-    document.addEventListener("visibilitychange", handler);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
-      window.removeEventListener("focus", handler);
-      document.removeEventListener("visibilitychange", handler);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [runWarmup]);
 
   useEffect(() => {
     const stored = readTesterContext(anonUserId);
@@ -1199,14 +1221,6 @@ export function Lesson() {
     }
     setShowTesterContext(shouldShowTesterContext(anonUserId));
   }, [anonUserId]);
-
-  useEffect(() => {
-    if (!userReady) {
-      requestAnimationFrame(() => {
-        userGateInputRef.current?.focus();
-      });
-    }
-  }, [userReady]);
 
   useEffect(() => {
     if (!userId.trim()) {
@@ -1386,7 +1400,7 @@ export function Lesson() {
 
 
   const canResume =
-    userReady && !busy && !practiceActive && !sessionActive && lastSessionStatus !== "completed";
+    !busy && !practiceActive && !sessionActive && lastSessionStatus !== "completed";
 
   function isLessonResumable(lessonIdValue: string): boolean {
     if (!canResume) return false;
@@ -1401,12 +1415,9 @@ export function Lesson() {
   const heroPrimaryLabel = canResumeSelected
     ? uiStrings.continueLabel ?? "Continue"
     : uiStrings.startLabel;
-  const primaryActionDisabled = canResumeSelected
-    ? false
-    : disableStartResume || noLessonsAvailable;
+  const primaryActionDisabled = disableStartResume || (!canResumeSelected && noLessonsAvailable);
   const emptyLessonsMessage =
     language === "de" ? "German lessons are being prepared." : uiStrings.noLessonsLabel;
-  const userRequiredMessage = !userReady ? "Enter a username to start." : "";
 
   function getLessonStatusInfo(lessonIdValue: string): {
     status: string;
@@ -1512,7 +1523,7 @@ export function Lesson() {
     completionButtonCount === 1 ? "lessonPrimaryBtn" : "lessonSecondaryBtn";
 
   const showContinueNextLessonCTA =
-    userReady && Boolean(nextLessonAfterLastCompleted) && !canResumeSelected && !practiceActive;
+    Boolean(nextLessonAfterLastCompleted) && !canResumeSelected && !practiceActive;
 
   function updateLocalProgress(lessonIdValue: string, status: string) {
     const now = new Date().toISOString();
@@ -1993,22 +2004,10 @@ export function Lesson() {
     setLessonId(storedLesson || "");
   }
 
-  function handleUserGateSave() {
-    const next = normalizeUserId(userGateValue);
-    if (!next) {
-      setUserGateError("Please enter a username.");
-      return;
-    }
-    setUserGateError(null);
-    setUserGateValue(next);
-    setUserId(next);
-  }
-
   function handleResetUserForTesting() {
-    writeUserId("");
-    setUserId("");
-    setUserGateValue("");
-    setUserGateError(null);
+    const fallbackUserId = getAnonUserId();
+    writeUserId(fallbackUserId);
+    setUserId(fallbackUserId);
     setPrefsOpen(false);
   }
 
@@ -2044,9 +2043,14 @@ export function Lesson() {
     setShowTesterContext(false);
   }
 
-  async function startLessonFlow(targetLessonId: string, restart: boolean) {
-    const uid = userId.trim();
-    if (!uid) return;
+  async function startLessonFlow(
+    targetLessonId: string,
+    restart: boolean,
+    options?: { language?: SupportedLanguage; userId?: string }
+  ) {
+    const uid = (options?.userId ?? userId).trim();
+    const lang = (options?.language ?? language) as SupportedLanguage;
+    if (!uid || !lang) return;
     setError(null);
     setForceLessonComplete(false);
 
@@ -2088,13 +2092,14 @@ export function Lesson() {
     try {
       const res = await startLesson({
         userId: uid,
-        language,
+        language: lang,
         lessonId: normalizedLessonId,
         restart,
         teachingPrefs: teachingPrefsPayload,
       });
 
       setSession(res.session);
+      setLanguage(res.session.language);
       setLessonId(res.session.lessonId);
       const questionMeta = res.question ?? null;
       setMessages(applyQuestionMetaToMessages(res.session.messages ?? [], questionMeta));
@@ -2136,6 +2141,7 @@ export function Lesson() {
   }
 
   async function handleStart(overrideLessonId?: string) {
+    if (isWarmupPending) return;
     if (!userId.trim()) return;
     const effectiveLessonId = (overrideLessonId ?? lessonId).trim();
     if (!effectiveLessonId) return;
@@ -2143,9 +2149,15 @@ export function Lesson() {
     await startLessonFlow(effectiveLessonId, restart);
   }
 
+  async function handleStartDemo() {
+    if (isWarmupPending || busy) return;
+    await startLessonFlow("basic-1", false, { language: "de" });
+  }
+
   async function handleResume() {
     setError(null);
 
+    if (isWarmupPending) return;
     if (!userId.trim()) return;
     if (!canResumeSelected) return;
 
@@ -2711,6 +2723,27 @@ export function Lesson() {
               <div className="space-y-6">
                 {error && <div className="lessonError">{error}</div>}
 
+                {warmupState === "warming" && (
+                  <div className="rounded-2xl border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-slate-700 shadow-sm ring-1 ring-blue-100/60">
+                    <div className="font-semibold text-slate-900">Waking up the server…</div>
+                    <div className="mt-1">After inactivity this can take up to ~1 minute.</div>
+                  </div>
+                )}
+
+                {warmupState === "failed" && (
+                  <div className="rounded-2xl border border-slate-300/70 bg-white p-4 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200/60">
+                    <div>Still trying to connect. Please refresh once, or try again in a moment.</div>
+                    <button
+                      type="button"
+                      className="mt-3 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                      onClick={() => void runWarmup({ force: true })}
+                      disabled={busy}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
                 {reviewBanner && (
                   <div className="rounded-2xl border border-slate-300/60 bg-white p-4 text-sm text-slate-600 shadow-sm ring-1 ring-slate-200/50">
                     {reviewBanner}
@@ -2721,10 +2754,10 @@ export function Lesson() {
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <LessonSetupPanel
                       userId={userId}
+                      displayName={displayName}
                       language={language}
                       lessonId={lessonId}
                       lessons={displayCatalog}
-                      onUserIdChange={(nextUserId) => setUserId(normalizeUserId(nextUserId))}
                       onLessonChange={setLessonId}
                       languages={TARGET_LANGUAGES}
                       onLanguageChange={handleTargetLanguageChange}
@@ -2960,9 +2993,14 @@ export function Lesson() {
                     >
                       {heroPrimaryLabel}
                     </button>
-                    {userRequiredMessage && (
-                      <div className="mt-3 text-sm text-slate-600">{userRequiredMessage}</div>
-                    )}
+                    <button
+                      type="button"
+                      className="mt-3 w-full rounded-xl border border-slate-300/80 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+                      onClick={() => void handleStartDemo()}
+                      disabled={disableStartResume}
+                    >
+                      Try a 2-minute German A1 demo
+                    </button>
                     <button
                       type="button"
                       className="mt-3 inline-flex text-sm font-medium text-blue-700 hover:text-blue-800"
@@ -3050,7 +3088,7 @@ export function Lesson() {
                         <button
                           className="rounded-xl border border-slate-300/70 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
                           onClick={() => void handleStart(nextLessonAfterLastCompleted)}
-                          disabled={loading}
+                          disabled={loading || isWarmupPending}
                           title={`Continue to ${nextLessonAfterLastCompleted}`}
                         >
                           {uiStrings.continueNextLesson}
@@ -3543,7 +3581,7 @@ export function Lesson() {
                           <button
                             className="lessonPrimaryBtn"
                             onClick={() => void handleStart(nextLessonId)}
-                            disabled={loading}
+                            disabled={loading || isWarmupPending}
                           >
                             {uiStrings.continueNextLesson}
                           </button>
@@ -3593,53 +3631,6 @@ export function Lesson() {
             </div>
           )}
         </>
-      )}
-      {!userReady && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm">
-          <div
-            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Enter username"
-          >
-            <div className="text-center">
-              <div className="text-lg font-semibold text-slate-900">
-                Welcome to AI Language Tutor
-              </div>
-              <div className="mt-2 text-sm text-slate-600">
-                Please enter a username to get started.
-              </div>
-            </div>
-            <input
-              ref={userGateInputRef}
-              className="mt-4 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-              value={userGateValue}
-              onChange={(e) => {
-                setUserGateValue(e.target.value);
-                if (userGateError) setUserGateError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleUserGateSave();
-                }
-              }}
-              placeholder="Your username"
-              autoComplete="username"
-            />
-            {userGateError && (
-              <div className="mt-2 text-sm text-rose-600">{userGateError}</div>
-            )}
-            <button
-              type="button"
-              className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
-              onClick={handleUserGateSave}
-              disabled={!userGateValue.trim()}
-            >
-              Save and continue
-            </button>
-          </div>
-        </div>
       )}
       <LessonFeedbackModal
         open={lessonFeedbackOpen}

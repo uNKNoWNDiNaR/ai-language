@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type { LessonCatalogItem, SupportedLanguage } from "../../api/lessonAPI";
 
 type LanguageOption = {
@@ -11,11 +10,11 @@ type LanguageOption = {
 
 type LessonSetupPanelProps = {
   userId: string;
+  displayName?: string;
   language: SupportedLanguage;
   lessonId: string;
   lessons?: LessonCatalogItem[];
   languages?: LanguageOption[];
-  onUserIdChange?: (userId: string) => void;
   onLessonChange?: (lessonId: string) => void;
   onLanguageChange?: (language: SupportedLanguage) => void;
   disabled?: boolean;
@@ -23,33 +22,18 @@ type LessonSetupPanelProps = {
 
 export function LessonSetupPanel({
   userId,
+  displayName,
   language,
   lessonId,
   lessons = [],
   languages = [],
-  onUserIdChange,
   onLessonChange,
   onLanguageChange,
   disabled = false,
 }: LessonSetupPanelProps) {
   const trimmedUserId = userId.trim();
   const trimmedLessonId = lessonId.trim();
-  const [draftUserId, setDraftUserId] = useState(userId);
-  const userInputDisabled = disabled || Boolean(trimmedUserId);
-
-  useEffect(() => {
-    setDraftUserId(userId);
-  }, [userId]);
-
-  const commitUserId = () => {
-    if (!onUserIdChange) return;
-    const next = draftUserId.trim();
-    if (next !== userId) {
-      onUserIdChange(next);
-    } else if (draftUserId !== userId) {
-      setDraftUserId(userId);
-    }
-  };
+  const profileName = ((displayName ?? trimmedUserId) || "Guest").trim() || "Guest";
 
   const languageOption =
     languages.find((opt) => opt.code === language) ??
@@ -61,25 +45,7 @@ export function LessonSetupPanel({
         <span className="lessonInfoIcon" aria-hidden="true">
           👤
         </span>
-        {onUserIdChange ? (
-          <input
-            className="lessonTextInput"
-            value={draftUserId}
-            onChange={(e) => setDraftUserId(e.target.value)}
-            onBlur={commitUserId}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.currentTarget.blur();
-              }
-            }}
-            placeholder="Enter username"
-            disabled={userInputDisabled}
-            aria-label="Username"
-            autoComplete="username"
-          />
-        ) : (
-          <span className="lessonInfoText">{trimmedUserId}</span>
-        )}
+        <span className="lessonInfoText">{profileName}</span>
       </div>
 
       <div className="lessonInfoPill" aria-label="Language">

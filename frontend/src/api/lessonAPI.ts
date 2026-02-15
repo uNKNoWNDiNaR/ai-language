@@ -218,6 +218,11 @@ export type LessonFeedbackRequest = {
 
 export type LessonFeedbackResponse = { ok: true };
 
+export type WarmupBackendResponse = {
+  ok: boolean;
+  status?: number;
+};
+
 
 export const API_BASE: string =
   import.meta.env.VITE_API_BASE ?? "http://localhost:3000";
@@ -471,15 +476,18 @@ export async function submitLessonFeedback(
   return data;
 }
 
-export async function warmupBackend(): Promise<boolean> {
+export async function warmupBackend(): Promise<WarmupBackendResponse> {
   try {
     const res = await http.get("/health", {
       timeout: 65000,
       validateStatus: () => true,
     });
-    return res.status >= 200 && res.status < 300;
+    return {
+      ok: res.status >= 200 && res.status < 300,
+      status: res.status,
+    };
   } catch {
-    return false;
+    return { ok: false };
   }
 }
 
